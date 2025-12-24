@@ -24,17 +24,7 @@
 go get github.com/rpdg/winput
 ```
 
-### HID 后端的前置要求
-如果您打算使用 `BackendHID` (Interception 模式)，您必须：
-1.  安装 **Interception 驱动** (运行官方发布包中的 `install-interception.exe`)。
-2.  确保 `interception.dll` 位于您的应用程序工作目录或系统 PATH 中。
-3.  开启 CGO (需要 MinGW 等 C 编译器)。
-
-> **注意**: 默认的 `BackendMessage` **不需要** 驱动或 CGO (运行时不需要，尽管本库在编译时链接了 HID 后端)。
-
-## 使用方法
-
-### 基础示例 (后台消息模式)
+## 快速开始
 
 ```go
 package main
@@ -48,59 +38,94 @@ func main() {
 	// 1. 查找目标窗口
 	w, err := winput.FindByTitle("无标题 - 记事本")
 	if err != nil {
-		log.Fatal("未找到窗口:", err)
+		log.Fatal(err)
 	}
 
-	// 2. 点击窗口内的 (100, 100) 位置
-	// 这不会移动物理鼠标光标。
+	// 2. 点击 (左键)
 	if err := w.Click(100, 100); err != nil {
 		log.Fatal(err)
 	}
 
 	// 3. 输入文本
-	w.Type("Hello Background World")
+	w.Type("Hello World")
 	w.Press(winput.KeyEnter)
 }
 ```
 
-### 切换到 HID 后端
+## 错误处理指南
 
-如果目标应用程序屏蔽了 `PostMessage`，或者您需要模拟真实的硬件行为（例如游戏或反作弊程序），请使用此模式。
+`winput` 拒绝静默失败。以下是您应该处理的常见错误：
+
+| 错误变量 | 描述 | 处理建议 |
+| :--- | :--- | :--- |
+| `ErrWindowNotFound` | 无法通过 Title/Class/PID 找到窗口。 | 检查应用是否运行，或尝试改用 `FindByClass`。 |
+| `ErrDriverNotInstalled` | Interception 驱动丢失（仅 HID 模式）。 | 提示用户安装驱动，或自动降级到 Message 后端。 |
+| `ErrUnsupportedKey` | 字符无法映射到按键。 | 检查输入字符串，特殊按键请使用 `KeyDown`。 |
+| `ErrPermissionDenied` | 操作被系统阻止 (如 UIPI)。 | 尝试以管理员身份运行程序。 |
+
+健壮的错误处理示例：
 
 ```go
-func main() {
-    w, _ := winput.FindByClass("Notepad")
+// 尝试切换到 HID 模式
+winput.SetBackend(winput.BackendHID)
 
-    // 将全局后端切换为 HID
-    // 注意: 这需要安装 Interception 驱动。
-    // 初始化错误将在第一次执行动作时返回。
-    winput.SetBackend(winput.BackendHID)
+// 执行动作
+err := w.Click(100, 100)
 
-    // 现在这将会物理移动鼠标光标到窗口内的 (100, 100)
-    err := w.Click(100, 100)
-    if err != nil {
-        log.Fatalf("HID 输入失败 (驱动未安装?): %v", err)
-    }
+// 检查是否是因为驱动未安装
+if errors.Is(err, winput.ErrDriverNotInstalled) {
+    log.Println("HID 驱动未安装，降级到消息后端...")
+    winput.SetBackend(winput.BackendMessage)
+    w.Click(100, 100) // 重试
 }
 ```
 
-## 架构
+## 高级用法
 
-### 包结构
-```
-winput/
-├── window/      # Win32 窗口 & DPI API
-├── mouse/       # PostMessage 鼠标实现
-├── keyboard/    # PostMessage 键盘实现
-├── hid/         # Interception 驱动包装 & 逻辑
-│   └── interception/ # 底层 CGO 绑定
-└── winput.go    # 公共 API & 后端切换
+### 1. 处理高 DPI 显示器
+现代 Windows 会对应用进行缩放。为了确保您的 `(100, 100)` 点击准确落在目标像素上：
+
+```go
+// 在程序启动时调用
+if err := winput.EnablePerMonitorDPI(); err != nil {
+    log.Printf("DPI 设置失败: %v", err)
+}
+
+// 检查特定窗口的 DPI (96 为标准 100%)
+dpi, _ := w.DPI()
+fmt.Printf("目标窗口 DPI: %d (缩放比: %.2f%%)\n", dpi, float64(dpi)/96.0*100)
 ```
 
-### 设计原则
-1.  **坐标一致性**: API *始终* 接受窗口客户端 (Client) 坐标。后端负责在必要时将其转换为屏幕坐标（例如用于 HID 注入）。
-2.  **显式失败**: 如果操作无法执行（例如窗口已关闭、后端不可用），将返回特定的错误。
-3.  **零成本抽象**: 默认的消息后端是轻量级的纯 Go 实现 (syscall)。只有在请求时才会加载 HID 后端逻辑。
+### 2. HID 后端与自动降级
+在游戏或反作弊场景使用 HID，在普通应用使用 Message。
+
+```go
+winput.SetBackend(winput.BackendHID)
+err := w.Type("password")
+if err != nil {
+    // 如果 HID 失败，切回 Message 模式
+    winput.SetBackend(winput.BackendMessage)
+    w.Type("password")
+}
+```
+
+### 3. 按键映射细节
+`winput` 将 rune 映射为扫描码 (Scan Code Set 1)。
+- **支持范围**: A-Z, 0-9, 常用符号 (`!`, `@`, `#`...), 空格, 回车, Tab。
+- **自动 Shift**: `Type("A")` 会自动发送 `Shift 按下` -> `a 按下` -> `a 抬起` -> `Shift 抬起`。
+
+## 项目对比
+
+| 特性 | winput (Go) | C# Interceptor 封装 | Python winput (ctypes) |
+| :--- | :--- | :--- | :--- |
+| **后端支持** | **双引擎 (HID + Message)** | 仅 HID (Interception) | 仅 Message (User32) |
+| **API 风格** | 面向对象 (`w.Click`) | 底层 (`SendInput`) | 函数式 |
+| **依赖项** | 无 (默认) / 驱动 (HID) | 必须安装驱动 | 无 |
+| **安全性** | 显式错误返回 | 异常 / 静默失败 | 静默 / 返回码 |
+| **DPI 感知** | ✅ 支持 | ❌ 需手动计算 | ❌ 需手动计算 |
+
+*   **对比 Python winput**: Python 版适合简单自动化，但缺乏游戏或顽固应用所需的内核级注入能力。
+*   **对比 C# Interceptor**: 大多数 C# 封装直接暴露原始驱动 API，而 `winput` 将其抽象为高级动作 (Click, Type) 并内置了坐标转换逻辑。
 
 ## 许可证
 

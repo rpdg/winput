@@ -16,6 +16,7 @@ Package `winput` provides a high-level interface for Windows background input au
     *   [func FindByPID](#func-findbypid)
     *   [func FindByTitle](#func-findbytitle)
     *   [func (*Window) Click](#func-window-click)
+    *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
     *   [func (*Window) ClickRight](#func-window-clickright)
     *   [func (*Window) ClientRect](#func-window-clientrect)
     *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
@@ -26,6 +27,7 @@ Package `winput` provides a high-level interface for Windows background input au
     *   [func (*Window) Move](#func-window-move)
     *   [func (*Window) Press](#func-window-press)
     *   [func (*Window) ScreenToClient](#func-window-screentoclient)
+    *   [func (*Window) Scroll](#func-window-scroll)
     *   [func (*Window) Type](#func-window-type)
 
 ---
@@ -34,10 +36,20 @@ Package `winput` provides a high-level interface for Windows background input au
 
 ```go
 var (
-    ErrWindowNotFound     = errors.New("window not found")
-    ErrUnsupportedKey     = errors.New("unsupported key")
-    ErrBackendUnavailable = errors.New("backend unavailable")
-    ErrPermissionDenied   = errors.New("permission denied")
+    // ErrWindowNotFound implies the target window could not be located by Title, Class, or PID.
+    ErrWindowNotFound = errors.New("window not found")
+
+    // ErrUnsupportedKey implies the character or key code cannot be mapped to a valid input event.
+    ErrUnsupportedKey = errors.New("unsupported key or character")
+
+    // ErrBackendUnavailable implies the selected backend (e.g. HID) failed to initialize.
+    ErrBackendUnavailable = errors.New("input backend unavailable")
+
+    // ErrDriverNotInstalled specific to BackendHID, implies the Interception driver is missing or not accessible.
+    ErrDriverNotInstalled = errors.New("interception driver not installed or accessible")
+
+    // ErrPermissionDenied implies the operation failed due to system privilege restrictions (e.g. UIPI).
+    ErrPermissionDenied = errors.New("permission denied")
 )
 ```
 
@@ -165,12 +177,27 @@ func (w *Window) ClickRight(x, y int32) error
 ```
 ClickRight performs a right mouse button click at the specified client coordinates.
 
+#### func (*Window) ClickMiddle
+
+```go
+func (w *Window) ClickMiddle(x, y int32) error
+```
+ClickMiddle performs a middle mouse button click at the specified client coordinates.
+
 #### func (*Window) DoubleClick
 
 ```go
 func (w *Window) DoubleClick(x, y int32) error
 ```
 DoubleClick performs a left mouse button double-click.
+
+#### func (*Window) Scroll
+
+```go
+func (w *Window) Scroll(x, y int32, delta int32) error
+```
+Scroll performs a vertical mouse wheel scroll at the specified coordinates.
+`delta` indicates the scroll amount; 120 is one standard wheel "click". Positive values scroll forward/up, negative values scroll backward/down.
 
 #### func (*Window) KeyDown
 
@@ -200,6 +227,7 @@ In `BackendHID`, a random delay is inserted between down and up events to simula
 func (w *Window) Type(text string) error
 ```
 Type types a string of text into the window. It maps characters to keys and presses them sequentially.
+It automatically handles **Shift** key modifiers for uppercase letters and symbols (e.g., 'A', '!', '@').
 
 #### func (*Window) DPI
 
@@ -207,6 +235,7 @@ Type types a string of text into the window. It maps characters to keys and pres
 func (w *Window) DPI() (uint32, error)
 ```
 DPI returns the Dots Per Inch (DPI) setting for the window. Standard DPI is 96.
+It attempts to use Per-Monitor V2 API, falling back to System DPI or GDI DeviceCaps on older systems.
 
 #### func (*Window) ClientRect
 

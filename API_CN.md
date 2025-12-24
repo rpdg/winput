@@ -16,6 +16,7 @@
     *   [func FindByPID](#func-findbypid)
     *   [func FindByTitle](#func-findbytitle)
     *   [func (*Window) Click](#func-window-click)
+    *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
     *   [func (*Window) ClickRight](#func-window-clickright)
     *   [func (*Window) ClientRect](#func-window-clientrect)
     *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
@@ -26,6 +27,7 @@
     *   [func (*Window) Move](#func-window-move)
     *   [func (*Window) Press](#func-window-press)
     *   [func (*Window) ScreenToClient](#func-window-screentoclient)
+    *   [func (*Window) Scroll](#func-window-scroll)
     *   [func (*Window) Type](#func-window-type)
 
 ---
@@ -34,10 +36,20 @@
 
 ```go
 var (
-    ErrWindowNotFound     = errors.New("window not found")     // 未找到窗口
-    ErrUnsupportedKey     = errors.New("unsupported key")      // 不支持的按键
-    ErrBackendUnavailable = errors.New("backend unavailable")  // 后端不可用
-    ErrPermissionDenied   = errors.New("permission denied")    // 权限不足
+    // ErrWindowNotFound 意味着无法通过标题、类名或 PID 找到目标窗口。
+    ErrWindowNotFound = errors.New("window not found")
+
+    // ErrUnsupportedKey 意味着字符或键码无法映射到有效的输入事件。
+    ErrUnsupportedKey = errors.New("unsupported key or character")
+
+    // ErrBackendUnavailable 意味着所选的后端（如 HID）初始化失败。
+    ErrBackendUnavailable = errors.New("input backend unavailable")
+
+    // ErrDriverNotInstalled 是 BackendHID 特有的，意味着 Interception 驱动丢失或不可访问。
+    ErrDriverNotInstalled = errors.New("interception driver not installed or accessible")
+
+    // ErrPermissionDenied 意味着操作因系统权限限制（如 UIPI）而失败。
+    ErrPermissionDenied = errors.New("permission denied")
 )
 ```
 
@@ -165,12 +177,27 @@ func (w *Window) ClickRight(x, y int32) error
 ```
 ClickRight 在指定的客户区坐标执行鼠标右键点击。
 
+#### func (*Window) ClickMiddle
+
+```go
+func (w *Window) ClickMiddle(x, y int32) error
+```
+ClickMiddle 在指定的客户区坐标执行鼠标中键点击。
+
 #### func (*Window) DoubleClick
 
 ```go
 func (w *Window) DoubleClick(x, y int32) error
 ```
 DoubleClick 执行鼠标左键双击。
+
+#### func (*Window) Scroll
+
+```go
+func (w *Window) Scroll(x, y int32, delta int32) error
+```
+Scroll 在指定坐标执行鼠标滚轮滚动。
+`delta` 表示滚动量；120 代表标准滚轮的一格。正值表示向前/向上滚动，负值表示向后/向下滚动。
 
 #### func (*Window) KeyDown
 
@@ -200,6 +227,7 @@ Press 模拟一次完整的按键过程 (KeyDown 后跟 KeyUp)。
 func (w *Window) Type(text string) error
 ```
 Type 向窗口输入字符串文本。它将字符映射为按键并依次按下。
+它会自动处理**Shift**组合键以支持大写字母和符号（例如 'A', '!', '@'）。
 
 #### func (*Window) DPI
 
@@ -207,6 +235,7 @@ Type 向窗口输入字符串文本。它将字符映射为按键并依次按下
 func (w *Window) DPI() (uint32, error)
 ```
 DPI 返回窗口的每英寸点数 (DPI) 设置。标准 DPI 为 96。
+它会尝试使用 Per-Monitor V2 API，在旧系统上会降级使用系统 DPI 或 GDI DeviceCaps。
 
 #### func (*Window) ClientRect
 

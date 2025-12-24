@@ -1,6 +1,8 @@
 package winput
 
 import (
+	"fmt"
+
 	"github.com/rpdg/winput/hid"
 	"github.com/rpdg/winput/keyboard"
 	"github.com/rpdg/winput/mouse"
@@ -66,7 +68,8 @@ func SetBackend(b Backend) {
 func checkBackend() error {
 	if currentBackend == BackendHID {
 		if err := hid.Init(); err != nil {
-			return ErrBackendUnavailable
+			// Wrap the error so users can check errors.Is(err, winput.ErrDriverNotInstalled)
+			return fmt.Errorf("%w: %v", ErrDriverNotInstalled, err)
 		}
 	}
 	return nil
