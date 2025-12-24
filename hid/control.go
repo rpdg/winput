@@ -11,10 +11,16 @@ import (
 	"github.com/rpdg/winput/window"
 )
 
-var ErrDriverNotInstalled = errors.New("interception driver not installed or accessible")
+var (
+	ErrDriverNotInstalled = errors.New("interception driver not installed or accessible")
+)
+
+func SetLibraryPath(path string) {
+	interception.SetLibraryPath(path)
+}
 
 var (
-	ctx         interception.Context
+	ctx          interception.Context
 	mouseDev    interception.Device
 	keyboardDev interception.Device
 	initialized bool
@@ -30,8 +36,12 @@ func Init() error {
 		return nil
 	}
 
+	if err := interception.Load(); err != nil {
+		return err // Will be wrapped by winput
+	}
+
 	ctx = interception.CreateContext()
-	if ctx == nil {
+	if ctx == 0 {
 		return ErrDriverNotInstalled
 	}
 
