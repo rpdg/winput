@@ -1,7 +1,7 @@
 package mouse
 
 import (
-	"winput/window"
+	"github.com/rpdg/winput/window"
 )
 
 const (

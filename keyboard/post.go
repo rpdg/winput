@@ -3,7 +3,7 @@ package keyboard
 import (
 	"fmt"
 	"time"
-	"winput/window"
+	"github.com/rpdg/winput/window"
 )
 
 const (

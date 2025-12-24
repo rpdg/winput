@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"time"
-	"winput"
+	"github.com/rpdg/winput"
 )
 
 func main() {

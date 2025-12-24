@@ -1,10 +1,10 @@
 package winput
 
 import (
-	"winput/hid"
-	"winput/keyboard"
-	"winput/mouse"
-	"winput/window"
+	"github.com/rpdg/winput/hid"
+	"github.com/rpdg/winput/keyboard"
+	"github.com/rpdg/winput/mouse"
+	"github.com/rpdg/winput/window"
 )
 
 type Window struct {

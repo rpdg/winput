@@ -41,7 +41,7 @@ package main
 
 import (
 	"log"
-	"winput"
+	"github.com/rpdg/winput"
 )
 
 func main() {

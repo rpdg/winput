@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-	"winput/hid/interception"
-	"winput/window"
+	"github.com/rpdg/winput/hid/interception"
+	"github.com/rpdg/winput/window"
 )
 
 var (
