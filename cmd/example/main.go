@@ -25,11 +25,8 @@ func main() {
 	fmt.Println("Found Notepad window:", w.HWND)
 	
 	// Optional: Switch to HID Backend (requires Interception driver installed)
-	// if err := winput.SetBackend(winput.BackendHID); err != nil {
-	// 	fmt.Println("Failed to init HID:", err)
-	// } else {
-	// 	fmt.Println("Switched to HID Backend")
-	// }
+	// winput.SetBackend(winput.BackendHID)
+	// Note: Initialization error will occur on first interaction if driver is missing.
 	
 	if err := winput.EnablePerMonitorDPI(); err != nil {
 		fmt.Println("DPI Enable Error:", err)
