@@ -21,7 +21,7 @@ It provides a unified, window-centric API that abstracts the underlying input me
 ## Installation
 
 ```bash
-go get github.com/yourusername/winput
+go get github.com/rpdg/winput
 ```
 
 ### Prerequisites for HID Backend

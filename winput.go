@@ -145,12 +145,74 @@ type Key = keyboard.Key
 
 // Common Key Constants Re-export
 const (
-	KeyEnter = keyboard.KeyEnter
 	KeyEsc   = keyboard.KeyEsc
-	KeySpace = keyboard.KeySpace
+	Key1     = keyboard.Key1
+	Key2     = keyboard.Key2
+	Key3     = keyboard.Key3
+	Key4     = keyboard.Key4
+	Key5     = keyboard.Key5
+	Key6     = keyboard.Key6
+	Key7     = keyboard.Key7
+	Key8     = keyboard.Key8
+	Key9     = keyboard.Key9
+	Key0     = keyboard.Key0
+	KeyMinus = keyboard.KeyMinus
+	KeyEqual = keyboard.KeyEqual
+	KeyBkSp  = keyboard.KeyBkSp
 	KeyTab   = keyboard.KeyTab
+	KeyQ     = keyboard.KeyQ
+	KeyW     = keyboard.KeyW
+	KeyE     = keyboard.KeyE
+	KeyR     = keyboard.KeyR
+	KeyT     = keyboard.KeyT
+	KeyY     = keyboard.KeyY
+	KeyU     = keyboard.KeyU
+	KeyI     = keyboard.KeyI
+	KeyO     = keyboard.KeyO
+	KeyP     = keyboard.KeyP
+	KeyLBr   = keyboard.KeyLBr
+	KeyRBr   = keyboard.KeyRBr
+	KeyEnter = keyboard.KeyEnter
+	KeyCtrl  = keyboard.KeyCtrl
 	KeyA     = keyboard.KeyA
-	// Add more as needed or users can import winput/keyboard
+	KeyS     = keyboard.KeyS
+	KeyD     = keyboard.KeyD
+	KeyF     = keyboard.KeyF
+	KeyG     = keyboard.KeyG
+	KeyH     = keyboard.KeyH
+	KeyJ     = keyboard.KeyJ
+	KeyK     = keyboard.KeyK
+	KeyL     = keyboard.KeyL
+	KeySemi  = keyboard.KeySemi
+	KeyQuot  = keyboard.KeyQuot
+	KeyTick  = keyboard.KeyTick
+	KeyShift = keyboard.KeyShift
+	KeyBackslash = keyboard.KeyBackslash
+	KeySlash = keyboard.KeySlash
+	KeyZ     = keyboard.KeyZ
+	KeyX     = keyboard.KeyX
+	KeyC     = keyboard.KeyC
+	KeyV     = keyboard.KeyV
+	KeyB     = keyboard.KeyB
+	KeyN     = keyboard.KeyN
+	KeyM     = keyboard.KeyM
+	KeyComma = keyboard.KeyComma
+	KeyDot   = keyboard.KeyDot
+	KeySpace = keyboard.KeySpace
+	KeyAlt   = keyboard.KeyAlt
+	KeyCaps  = keyboard.KeyCaps
+	KeyF1    = keyboard.KeyF1
+	KeyF2    = keyboard.KeyF2
+	KeyF3    = keyboard.KeyF3
+	KeyF4    = keyboard.KeyF4
+	KeyF5    = keyboard.KeyF5
+	KeyF6    = keyboard.KeyF6
+	KeyF7    = keyboard.KeyF7
+	KeyF8    = keyboard.KeyF8
+	KeyF9    = keyboard.KeyF9
+	KeyF10   = keyboard.KeyF10
+	KeyF11   = keyboard.KeyF11
+	KeyF12   = keyboard.KeyF12
 )
 
 func KeyFromRune(r rune) (Key, bool) {

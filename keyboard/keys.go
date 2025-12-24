@@ -45,7 +45,7 @@ const (
 	KeyQuot  Key = 0x28
 	KeyTick  Key = 0x29
 	KeyShift Key = 0x2A
-	KeySlash Key = 0x2B
+	KeyBackslash Key = 0x2B
 	KeyZ     Key = 0x2C
 	KeyX     Key = 0x2D
 	KeyC     Key = 0x2E
@@ -55,7 +55,24 @@ const (
 	KeyM     Key = 0x32
 	KeyComma Key = 0x33
 	KeyDot   Key = 0x34
+	KeySlash Key = 0x35
 	KeySpace Key = 0x39
+	KeyCaps  Key = 0x3A
+	KeyF1    Key = 0x3B
+	KeyF2    Key = 0x3C
+	KeyF3    Key = 0x3D
+	KeyF4    Key = 0x3E
+	KeyF5    Key = 0x3F
+	KeyF6    Key = 0x40
+	KeyF7    Key = 0x41
+	KeyF8    Key = 0x42
+	KeyF9    Key = 0x43
+	KeyF10   Key = 0x44
+	KeyNumLock Key = 0x45
+	KeyScroll  Key = 0x46
+	KeyF11     Key = 0x57
+	KeyF12     Key = 0x58
+	KeyAlt     Key = 0x38
 )
 
 var runeMap = map[rune]Key{
