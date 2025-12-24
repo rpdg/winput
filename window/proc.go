@@ -13,6 +13,7 @@ var (
 	ProcFindWindowExW            = user32.NewProc("FindWindowExW")
 	ProcGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	ProcEnumWindows              = user32.NewProc("EnumWindows")
+	ProcIsWindow                 = user32.NewProc("IsWindow")
 	ProcIsWindowVisible          = user32.NewProc("IsWindowVisible")
 	ProcIsIconic                 = user32.NewProc("IsIconic")
 	ProcGetClassNameW            = user32.NewProc("GetClassNameW")

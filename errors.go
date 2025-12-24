@@ -9,6 +9,9 @@ var (
 	// ErrWindowGone implies the window handle is no longer valid (window closed).
 	ErrWindowGone = errors.New("window is gone or invalid")
 
+	// ErrWindowNotVisible implies the window is hidden or minimized.
+	ErrWindowNotVisible = errors.New("window is not visible")
+
 	// ErrUnsupportedKey implies the character or key code cannot be mapped to a valid input event.
 	ErrUnsupportedKey = errors.New("unsupported key or character")
 

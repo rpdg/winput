@@ -18,6 +18,16 @@ func IsIconic(hwnd uintptr) bool {
 	return r != 0
 }
 
+func IsValid(hwnd uintptr) bool {
+	r, _, _ := ProcIsWindow.Call(hwnd)
+	return r != 0
+}
+
+func IsVisible(hwnd uintptr) bool {
+	r, _, _ := ProcIsWindowVisible.Call(hwnd)
+	return r != 0
+}
+
 func GetClientRect(hwnd uintptr) (width, height int32, err error) {
 	if IsIconic(hwnd) {
 		return 0, 0, fmt.Errorf("window is minimized")
