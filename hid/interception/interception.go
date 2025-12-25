@@ -101,22 +101,10 @@ type KeyStroke struct {
 }
 
 // Ensure Memory Safety:
-// InterceptionStroke in C is a union of MouseStroke and KeyStroke.
-// We calculate the safe buffer size at runtime init.
-var strokeSize int
-
-func init() {
-	// Size of MouseStroke is usually 18, but padding could change that.
-	s := int(unsafe.Sizeof(MouseStroke{}))
-	if s < 18 {
-		s = 18
-	}
-	// Safety cap to avoid unexpected huge sizes from padding changes.
-	if s > 64 {
-		s = 64
-	}
-	strokeSize = s
-}
+// We use a fixed buffer size that accommodates the C struct padding.
+// C MouseStroke: 2+2+2 + 2(pad) + 4+4+4 = 20 bytes.
+// But we allocate slightly more to be safe against compiler variations.
+var strokeSize = 24
 
 // Constants for Mouse
 const (
@@ -179,14 +167,23 @@ func SendMouse(ctx Context, dev Device, s *MouseStroke) error {
 	}
 
 	buf := make([]byte, strokeSize)
+	// Offset 0: State (2 bytes)
 	binary.LittleEndian.PutUint16(buf[0:2], s.State)
+	// Offset 2: Flags (2 bytes)
 	binary.LittleEndian.PutUint16(buf[2:4], s.Flags)
+	// Offset 4: Rolling (2 bytes)
 	binary.LittleEndian.PutUint16(buf[4:6], uint16(s.Rolling))
-	binary.LittleEndian.PutUint32(buf[6:10], uint32(s.X))
-	binary.LittleEndian.PutUint32(buf[10:14], uint32(s.Y))
-	binary.LittleEndian.PutUint32(buf[14:18], s.Information)
 
-	return send(ctx, dev, buf)
+	// Offset 6: Padding (2 bytes) - Implicitly 0
+
+	// Offset 8: X (4 bytes) - Correctly aligned
+	binary.LittleEndian.PutUint32(buf[8:12], uint32(s.X))
+	// Offset 12: Y (4 bytes)
+	binary.LittleEndian.PutUint32(buf[12:16], uint32(s.Y))
+	// Offset 16: Information (4 bytes)
+	binary.LittleEndian.PutUint32(buf[16:20], s.Information)
+
+	return send(ctx, dev, buf[:20]) // Send exactly 20 bytes as expected by C struct
 }
 
 func SendKey(ctx Context, dev Device, s *KeyStroke) error {
@@ -194,12 +191,14 @@ func SendKey(ctx Context, dev Device, s *KeyStroke) error {
 		return fmt.Errorf("interception_send missing")
 	}
 
+	// KeyStroke is naturally aligned: 2+2+4 = 8 bytes.
+	// No padding needed.
 	buf := make([]byte, strokeSize)
 	binary.LittleEndian.PutUint16(buf[0:2], s.Code)
 	binary.LittleEndian.PutUint16(buf[2:4], s.State)
 	binary.LittleEndian.PutUint32(buf[4:8], s.Information)
 
-	return send(ctx, dev, buf)
+	return send(ctx, dev, buf[:8]) // Send 8 bytes
 }
 
 func send(ctx Context, dev Device, buf []byte) error {

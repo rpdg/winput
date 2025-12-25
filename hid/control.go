@@ -143,6 +143,20 @@ func getKeyboard() (interception.Context, interception.Device, error) {
 // Mouse
 // -----------------------------------------------------------------------------
 
+func abs(n int32) int32 {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func max(a, b int32) int32 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func Move(targetX, targetY int32) error {
 	lCtx, lDev, err := getMouse()
 	if err != nil {
@@ -154,8 +168,26 @@ func Move(targetX, targetY int32) error {
 		return err
 	}
 
-	steps := 20
+	dxTotal := abs(targetX - cx)
+	dyTotal := abs(targetY - cy)
+	maxDist := max(dxTotal, dyTotal)
+
+	// Ensure step size < 100 to avoid large jumps that might look bot-like
+	// or cause issues with some drivers.
+	steps := int(maxDist / 80)
+	if steps < 20 {
+		steps = 20
+	}
+
+	timeout := time.After(2 * time.Second)
+
 	for i := 1; i <= steps; i++ {
+		select {
+		case <-timeout:
+			return fmt.Errorf("move timeout")
+		default:
+		}
+
 		nextX := cx + (targetX-cx)*int32(i)/int32(steps)
 		nextY := cy + (targetY-cy)*int32(i)/int32(steps)
 
@@ -167,7 +199,14 @@ func Move(targetX, targetY int32) error {
 		dx := nextX - curX
 		dy := nextY - curY
 
-		if i < steps {
+		// Optimization: If very close (within jitter range), skip correction
+		// to avoid oscillation near the target.
+		if i > steps-5 && abs(dx) < 3 && abs(dy) < 3 {
+			continue
+		}
+
+		// Apply jitter only if not the final few steps
+		if i < steps-2 {
 			dx += int32(rng.Intn(3) - 1)
 			dy += int32(rng.Intn(3) - 1)
 		}
@@ -185,7 +224,13 @@ func Move(targetX, targetY int32) error {
 		if err := interception.SendMouse(lCtx, lDev, &stroke); err != nil {
 			return err
 		}
-		time.Sleep(5 * time.Millisecond)
+
+		// Wait slightly longer to allow OS to update cursor pos
+		sleepTime := 6
+		if steps > 50 {
+			sleepTime = 3
+		}
+		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 	}
 	return nil
 }
