@@ -1,6 +1,7 @@
 package interception
 
 import (
+	"encoding/binary"
 	"fmt"
 	"runtime"
 	"syscall"
@@ -176,12 +177,12 @@ func SendMouse(ctx Context, dev Device, s *MouseStroke) error {
 	}
 	
 	buf := make([]byte, strokeSize)
-	*(*uint16)(unsafe.Pointer(&buf[0])) = s.State
-	*(*uint16)(unsafe.Pointer(&buf[2])) = s.Flags
-	*(*int16)(unsafe.Pointer(&buf[4])) = s.Rolling
-	*(*int32)(unsafe.Pointer(&buf[6])) = s.X
-	*(*int32)(unsafe.Pointer(&buf[10])) = s.Y
-	*(*uint32)(unsafe.Pointer(&buf[14])) = s.Information
+	binary.LittleEndian.PutUint16(buf[0:2], s.State)
+	binary.LittleEndian.PutUint16(buf[2:4], s.Flags)
+	binary.LittleEndian.PutUint16(buf[4:6], uint16(s.Rolling))
+	binary.LittleEndian.PutUint32(buf[6:10], uint32(s.X))
+	binary.LittleEndian.PutUint32(buf[10:14], uint32(s.Y))
+	binary.LittleEndian.PutUint32(buf[14:18], s.Information)
 
 	return send(ctx, dev, buf)
 }
@@ -192,9 +193,9 @@ func SendKey(ctx Context, dev Device, s *KeyStroke) error {
 	}
 
 	buf := make([]byte, strokeSize)
-	*(*uint16)(unsafe.Pointer(&buf[0])) = s.Code
-	*(*uint16)(unsafe.Pointer(&buf[2])) = s.State
-	*(*uint32)(unsafe.Pointer(&buf[4])) = s.Information
+	binary.LittleEndian.PutUint16(buf[0:2], s.Code)
+	binary.LittleEndian.PutUint16(buf[2:4], s.State)
+	binary.LittleEndian.PutUint32(buf[4:8], s.Information)
 
 	return send(ctx, dev, buf)
 }
@@ -211,7 +212,7 @@ func send(ctx Context, dev Device, buf []byte) error {
 		}
 		return ErrSendFailed
 	}
-	// Ensure buf is kept alive until syscall returns (though syscall usually guarantees this, explicit is safer)
+	// Ensure buf is kept alive until syscall returns
 	runtime.KeepAlive(buf)
 	return nil
 }

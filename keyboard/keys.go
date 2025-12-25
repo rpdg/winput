@@ -73,6 +73,19 @@ const (
 	KeyScroll    Key = 0x46
 	KeyF11       Key = 0x57
 	KeyF12       Key = 0x58
+
+	// Extended Keys (Scan Code Set 1 usually, but some are E0 prefixed)
+	// Note: Standard Scan Code Set 1 values.
+	KeyHome      Key = 0x47
+	KeyArrowUp   Key = 0x48
+	KeyPageUp    Key = 0x49
+	KeyLeft      Key = 0x4B
+	KeyRight     Key = 0x4D
+	KeyEnd       Key = 0x4F
+	KeyArrowDown Key = 0x50
+	KeyPageDown  Key = 0x51
+	KeyInsert    Key = 0x52
+	KeyDelete    Key = 0x53
 )
 
 type KeyDef struct {

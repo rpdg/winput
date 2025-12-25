@@ -37,7 +37,15 @@ func KeyDown(hwnd uintptr, key Key) error {
 		return fmt.Errorf("unsupported key: %d", key)
 	}
 
+	// LParam for WM_KEYDOWN:
+	// 0-15: Repeat count (1)
+	// 16-23: Scan code
+	// 24: Extended key (0 for standard keys, assuming standard for now)
+	// 29: Context Code (0)
+	// 30: Previous Key State (0 for first press)
+	// 31: Transition State (0 for key down)
 	lparam := uintptr(1) | (uintptr(key) << 16)
+	
 	return post(hwnd, WM_KEYDOWN, vk, lparam)
 }
 
@@ -47,7 +55,18 @@ func KeyUp(hwnd uintptr, key Key) error {
 		return fmt.Errorf("unsupported key: %d", key)
 	}
 
-	lparam := uintptr(1) | (uintptr(key) << 16) | (1 << 30) | (1 << 31)
+	// LParam for WM_KEYUP:
+	// 0-15: Repeat count (1)
+	// 16-23: Scan code
+	// 24: Extended key
+	// 29: Context Code (0)
+	// 30: Previous Key State (1, always down before up)
+	// 31: Transition State (1, key is being released)
+	lparam := uintptr(1) |
+		(uintptr(key) << 16) |
+		(1 << 30) |
+		(1 << 31)
+
 	return post(hwnd, WM_KEYUP, vk, lparam)
 }
 
@@ -68,6 +87,7 @@ func Type(hwnd uintptr, text string) error {
 					return err
 				}
 				if err := Press(hwnd, k); err != nil {
+					KeyUp(hwnd, KeyShift) // Try cleanup
 					return err
 				}
 				if err := KeyUp(hwnd, KeyShift); err != nil {

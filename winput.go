@@ -3,6 +3,7 @@ package winput
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/rpdg/winput/hid"
 	"github.com/rpdg/winput/keyboard"
@@ -89,9 +90,14 @@ const (
 	BackendHID
 )
 
-var currentBackend Backend = BackendMessage
+var (
+	currentBackend Backend = BackendMessage
+	backendMutex   sync.RWMutex
+)
 
 func SetBackend(b Backend) {
+	backendMutex.Lock()
+	defer backendMutex.Unlock()
 	currentBackend = b
 }
 
@@ -100,7 +106,11 @@ func SetHIDLibraryPath(path string) {
 }
 
 func checkBackend() error {
-	if currentBackend == BackendHID {
+	backendMutex.RLock()
+	cb := currentBackend
+	backendMutex.RUnlock()
+
+	if cb == BackendHID {
 		if err := hid.Init(); err != nil {
 			if errors.Is(err, hid.ErrDriverNotInstalled) {
 				return ErrDriverNotInstalled
@@ -109,6 +119,12 @@ func checkBackend() error {
 		}
 	}
 	return nil
+}
+
+func getBackend() Backend {
+	backendMutex.RLock()
+	defer backendMutex.RUnlock()
+	return currentBackend
 }
 
 // -----------------------------------------------------------------------------
@@ -123,7 +139,7 @@ func (w *Window) Move(x, y int32) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
@@ -141,7 +157,7 @@ func (w *Window) MoveRel(dx, dy int32) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		cx, cy, err := window.GetCursorPos()
 		if err != nil {
 			return err
@@ -169,7 +185,7 @@ func (w *Window) Click(x, y int32) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
@@ -187,7 +203,7 @@ func (w *Window) ClickRight(x, y int32) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
@@ -205,7 +221,7 @@ func (w *Window) ClickMiddle(x, y int32) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
@@ -223,7 +239,7 @@ func (w *Window) DoubleClick(x, y int32) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
@@ -241,7 +257,7 @@ func (w *Window) Scroll(x, y int32, delta int32) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		return hid.Scroll(delta)
 	}
 	return mouse.Scroll(w.HWND, x, y, delta)
@@ -322,6 +338,19 @@ const (
 	KeyF10       = keyboard.KeyF10
 	KeyF11       = keyboard.KeyF11
 	KeyF12       = keyboard.KeyF12
+	KeyNumLock   = keyboard.KeyNumLock
+	KeyScroll    = keyboard.KeyScroll
+	
+	KeyHome      = keyboard.KeyHome
+	KeyArrowUp   = keyboard.KeyArrowUp
+	KeyPageUp    = keyboard.KeyPageUp
+	KeyLeft      = keyboard.KeyLeft
+	KeyRight     = keyboard.KeyRight
+	KeyEnd       = keyboard.KeyEnd
+	KeyArrowDown = keyboard.KeyArrowDown
+	KeyPageDown  = keyboard.KeyPageDown
+	KeyInsert    = keyboard.KeyInsert
+	KeyDelete    = keyboard.KeyDelete
 )
 
 func KeyFromRune(r rune) (Key, bool) {
@@ -337,7 +366,7 @@ func (w *Window) KeyDown(key Key) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		return hid.KeyDown(uint16(key))
 	}
 	return keyboard.KeyDown(w.HWND, key)
@@ -351,7 +380,7 @@ func (w *Window) KeyUp(key Key) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		return hid.KeyUp(uint16(key))
 	}
 	return keyboard.KeyUp(w.HWND, key)
@@ -365,7 +394,7 @@ func (w *Window) Press(key Key) error {
 		return err
 	}
 
-	if currentBackend == BackendHID {
+	if getBackend() == BackendHID {
 		return hid.Press(uint16(key))
 	}
 	return keyboard.Press(w.HWND, key)
@@ -403,18 +432,22 @@ func (w *Window) Type(text string) error {
 		return err
 	}
 
+	cb := getBackend()
+
 	for _, r := range text {
 		k, shifted, ok := keyboard.LookupKey(r)
 		if !ok {
 			return ErrUnsupportedKey
 		}
-		
+
 		if shifted {
-			if currentBackend == BackendHID {
+			if cb == BackendHID {
 				if err := hid.KeyDown(uint16(KeyShift)); err != nil {
 					return err
 				}
+				// Defer cleanup not applicable in loop, must manual check
 				if err := hid.Press(uint16(k)); err != nil {
+					hid.KeyUp(uint16(KeyShift)) // Try cleanup
 					return err
 				}
 				if err := hid.KeyUp(uint16(KeyShift)); err != nil {
@@ -425,6 +458,7 @@ func (w *Window) Type(text string) error {
 					return err
 				}
 				if err := keyboard.Press(w.HWND, k); err != nil {
+					keyboard.KeyUp(w.HWND, KeyShift) // Try cleanup
 					return err
 				}
 				if err := keyboard.KeyUp(w.HWND, KeyShift); err != nil {
@@ -432,7 +466,7 @@ func (w *Window) Type(text string) error {
 				}
 			}
 		} else {
-			if currentBackend == BackendHID {
+			if cb == BackendHID {
 				if err := hid.Press(uint16(k)); err != nil {
 					return err
 				}

@@ -17,9 +17,8 @@ func SetLibraryPath(path string) {
 	interception.SetLibraryPath(path)
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
+// Use a local random source instead of global rand
+var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 var (
 	ctx         interception.Context
@@ -101,8 +100,18 @@ func EnsureInit() error {
 }
 
 func humanSleep(base int) {
-	jitter := rand.Intn(base/3 + 1)
-	time.Sleep(time.Duration(base+jitter) * time.Millisecond)
+	// Base +/- Jitter (max base/3)
+	maxJitter := base / 3
+	if maxJitter == 0 {
+		maxJitter = 1
+	}
+	jitter := rng.Intn(maxJitter*2+1) - maxJitter // -maxJitter to +maxJitter
+	
+	duration := base + jitter
+	if duration < 0 {
+		duration = 0
+	}
+	time.Sleep(time.Duration(duration) * time.Millisecond)
 }
 
 // Helper to safely get context and device for operations
@@ -159,8 +168,8 @@ func Move(targetX, targetY int32) error {
 		dy := nextY - curY
 
 		if i < steps {
-			dx += int32(rand.Intn(3) - 1)
-			dy += int32(rand.Intn(3) - 1)
+			dx += int32(rng.Intn(3) - 1)
+			dy += int32(rng.Intn(3) - 1)
 		}
 
 		if dx == 0 && dy == 0 {
