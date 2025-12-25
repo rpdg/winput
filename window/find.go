@@ -2,6 +2,7 @@ package window
 
 import (
 	"fmt"
+	"strings"
 	"syscall"
 	"unsafe"
 )
@@ -46,7 +47,15 @@ func FindByPID(targetPid uint32) ([]uintptr, error) {
 		return 1 // Continue enumeration
 	})
 
-	ProcEnumWindows.Call(cb, 0)
+	r, _, e := ProcEnumWindows.Call(cb, 0)
+	if r == 0 {
+		// EnumWindows returns 0 if it fails OR if the callback stops it.
+		// Since our callback always returns 1, r==0 implies failure or no windows (unlikely).
+		// Check LastError.
+		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
+			return nil, fmt.Errorf("EnumWindows failed: %w", errno)
+		}
+	}
 
 	if len(hwnds) == 0 {
 		return nil, fmt.Errorf("no windows found for PID: %d", targetPid)
@@ -62,16 +71,16 @@ const (
 )
 
 type PROCESSENTRY32 struct {
-	Size            uint32
-	CntUsage        uint32
-	ProcessID       uint32
-	DefaultHeapID   uintptr
-	ModuleID        uint32
-	CntThreads      uint32
-	ParentProcessID uint32
-	PriClassBase    int32
-	Flags           uint32
-	ExeFile         [260]uint16
+	Size              uint32
+	CntUsage          uint32
+	ProcessID         uint32
+	DefaultHeapID     uintptr
+	ModuleID          uint32
+	CntThreads        uint32
+	ParentProcessID   uint32
+	PriClassBase      int32
+	Flags             uint32
+	ExeFile           [260]uint16
 }
 
 func FindPIDByName(name string) (uint32, error) {
@@ -86,14 +95,19 @@ func FindPIDByName(name string) (uint32, error) {
 	var pe32 PROCESSENTRY32
 	pe32.Size = uint32(unsafe.Sizeof(pe32))
 
-	r, _, _ := ProcProcess32First.Call(snap, uintptr(unsafe.Pointer(&pe32)))
+	r, _, err := ProcProcess32First.Call(snap, uintptr(unsafe.Pointer(&pe32)))
 	if r == 0 {
-		return 0, fmt.Errorf("Process32First failed")
+		return 0, fmt.Errorf("Process32First failed: %v", err)
+	}
+
+	target := strings.ToLower(name)
+	if !strings.HasSuffix(target, ".exe") {
+		target += ".exe"
 	}
 
 	for {
 		exeName := syscall.UTF16ToString(pe32.ExeFile[:])
-		if exeName == name {
+		if strings.EqualFold(exeName, target) {
 			return pe32.ProcessID, nil
 		}
 

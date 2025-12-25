@@ -388,7 +388,9 @@ func (w *Window) PressHotkey(keys ...Key) error {
 		}
 	}
 	for i := len(keys) - 1; i >= 0; i-- {
-		w.KeyUp(keys[i])
+		if err := w.KeyUp(keys[i]); err != nil {
+			return err
+		}
 	}
 	return nil
 }

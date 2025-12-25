@@ -142,7 +142,9 @@ func Move(targetX, targetY int32) error {
 			Y:     dy,
 		}
 
-		interception.SendMouse(ctx, mouseDev, &stroke)
+		if err := interception.SendMouse(ctx, mouseDev, &stroke); err != nil {
+			return err
+		}
 		time.Sleep(5 * time.Millisecond)
 	}
 	return nil
@@ -155,12 +157,16 @@ func Click(x, y int32) error {
 	humanSleep(50)
 
 	down := interception.MouseStroke{State: interception.MouseStateLeftDown}
-	interception.SendMouse(ctx, mouseDev, &down)
+	if err := interception.SendMouse(ctx, mouseDev, &down); err != nil {
+		return err
+	}
 
 	humanSleep(60)
 
 	up := interception.MouseStroke{State: interception.MouseStateLeftUp}
-	interception.SendMouse(ctx, mouseDev, &up)
+	if err := interception.SendMouse(ctx, mouseDev, &up); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -172,12 +178,16 @@ func ClickRight(x, y int32) error {
 	humanSleep(50)
 
 	down := interception.MouseStroke{State: interception.MouseStateRightDown}
-	interception.SendMouse(ctx, mouseDev, &down)
+	if err := interception.SendMouse(ctx, mouseDev, &down); err != nil {
+		return err
+	}
 
 	humanSleep(60)
 
 	up := interception.MouseStroke{State: interception.MouseStateRightUp}
-	interception.SendMouse(ctx, mouseDev, &up)
+	if err := interception.SendMouse(ctx, mouseDev, &up); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -188,12 +198,16 @@ func ClickMiddle(x, y int32) error {
 	humanSleep(50)
 
 	down := interception.MouseStroke{State: interception.MouseStateMiddleDown}
-	interception.SendMouse(ctx, mouseDev, &down)
+	if err := interception.SendMouse(ctx, mouseDev, &down); err != nil {
+		return err
+	}
 
 	humanSleep(60)
 
 	up := interception.MouseStroke{State: interception.MouseStateMiddleUp}
-	interception.SendMouse(ctx, mouseDev, &up)
+	if err := interception.SendMouse(ctx, mouseDev, &up); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -214,7 +228,9 @@ func Scroll(delta int32) error {
 		State:   interception.MouseStateWheel,
 		Rolling: int16(delta),
 	}
-	interception.SendMouse(ctx, mouseDev, &stroke)
+	if err := interception.SendMouse(ctx, mouseDev, &stroke); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -230,7 +246,9 @@ func KeyDown(scanCode uint16) error {
 		Code:  scanCode,
 		State: interception.KeyStateDown,
 	}
-	interception.SendKey(ctx, keyboardDev, &s)
+	if err := interception.SendKey(ctx, keyboardDev, &s); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -242,7 +260,9 @@ func KeyUp(scanCode uint16) error {
 		Code:  scanCode,
 		State: interception.KeyStateUp,
 	}
-	interception.SendKey(ctx, keyboardDev, &s)
+	if err := interception.SendKey(ctx, keyboardDev, &s); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -16,6 +16,11 @@ var (
 	procSend           uintptr
 )
 
+var (
+	ErrLibraryNotFound = fmt.Errorf("interception library not found")
+	ErrSendFailed      = fmt.Errorf("interception_send failed")
+)
+
 // Default library name
 var libraryPath = "interception.dll"
 
@@ -23,8 +28,6 @@ var libraryPath = "interception.dll"
 func SetLibraryPath(path string) {
 	libraryPath = path
 }
-
-var ErrLibraryNotFound = fmt.Errorf("interception library not found")
 
 // Load loads the interception.dll and resolves function addresses.
 func Load() error {
@@ -61,10 +64,8 @@ func getProc(h syscall.Handle, name string) uintptr {
 
 // Types
 
-type (
-	Context uintptr
-	Device  int
-)
+type Context uintptr
+type Device int
 
 // Go-friendly structs
 type MouseStroke struct {
@@ -82,7 +83,25 @@ type KeyStroke struct {
 	Information uint32
 }
 
-// Constants for Mouse (Manually copied from header)
+// Ensure Memory Safety:
+// InterceptionStroke in C is a union of MouseStroke and KeyStroke.
+// We calculate the safe buffer size at runtime init.
+var strokeSize int
+
+func init() {
+	// Size of MouseStroke is usually 18, but padding could change that.
+	s := int(unsafe.Sizeof(MouseStroke{}))
+	if s < 18 {
+		s = 18
+	}
+	// Safety cap to avoid unexpected huge sizes from padding changes.
+	if s > 64 {
+		s = 64
+	}
+	strokeSize = s
+}
+
+// Constants for Mouse
 const (
 	MouseStateLeftDown   = 0x001
 	MouseStateLeftUp     = 0x002
@@ -137,24 +156,46 @@ func IsKeyboard(dev Device) bool {
 	return r != 0
 }
 
-func SendMouse(ctx Context, dev Device, s *MouseStroke) {
+func SendMouse(ctx Context, dev Device, s *MouseStroke) error {
 	if procSend == 0 {
-		return
+		return fmt.Errorf("interception_send missing")
 	}
-	// InterceptionStroke is [sizeof(MouseStroke)]byte.
-	// We can pass the pointer to our struct directly as it matches the layout.
-	// Signature: int interception_send(Context, Device, Stroke*, nStroke)
-	syscall.Syscall6(procSend, 4, uintptr(ctx), uintptr(dev), uintptr(unsafe.Pointer(s)), 1, 0, 0)
+	
+	buf := make([]byte, strokeSize)
+	*(*uint16)(unsafe.Pointer(&buf[0])) = s.State
+	*(*uint16)(unsafe.Pointer(&buf[2])) = s.Flags
+	*(*int16)(unsafe.Pointer(&buf[4])) = s.Rolling
+	*(*int32)(unsafe.Pointer(&buf[6])) = s.X
+	*(*int32)(unsafe.Pointer(&buf[10])) = s.Y
+	*(*uint32)(unsafe.Pointer(&buf[14])) = s.Information
+
+	return send(ctx, dev, buf)
 }
 
-func SendKey(ctx Context, dev Device, s *KeyStroke) {
+func SendKey(ctx Context, dev Device, s *KeyStroke) error {
 	if procSend == 0 {
-		return
+		return fmt.Errorf("interception_send missing")
 	}
-	// Note: KeyStroke is smaller than MouseStroke.
-	// Interception expects a pointer to a buffer of size INTERCEPTION_STROKE (which is max of mouse/key).
-	// But interception_send implementation likely only reads relevant fields based on device type.
-	// However, to be safe and match the C logic (casting to array of char), we should ensure memory safety.
-	// Go structs are memory compatible here.
-	syscall.Syscall6(procSend, 4, uintptr(ctx), uintptr(dev), uintptr(unsafe.Pointer(s)), 1, 0, 0)
+
+	buf := make([]byte, strokeSize)
+	*(*uint16)(unsafe.Pointer(&buf[0])) = s.Code
+	*(*uint16)(unsafe.Pointer(&buf[2])) = s.State
+	*(*uint32)(unsafe.Pointer(&buf[4])) = s.Information
+
+	return send(ctx, dev, buf)
+}
+
+func send(ctx Context, dev Device, buf []byte) error {
+	if len(buf) == 0 {
+		return fmt.Errorf("empty buffer")
+	}
+	// Pass pointer to first element in single expression to satisfy unsafe rules.
+	r, _, e := syscall.Syscall6(procSend, 4, uintptr(ctx), uintptr(dev), uintptr(unsafe.Pointer(&buf[0])), 1, 0, 0)
+	if r == 0 {
+		if e != 0 {
+			return e
+		}
+		return ErrSendFailed
+	}
+	return nil
 }
