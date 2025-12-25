@@ -36,4 +36,11 @@ var (
 
 	ProcPostMessageW   = user32.NewProc("PostMessageW")
 	ProcMapVirtualKeyW = user32.NewProc("MapVirtualKeyW")
+
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+
+	ProcCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
+	ProcProcess32First           = kernel32.NewProc("Process32FirstW")
+	ProcProcess32Next            = kernel32.NewProc("Process32NextW")
+	ProcCloseHandle              = kernel32.NewProc("CloseHandle")
 )

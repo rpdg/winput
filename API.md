@@ -14,6 +14,7 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [type Window](#type-window)
     *   [func FindByClass](#func-findbyclass)
     *   [func FindByPID](#func-findbypid)
+    *   [func FindByProcessName](#func-findbyprocessname)
     *   [func FindByTitle](#func-findbytitle)
     *   [func (*Window) Click](#func-window-click)
     *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
@@ -165,6 +166,15 @@ FindByClass searches for a top-level window matching the class name (e.g., "Note
 func FindByPID(pid uint32) ([]*Window, error)
 ```
 FindByPID returns all top-level windows belonging to the specified Process ID.
+
+#### func FindByProcessName
+
+```go
+func FindByProcessName(name string) ([]*Window, error)
+```
+FindByProcessName returns all top-level windows belonging to the process with the given executable name (e.g. "notepad.exe").
+
+#### func FindByTitle
 
 #### func (*Window) Move
 

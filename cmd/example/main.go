@@ -11,6 +11,8 @@ func main() {
 	log.SetFlags(log.Ltime)
 	log.Println("=== winput Library Example ===")
 
+	winput.SetBackend(winput.BackendHID)
+
 	// 1. 设置 DPI 感知 (推荐)
 	if err := winput.EnablePerMonitorDPI(); err != nil {
 		log.Printf("Warning: DPI awareness error: %v", err)
@@ -18,7 +20,7 @@ func main() {
 
 	// 2. 寻找记事本窗口
 	// 优先匹配标题，失败则匹配类名
-	w, err := winput.FindByTitle("Untitled - Notepad")
+	w, err := winput.FindByTitle("无标题 - 记事本")
 	if err != nil {
 		w, err = winput.FindByClass("Notepad")
 	}

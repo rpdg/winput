@@ -46,6 +46,16 @@ func FindByPID(pid uint32) ([]*Window, error) {
 	return windows, nil
 }
 
+// FindByProcessName searches for all top-level windows belonging to a process with the given executable name.
+// name: e.g. "notepad.exe"
+func FindByProcessName(name string) ([]*Window, error) {
+	pid, err := window.FindPIDByName(name)
+	if err != nil {
+		return nil, err
+	}
+	return FindByPID(pid)
+}
+
 // -----------------------------------------------------------------------------
 // Window State
 // -----------------------------------------------------------------------------

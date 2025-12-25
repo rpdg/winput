@@ -41,24 +41,65 @@ func FindByPID(targetPid uint32) ([]uintptr, error) {
 		ProcGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
 
 		if pid == targetPid {
-			// Optional: Check if window is visible? User didn't specify, but usually we want visible ones.
-			// But for automation, sometimes invisible ones are used.
-			// Let's stick to simple PID match for now.
 			hwnds = append(hwnds, hwnd)
 		}
 		return 1 // Continue enumeration
 	})
 
-	ret, _, _ := ProcEnumWindows.Call(cb, 0)
-	if ret == 0 {
-		// EnumWindows returns 0 if it fails OR if the callback stops it (returns 0).
-		// Since we always return 1, 0 means failure or no windows (but EnumWindows rarely fails like that).
-		// However, if we found nothing, hwnds is empty.
-	}
+	ProcEnumWindows.Call(cb, 0)
 
 	if len(hwnds) == 0 {
 		return nil, fmt.Errorf("no windows found for PID: %d", targetPid)
 	}
 
 	return hwnds, nil
+}
+
+// Process Enumeration helpers
+
+const (
+	TH32CS_SNAPPROCESS = 0x00000002
+)
+
+type PROCESSENTRY32 struct {
+	Size            uint32
+	CntUsage        uint32
+	ProcessID       uint32
+	DefaultHeapID   uintptr
+	ModuleID        uint32
+	CntThreads      uint32
+	ParentProcessID uint32
+	PriClassBase    int32
+	Flags           uint32
+	ExeFile         [260]uint16
+}
+
+func FindPIDByName(name string) (uint32, error) {
+	snap, _, _ := ProcCreateToolhelp32Snapshot.Call(TH32CS_SNAPPROCESS, 0)
+	if uintptr(snap) == ^uintptr(0) { // INVALID_HANDLE_VALUE is -1
+		return 0, fmt.Errorf("CreateToolhelp32Snapshot failed")
+	}
+	defer ProcCloseHandle.Call(snap)
+
+	var pe32 PROCESSENTRY32
+	pe32.Size = uint32(unsafe.Sizeof(pe32))
+
+	r, _, _ := ProcProcess32First.Call(snap, uintptr(unsafe.Pointer(&pe32)))
+	if r == 0 {
+		return 0, fmt.Errorf("Process32First failed")
+	}
+
+	for {
+		exeName := syscall.UTF16ToString(pe32.ExeFile[:])
+		if exeName == name {
+			return pe32.ProcessID, nil
+		}
+
+		r, _, _ = ProcProcess32Next.Call(snap, uintptr(unsafe.Pointer(&pe32)))
+		if r == 0 {
+			break
+		}
+	}
+
+	return 0, fmt.Errorf("process not found: %s", name)
 }

@@ -14,6 +14,7 @@
 *   [type Window](#type-window)
     *   [func FindByClass](#func-findbyclass)
     *   [func FindByPID](#func-findbypid)
+    *   [func FindByProcessName](#func-findbyprocessname)
     *   [func FindByTitle](#func-findbytitle)
     *   [func (*Window) Click](#func-window-click)
     *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
@@ -145,26 +146,21 @@ type Window struct {
 ```
 Window 代表自动化的目标窗口。它封装了窗口句柄 (HWND)，并提供了输入和坐标管理的方法。
 
-#### func FindByTitle
-
-```go
-func FindByTitle(title string) (*Window, error)
-```
-FindByTitle 搜索精确匹配标题的顶级窗口。如果未找到，返回 `ErrWindowNotFound`。
-
-#### func FindByClass
-
-```go
-func FindByClass(class string) (*Window, error)
-```
-FindByClass 搜索匹配类名的顶级窗口 (例如 "Notepad", "Chrome_WidgetWin_1")。
-
 #### func FindByPID
 
 ```go
 func FindByPID(pid uint32) ([]*Window, error)
 ```
 FindByPID 返回属于指定进程 ID 的所有顶级窗口。
+
+#### func FindByProcessName
+
+```go
+func FindByProcessName(name string) ([]*Window, error)
+```
+FindByProcessName 返回属于指定可执行文件名称（例如 "notepad.exe"）的所有顶级窗口。
+
+#### func FindByTitle
 
 #### func (*Window) Move
 
