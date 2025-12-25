@@ -1,6 +1,9 @@
 package mouse
 
 import (
+	"fmt"
+	"syscall"
+
 	"github.com/rpdg/winput/window"
 )
 
@@ -22,16 +25,28 @@ const (
 	MK_MBUTTON = 0x0010
 )
 
+// makeLParam packs two 16-bit integers into a 32-bit uintptr.
+// Note: It casts to int16 first to preserve sign behavior for negative coordinates.
 func makeLParam(x, y int32) uintptr {
-	ux := uint32(uint16(x))
-	uy := uint32(uint16(y))
-	return uintptr(ux | (uy << 16))
+	lx := uint32(uint16(int16(x)))
+	ly := uint32(uint16(int16(y)))
+	return uintptr(lx | (ly << 16))
+}
+
+// makeWheelWParam packs delta (high word) and key states (low word).
+func makeWheelWParam(delta int32, keyFlags uint16) uintptr {
+	low := uint32(keyFlags)
+	high := uint32(uint16(int16(delta)))
+	return uintptr((high << 16) | low)
 }
 
 func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
-	r, _, _ := window.ProcPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
+	r, _, e := window.ProcPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
 	if r == 0 {
-		return nil
+		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
+			return fmt.Errorf("PostMessageW failed: %w", errno)
+		}
+		return fmt.Errorf("PostMessageW failed")
 	}
 	return nil
 }
@@ -43,7 +58,12 @@ func Move(hwnd uintptr, x, y int32) error {
 
 func Click(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
-	Move(hwnd, x, y)
+	// We should propagate errors. If Move fails, Click should probably fail?
+	// But Move (WM_MOUSEMOVE) failure might be ignorable? 
+	// Better to be strict as per review.
+	if err := post(hwnd, WM_MOUSEMOVE, 0, lparam); err != nil {
+		return err
+	}
 
 	if err := post(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam); err != nil {
 		return err
@@ -53,7 +73,9 @@ func Click(hwnd uintptr, x, y int32) error {
 
 func ClickRight(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
-	Move(hwnd, x, y)
+	if err := post(hwnd, WM_MOUSEMOVE, 0, lparam); err != nil {
+		return err
+	}
 
 	if err := post(hwnd, WM_RBUTTONDOWN, MK_RBUTTON, lparam); err != nil {
 		return err
@@ -63,7 +85,9 @@ func ClickRight(hwnd uintptr, x, y int32) error {
 
 func ClickMiddle(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
-	Move(hwnd, x, y)
+	if err := post(hwnd, WM_MOUSEMOVE, 0, lparam); err != nil {
+		return err
+	}
 
 	if err := post(hwnd, WM_MBUTTONDOWN, MK_MBUTTON, lparam); err != nil {
 		return err
@@ -73,7 +97,9 @@ func ClickMiddle(hwnd uintptr, x, y int32) error {
 
 func DoubleClick(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
-	Move(hwnd, x, y)
+	if err := post(hwnd, WM_MOUSEMOVE, 0, lparam); err != nil {
+		return err
+	}
 
 	if err := post(hwnd, WM_LBUTTONDBLCLK, MK_LBUTTON, lparam); err != nil {
 		return err
@@ -83,22 +109,16 @@ func DoubleClick(hwnd uintptr, x, y int32) error {
 
 // Scroll sends a vertical scroll message.
 // delta is usually a multiple of 120 (WHEEL_DELTA). Positive = forward/up, Negative = backward/down.
-// x, y are client coordinates where the scroll happens (usually under cursor).
+// x, y are client coordinates where the scroll happens.
 func Scroll(hwnd uintptr, x, y int32, delta int32) error {
 	// WM_MOUSEWHEEL requires Screen Coordinates in LPARAM (low x, high y)
-	// BUT PostMessage to a specific window handles client coordinates differently?
-	// MSDN says: "The coordinates are relative to the upper-left corner of the screen."
-	// So we need Screen coordinates here, even if we are targeting a specific HWND via PostMessage.
-
 	sx, sy, err := window.ClientToScreen(hwnd, x, y)
 	if err != nil {
 		return err
 	}
 
-	// WPARAM: High word = distance, Low word = keys (0)
-	// Distance: multiples of 120.
-	wparam := uintptr(uint32(uint16(0)) | (uint32(int16(delta)) << 16))
-	lparam := makeLParam(sx, sy) // reusing makeLParam but passing Screen X/Y
+	wparam := makeWheelWParam(delta, 0)
+	lparam := makeLParam(sx, sy)
 
 	return post(hwnd, WM_MOUSEWHEEL, wparam, lparam)
 }

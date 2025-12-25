@@ -38,10 +38,10 @@
 ```go
 var (
     // ErrWindowNotFound 意味着无法通过标题、类名或 PID 找到目标窗口。
-    ErrWindowNotFound = errors.New("window not found")
-
-    // ErrUnsupportedKey 意味着字符或键码无法映射到有效的输入事件。
-    ErrUnsupportedKey = errors.New("unsupported key or character")
+    ErrWindowNotFound     = errors.New("window not found")     // 未找到窗口
+    ErrWindowGone         = errors.New("window is gone")       // 窗口句柄失效
+    ErrWindowNotVisible   = errors.New("window is not visible")// 窗口不可见或最小化
+    ErrUnsupportedKey     = errors.New("unsupported key")      // 不支持的按键
 
     // ErrBackendUnavailable 意味着所选的后端（如 HID）初始化失败。
     ErrBackendUnavailable = errors.New("input backend unavailable")
@@ -168,8 +168,8 @@ FindByProcessName 返回属于指定可执行文件名称（例如 "notepad.exe"
 func (w *Window) Move(x, y int32) error
 ```
 Move 将鼠标光标移动到**相对于窗口客户区**的指定坐标。
-- 在 `BackendMessage` 模式下：投递 `WM_MOUSEMOVE` 消息。
-- 在 `BackendHID` 模式下：计算绝对屏幕位置并物理移动鼠标光标（带有拟人化的平滑处理）。
+- **消息后端**: 投递 `WM_MOUSEMOVE` 消息（瞬间完成）。
+- **HID 后端**: 计算绝对屏幕位置并物理移动鼠标光标（拟人化轨迹）。**此操作是同步且阻塞的。**
 
 #### func (*Window) Click
 
@@ -234,8 +234,8 @@ Press 模拟一次完整的按键过程 (KeyDown 后跟 KeyUp)。
 ```go
 func (w *Window) Type(text string) error
 ```
-Type 向窗口输入字符串文本。它将字符映射为按键并依次按下。
-它会自动处理**Shift**组合键以支持大写字母和符号（例如 'A', '!', '@'）。
+输入字符串，自动处理大写字母和符号的 Shift 切换。
+
 
 #### func (*Window) DPI
 

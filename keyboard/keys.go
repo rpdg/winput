@@ -137,8 +137,8 @@ var runeMap = map[rune]KeyDef{
 	'\t': {KeyTab, false},
 }
 
-// KeyFromRune returns the Scan Code and whether Shift is required.
-func KeyFromRune(r rune) (Key, bool, bool) {
+// LookupKey returns the Scan Code and whether Shift is required.
+func LookupKey(r rune) (Key, bool, bool) {
 	k, ok := runeMap[r]
 	return k.Code, k.Shifted, ok
 }

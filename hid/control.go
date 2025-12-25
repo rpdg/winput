@@ -17,6 +17,10 @@ func SetLibraryPath(path string) {
 	interception.SetLibraryPath(path)
 }
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 var (
 	ctx         interception.Context
 	mouseDev    interception.Device
@@ -56,10 +60,30 @@ func Init() error {
 
 	if mouseDev == 0 && keyboardDev == 0 {
 		interception.DestroyContext(ctx)
+		ctx = 0
 		return fmt.Errorf("no interception devices found")
 	}
 
 	initialized = true
+	return nil
+}
+
+// Close destroys the Interception context.
+func Close() error {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+
+	if !initialized {
+		return nil
+	}
+
+	if ctx != 0 {
+		interception.DestroyContext(ctx)
+		ctx = 0
+	}
+	mouseDev = 0
+	keyboardDev = 0
+	initialized = false
 	return nil
 }
 
@@ -95,7 +119,11 @@ func Move(targetX, targetY int32) error {
 		nextX := cx + (targetX-cx)*int32(i)/int32(steps)
 		nextY := cy + (targetY-cy)*int32(i)/int32(steps)
 
-		curX, curY, _ := window.GetCursorPos()
+		curX, curY, err := window.GetCursorPos()
+		if err != nil {
+			return err
+		}
+
 		dx := nextX - curX
 		dy := nextY - curY
 

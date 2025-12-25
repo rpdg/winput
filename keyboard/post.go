@@ -2,6 +2,7 @@ package keyboard
 
 import (
 	"fmt"
+	"syscall"
 	"time"
 
 	"github.com/rpdg/winput/window"
@@ -20,9 +21,12 @@ func mapScanCodeToVK(sc Key) uintptr {
 }
 
 func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
-	r, _, _ := window.ProcPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
+	r, _, e := window.ProcPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
 	if r == 0 {
-		return fmt.Errorf("PostMessage failed")
+		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
+			return fmt.Errorf("PostMessageW failed: %w", errno)
+		}
+		return fmt.Errorf("PostMessageW failed")
 	}
 	return nil
 }
@@ -39,6 +43,9 @@ func KeyDown(hwnd uintptr, key Key) error {
 
 func KeyUp(hwnd uintptr, key Key) error {
 	vk := mapScanCodeToVK(key)
+	if vk == 0 {
+		return fmt.Errorf("unsupported key: %d", key)
+	}
 
 	lparam := uintptr(1) | (uintptr(key) << 16) | (1 << 30) | (1 << 31)
 	return post(hwnd, WM_KEYUP, vk, lparam)
@@ -54,14 +61,22 @@ func Press(hwnd uintptr, key Key) error {
 
 func Type(hwnd uintptr, text string) error {
 	for _, r := range text {
-		k, shifted, ok := KeyFromRune(r)
+		k, shifted, ok := LookupKey(r)
 		if ok {
 			if shifted {
-				KeyDown(hwnd, KeyShift)
-				Press(hwnd, k)
-				KeyUp(hwnd, KeyShift)
+				if err := KeyDown(hwnd, KeyShift); err != nil {
+					return err
+				}
+				if err := Press(hwnd, k); err != nil {
+					return err
+				}
+				if err := KeyUp(hwnd, KeyShift); err != nil {
+					return err
+				}
 			} else {
-				Press(hwnd, k)
+				if err := Press(hwnd, k); err != nil {
+					return err
+				}
 			}
 		}
 		time.Sleep(20 * time.Millisecond)

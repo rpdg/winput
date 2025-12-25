@@ -75,9 +75,11 @@ type PROCESSENTRY32 struct {
 }
 
 func FindPIDByName(name string) (uint32, error) {
-	snap, _, _ := ProcCreateToolhelp32Snapshot.Call(TH32CS_SNAPPROCESS, 0)
-	if uintptr(snap) == ^uintptr(0) { // INVALID_HANDLE_VALUE is -1
-		return 0, fmt.Errorf("CreateToolhelp32Snapshot failed")
+	const INVALID_HANDLE_VALUE = ^uintptr(0)
+
+	snap, _, err := ProcCreateToolhelp32Snapshot.Call(TH32CS_SNAPPROCESS, 0)
+	if snap == INVALID_HANDLE_VALUE {
+		return 0, fmt.Errorf("CreateToolhelp32Snapshot failed: %v", err)
 	}
 	defer ProcCloseHandle.Call(snap)
 

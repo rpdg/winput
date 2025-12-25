@@ -40,7 +40,13 @@ var (
     // ErrWindowNotFound implies the target window could not be located by Title, Class, or PID.
     ErrWindowNotFound = errors.New("window not found")
 
-    // ErrUnsupportedKey implies the character or key code cannot be mapped to a valid input event.
+    // ErrWindowGone implies the window handle is no longer valid.
+    ErrWindowGone = errors.New("window is gone or invalid")
+
+    // ErrWindowNotVisible implies the window is hidden or minimized.
+    ErrWindowNotVisible = errors.New("window is not visible")
+
+    // ErrUnsupportedKey implies the character cannot be mapped to a key.
     ErrUnsupportedKey = errors.New("unsupported key or character")
 
     // ErrBackendUnavailable implies the selected backend (e.g. HID) failed to initialize.
@@ -182,8 +188,8 @@ FindByProcessName returns all top-level windows belonging to the process with th
 func (w *Window) Move(x, y int32) error
 ```
 Move moves the mouse cursor to the specified coordinates **relative to the window's client area**.
-- In `BackendMessage`: It posts a `WM_MOUSEMOVE` message.
-- In `BackendHID`: It calculates the absolute screen position and physically moves the mouse cursor (with human-like smoothing).
+- **BackendMessage**: Posts a `WM_MOUSEMOVE` message (Instant).
+- **BackendHID**: Calculates screen position and physically moves the cursor using a human-like trajectory. **This operation is synchronous and blocking.**
 
 #### func (*Window) Click
 
@@ -248,8 +254,8 @@ In `BackendHID`, a random delay is inserted between down and up events to simula
 ```go
 func (w *Window) Type(text string) error
 ```
-Type types a string of text into the window. It maps characters to keys and presses them sequentially.
-It automatically handles **Shift** key modifiers for uppercase letters and symbols (e.g., 'A', '!', '@').
+Types a string, automatically handling Shift modifiers for uppercase and symbols.
+
 
 #### func (*Window) DPI
 

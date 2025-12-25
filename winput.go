@@ -325,7 +325,7 @@ const (
 )
 
 func KeyFromRune(r rune) (Key, bool) {
-	k, _, ok := keyboard.KeyFromRune(r)
+	k, _, ok := keyboard.LookupKey(r)
 	return k, ok
 }
 
@@ -402,32 +402,47 @@ func (w *Window) Type(text string) error {
 	}
 
 	for _, r := range text {
-		k, shifted, ok := keyboard.KeyFromRune(r)
+		k, shifted, ok := keyboard.LookupKey(r)
 		if !ok {
 			return ErrUnsupportedKey
 		}
-
+		
 		if shifted {
 			if currentBackend == BackendHID {
-				hid.KeyDown(uint16(KeyShift))
-				hid.Press(uint16(k))
-				hid.KeyUp(uint16(KeyShift))
+				if err := hid.KeyDown(uint16(KeyShift)); err != nil {
+					return err
+				}
+				if err := hid.Press(uint16(k)); err != nil {
+					return err
+				}
+				if err := hid.KeyUp(uint16(KeyShift)); err != nil {
+					return err
+				}
 			} else {
-				keyboard.KeyDown(w.HWND, KeyShift)
-				keyboard.Press(w.HWND, k)
-				keyboard.KeyUp(w.HWND, KeyShift)
+				if err := keyboard.KeyDown(w.HWND, KeyShift); err != nil {
+					return err
+				}
+				if err := keyboard.Press(w.HWND, k); err != nil {
+					return err
+				}
+				if err := keyboard.KeyUp(w.HWND, KeyShift); err != nil {
+					return err
+				}
 			}
 		} else {
 			if currentBackend == BackendHID {
-				hid.Press(uint16(k))
+				if err := hid.Press(uint16(k)); err != nil {
+					return err
+				}
 			} else {
-				keyboard.Press(w.HWND, k)
+				if err := keyboard.Press(w.HWND, k); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	return nil
 }
-
 // -----------------------------------------------------------------------------
 // Coordinate & DPI
 // -----------------------------------------------------------------------------

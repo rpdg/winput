@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -8,56 +10,70 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.Ltime)
-	log.Println("=== winput Library Example ===")
+	fmt.Println("=== winput Library Example ===")
 
-	winput.SetBackend(winput.BackendHID)
-
-	// 1. 设置 DPI 感知 (推荐)
+	// 1. Enable DPI Awareness (Critical for correct coordinates)
 	if err := winput.EnablePerMonitorDPI(); err != nil {
-		log.Printf("Warning: DPI awareness error: %v", err)
+		log.Printf("Warning: Failed to enable DPI awareness: %v", err)
 	}
 
-	// 2. 寻找记事本窗口
-	// 优先匹配标题，失败则匹配类名
-	w, err := winput.FindByTitle("无标题 - 记事本")
-	if err != nil {
+	// 2. Find Window
+	// Try finding Notepad by Process Name first, then Class
+	windows, err := winput.FindByProcessName("notepad.exe")
+	var w *winput.Window
+	if err == nil && len(windows) > 0 {
+		w = windows[0]
+		fmt.Println("✅ Found Notepad via Process Name")
+	} else {
 		w, err = winput.FindByClass("Notepad")
+		if err != nil {
+			log.Println("❌ 未找到记事本窗口，请先打开记事本运行此示例。")
+			return
+		}
+		fmt.Println("✅ Found Notepad via Window Class")
 	}
 
-	if err != nil {
-		log.Fatalf("❌ 未找到记事本窗口，请先打开记事本运行此示例。")
+	// 3. Check Visibility
+	// New safety feature: operations fail if window is minimized
+	// Let's bring it to front (User manual action required usually, but we check state)
+	// winput doesn't provide "ShowWindow" yet to keep API clean, but we warn user.
+	
+	// 4. Basic Input (Message Backend)
+	fmt.Println("👉 Testing Message Backend (Click & Type)...")
+	if err := w.Click(100, 100); err != nil {
+		if errors.Is(err, winput.ErrWindowNotVisible) {
+			log.Fatal("❌ Window is minimized or hidden. Please restore it.")
+		}
+		log.Fatal(err)
 	}
 
-	log.Printf("✅ 已连接窗口: %v", w.HWND)
-
-	// 3. 鼠标交互
-	// 坐标均为相对于窗口客户区的逻辑坐标
-	log.Println("👉 正在执行鼠标操作...")
-	w.Click(100, 100) // 左键点击
-	time.Sleep(500 * time.Millisecond)
-
-	// w.ClickRight(100, 100)  // 右键点击演示
-	// w.Scroll(100, 100, 120) // 向上滚动演示
-
-	// 4. 键盘交互
-	log.Println("⌨️  正在执行键盘操作...")
-
-	// 测试大写字母和符号 (Type 现在会自动处理 Shift)
-	msg := "Hello WINPUT! 123 @#$"
-	log.Printf("   - 正在输入: '%s'", msg)
-	if err := w.Type(msg); err != nil {
-		log.Printf("Type failed: %v", err)
-	}
-
-	// 按下回车
+	w.Type("Hello from winput! ")
+	w.PressHotkey(winput.KeyShift, winput.Key1) // Prints '!'
 	w.Press(winput.KeyEnter)
 
-	// 演示手动组合键 (例如 Ctrl + A 全选)
-	log.Println("   - 执行组合键: Ctrl + A")
-	w.KeyDown(winput.KeyCtrl)
-	w.Press(winput.KeyA)
-	w.KeyUp(winput.KeyCtrl)
+	// 5. HID Backend (Optional)
+	fmt.Println("👉 Testing HID Backend (Mouse Move)...")
+	// Note: interception.dll must be present for this to work
+	winput.SetHIDLibraryPath("interception.dll") // Default, strictly optional call
+	winput.SetBackend(winput.BackendHID)
 
-	log.Println("✅ 演示完成。")
+	// MoveRel is a good test for HID
+	err = w.MoveRel(50, 50)
+	if err != nil {
+		if errors.Is(err, winput.ErrDriverNotInstalled) {
+			fmt.Println("⚠️ Interception driver not installed. Skipping HID tests.")
+		} else if errors.Is(err, winput.ErrDLLLoadFailed) {
+			fmt.Println("⚠️ interception.dll not found. Skipping HID tests.")
+		} else {
+			log.Printf("❌ HID Error: %v", err)
+		}
+		// Fallback
+		winput.SetBackend(winput.BackendMessage)
+	} else {
+		fmt.Println("✅ HID Move successful")
+		w.Type("(HID Input)")
+	}
+
+	time.Sleep(1 * time.Second)
+	fmt.Println("=== Done ===")
 }

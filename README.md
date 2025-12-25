@@ -19,6 +19,26 @@ It provides a unified, window-centric API that abstracts the underlying input me
     *   Explicit error returns (no silent failures).
     *   Type-safe Key definitions.
 
+## Backend Limitations & Permissions
+
+### Message Backend
+*   **Mechanism**: Uses `PostMessageW`.
+*   **Pros**: No focus required, no mouse movement, works in background.
+*   **Cons**: 
+    *   **Modifier Keys**: `PostMessage` does **not** update global keyboard state. Apps checking `GetKeyState` (e.g. for Ctrl+C) might fail.
+    *   **UIPI**: Cannot send messages to apps running as Administrator if your app is not.
+    *   **Compatibility**: Some games (DirectX/OpenGL) and frameworks (Qt/WPF sometimes) ignore these messages.
+
+### HID Backend
+*   **Mechanism**: Uses Interception driver (kernel-level).
+*   **Context**: Uses a global driver context (singleton). Safe for automation scripts, but be aware if integrating into larger apps.
+*   **Pros**: Works with almost everything (games, anti-cheat), undetectable as software input.
+*   **Cons**:
+    *   **Driver Required**: Must install Interception driver.
+    *   **Blocking**: `Move` operations are synchronous and blocking (to simulate human speed).
+    *   **Mouse Movement**: Physically moves the cursor.
+    *   **Focus**: Usually requires the window to be active/foreground.
+
 ## Installation
 
 ```bash
