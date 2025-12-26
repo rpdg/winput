@@ -19,6 +19,8 @@ It provides a unified, window-centric API that abstracts the underlying input me
     *   **Thread-Safe**: Global input serialization ensures atomic operations (`inputMutex`).
     *   Explicit error returns (no silent failures).
     *   Type-safe Key definitions.
+*   **Keyboard Layout**:
+    *   The `KeyFromRune` and `Type` functions currently assume a **US QWERTY** keyboard layout.
 
 ## Vision Automation (Electron / Games)
 For applications like **Electron** (VS Code, Discord) or games where `HWND` is unreliable or standard messages are ignored:

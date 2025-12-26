@@ -625,6 +625,11 @@ func PressHotkey(keys ...Key) error {
 	return nil
 }
 
+var (
+	sendInputOnce sync.Once
+	sendInputErr  error
+)
+
 // Global Type using SendInput (Unicode) for Message Backend
 func Type(text string) error {
 	inputMutex.Lock()
@@ -654,6 +659,22 @@ func Type(text string) error {
 	}
 
 	// Message Backend Fallback: SendInput with Unicode
+	sendInputOnce.Do(func() {
+		// Self-test to check if SendInput is viable (permissions, etc.)
+		var inputs [1]input
+		inputs[0].Type = INPUT_KEYBOARD
+		inputs[0].Ki.WScan = 'A' // Dummy char
+		inputs[0].Ki.DwFlags = KEYEVENTF_UNICODE
+
+		n, _, _ := window.ProcSendInput.Call(1, uintptr(unsafe.Pointer(&inputs[0])), uintptr(unsafe.Sizeof(inputs[0])))
+		if n == 0 {
+			sendInputErr = errors.New("SendInput self-test failed; unsupported in this context")
+		}
+	})
+	if sendInputErr != nil {
+		return sendInputErr
+	}
+
 	for _, r := range text {
 		sendUnicode(r)
 		time.Sleep(30 * time.Millisecond)
@@ -661,31 +682,33 @@ func Type(text string) error {
 	return nil
 }
 
+// Internal structures for SendInput
+type keyboardInput struct {
+	WVk     uint16
+	WScan   uint16
+	DwFlags uint32
+	Time    uint32
+	DwExtra uintptr
+}
+type input struct {
+	Type uint32
+	Ki   keyboardInput
+}
+
+const (
+	INPUT_KEYBOARD    = 1
+	KEYEVENTF_UNICODE = 0x0004
+	KEYEVENTF_KEYUP   = 0x0002
+)
+
 func sendUnicode(r rune) {
-	// INPUT structure for SendInput
-	type keyboardInput struct {
-		Type  uint32
-		Vk    uint16
-		Scan  uint16
-		Flags uint32
-		Time  uint32
-		Extra uintptr
-	}
-	const (
-		INPUT_KEYBOARD    = 1
-		KEYEVENTF_UNICODE = 0x0004
-		KEYEVENTF_KEYUP   = 0x0002
-	)
-
-	// Note: simplified for rune. Real implementation should handle surrogates if needed.
-	var inputs [2]keyboardInput
+	var inputs [2]input
 	inputs[0].Type = INPUT_KEYBOARD
-	inputs[0].Scan = uint16(r)
-	inputs[0].Flags = KEYEVENTF_UNICODE
+	inputs[0].Ki.WScan = uint16(r)
+	inputs[0].Ki.DwFlags = KEYEVENTF_UNICODE
 
-	inputs[1].Type = INPUT_KEYBOARD
-	inputs[1].Scan = uint16(r)
-	inputs[1].Flags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
+	inputs[1] = inputs[0]
+	inputs[1].Ki.DwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
 
 	window.ProcSendInput.Call(2, uintptr(unsafe.Pointer(&inputs[0])), uintptr(unsafe.Sizeof(inputs[0])))
 }

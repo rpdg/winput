@@ -19,6 +19,8 @@
     *   **并发安全 (Thread-Safe)**: 全局输入序列化 (`inputMutex`) 确保操作原子性。
     *   显式错误返回 (Explicit Errors)，拒绝静默失败。
     *   类型安全的 Key 定义 (避免直接使用裸扫描码)。
+*   **键盘布局**:
+    *   `KeyFromRune` 和 `Type` 函数目前假定为 **美国 QWERTY** 键盘布局。
 
 ## 视觉自动化 (Electron / 游戏)
 对于 **Electron** 应用 (如 VS Code, Discord) 或游戏，`HWND` 往往不可靠且忽略标准消息：

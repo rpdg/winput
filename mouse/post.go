@@ -1,6 +1,7 @@
 package mouse
 
 import (
+	"errors"
 	"fmt"
 	"syscall"
 	"time"
@@ -24,7 +25,11 @@ const (
 	MK_LBUTTON = 0x0001
 	MK_RBUTTON = 0x0002
 	MK_MBUTTON = 0x0010
+
+	WHEEL_DELTA = 120
 )
+
+var ErrInvalidScrollDelta = errors.New("scroll delta must be a multiple of WHEEL_DELTA (120)")
 
 // Helper to check for errors and wrap errno
 func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
@@ -39,7 +44,6 @@ func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
 }
 
 // makeLParam constructs the LPARAM for mouse messages.
-// It clips coordinates to 16-bit signed integer range to prevent overflow behavior.
 func makeLParam(x, y int32) uintptr {
 	lx := clipToInt16(x)
 	ly := clipToInt16(y)
@@ -61,80 +65,52 @@ func Move(hwnd uintptr, x, y int32) error {
 }
 
 func Click(hwnd uintptr, x, y int32) error {
-	if err := Move(hwnd, x, y); err != nil {
-		return err
-	}
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam); err != nil {
 		return err
 	}
-	// Small delay to simulate click duration, though PostMessage is async
 	time.Sleep(10 * time.Millisecond)
-	if err := post(hwnd, WM_LBUTTONUP, 0, lparam); err != nil {
-		return err
-	}
-	return nil
+	return post(hwnd, WM_LBUTTONUP, 0, lparam)
 }
 
 func ClickRight(hwnd uintptr, x, y int32) error {
-	if err := Move(hwnd, x, y); err != nil {
-		return err
-	}
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_RBUTTONDOWN, MK_RBUTTON, lparam); err != nil {
 		return err
 	}
 	time.Sleep(10 * time.Millisecond)
-	if err := post(hwnd, WM_RBUTTONUP, 0, lparam); err != nil {
-		return err
-	}
-	return nil
+	return post(hwnd, WM_RBUTTONUP, 0, lparam)
 }
 
 func ClickMiddle(hwnd uintptr, x, y int32) error {
-	if err := Move(hwnd, x, y); err != nil {
-		return err
-	}
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_MBUTTONDOWN, MK_MBUTTON, lparam); err != nil {
 		return err
 	}
 	time.Sleep(10 * time.Millisecond)
-	if err := post(hwnd, WM_MBUTTONUP, 0, lparam); err != nil {
-		return err
-	}
-	return nil
+	return post(hwnd, WM_MBUTTONUP, 0, lparam)
 }
 
 func DoubleClick(hwnd uintptr, x, y int32) error {
-	// Standard double click sequence: Down, Up, DoubleClick, Up
-	if err := Click(hwnd, x, y); err != nil {
-		return err
-	}
-	time.Sleep(50 * time.Millisecond) // Typical double click interval
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_LBUTTONDBLCLK, MK_LBUTTON, lparam); err != nil {
 		return err
 	}
-	if err := post(hwnd, WM_LBUTTONUP, 0, lparam); err != nil {
-		return err
-	}
-	return nil
+	return post(hwnd, WM_LBUTTONUP, 0, lparam)
 }
 
-// Scroll sends a vertical scroll message.
-// delta is usually a multiple of 120 (WHEEL_DELTA). Positive = forward/up, Negative = backward/down.
-// x, y are client coordinates where the scroll happens.
 func Scroll(hwnd uintptr, x, y int32, delta int32) error {
-	// WM_MOUSEWHEEL expects screen coordinates in LPARAM!
-	// Low-order word: x, High-order word: y
+	if delta%WHEEL_DELTA != 0 {
+		return ErrInvalidScrollDelta
+	}
+
 	sx, sy, err := window.ClientToScreen(hwnd, x, y)
 	if err != nil {
 		return err
 	}
 
-	// Prepare WPARAM: High-order word is delta, Low-order word is keys (0)
-	wparam := uintptr(uint16(0)) | (uintptr(uint16(delta)) << 16)
+	// High-order word is signed delta
+	wparam := uintptr(uint16(0)) | (uintptr(int16(delta)) << 16)
 	lparam := makeLParam(sx, sy)
 
 	return post(hwnd, WM_MOUSEWHEEL, wparam, lparam)

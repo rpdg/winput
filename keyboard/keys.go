@@ -74,8 +74,7 @@ const (
 	KeyF11       Key = 0x57
 	KeyF12       Key = 0x58
 
-	// Extended Keys (Scan Code Set 1 usually, but some are E0 prefixed)
-	// Note: Standard Scan Code Set 1 values.
+	// Extended Keys
 	KeyHome      Key = 0x47
 	KeyArrowUp   Key = 0x48
 	KeyPageUp    Key = 0x49
@@ -86,6 +85,10 @@ const (
 	KeyPageDown  Key = 0x51
 	KeyInsert    Key = 0x52
 	KeyDelete    Key = 0x53
+
+	KeyRightCtrl Key = 0x1D
+	KeyRightAlt  Key = 0x38
+	KeyDivide    Key = 0x35
 )
 
 type KeyDef struct {
@@ -93,7 +96,6 @@ type KeyDef struct {
 	Shifted bool
 }
 
-// Complete US QWERTY map including shifted chars
 var runeMap = map[rune]KeyDef{
 	'a': {KeyA, false}, 'A': {KeyA, true},
 	'b': {KeyB, false}, 'B': {KeyB, true},
@@ -150,8 +152,21 @@ var runeMap = map[rune]KeyDef{
 	'\t': {KeyTab, false},
 }
 
-// LookupKey returns the Scan Code and whether Shift is required.
 func LookupKey(r rune) (Key, bool, bool) {
 	k, ok := runeMap[r]
 	return k.Code, k.Shifted, ok
+}
+
+func isExtended(key Key) bool {
+	switch key {
+	case KeyInsert, KeyDelete,
+		KeyHome, KeyEnd,
+		KeyPageUp, KeyPageDown,
+		KeyArrowUp, KeyArrowDown, KeyLeft, KeyRight,
+		KeyNumLock, KeyDivide,
+		KeyRightCtrl, KeyRightAlt:
+		return true
+	default:
+		return false
+	}
 }

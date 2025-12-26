@@ -32,19 +32,31 @@ func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
 	return nil
 }
 
+func makeKeyLParam(sc Key, isUp bool) uintptr {
+	var lparam uintptr
+	// Repeat count = 1
+	lparam |= 1
+	// Scan code (bits 16-23)
+	lparam |= (uintptr(sc) & 0xFF) << 16
+
+	// Extended key flag (bit 24)
+	if isExtended(sc) {
+		lparam |= 1 << 24
+	}
+
+	if isUp {
+		// Previous state (bit 30) + Transition state (bit 31)
+		lparam |= 1<<30 | 1<<31
+	}
+	return lparam
+}
+
 func KeyDown(hwnd uintptr, key Key) error {
 	vk := MapScanCodeToVK(key)
 	if vk == 0 {
 		return fmt.Errorf("unsupported key: %d", key)
 	}
-	// LParam for WM_KEYDOWN:
-	// 0-15: Repeat count (1)
-	// 16-23: Scan code
-	// 24: Extended key (0 for standard keys, assuming standard for now)
-	// 29: Context Code (0)
-	// 30: Previous Key State (0 for first press)
-	// 31: Transition State (0 for key down)
-	lparam := uintptr(1) | (uintptr(key) << 16)
+	lparam := makeKeyLParam(key, false)
 	return post(hwnd, WM_KEYDOWN, vk, lparam)
 }
 
@@ -53,14 +65,7 @@ func KeyUp(hwnd uintptr, key Key) error {
 	if vk == 0 {
 		return fmt.Errorf("unsupported key: %d", key)
 	}
-	// LParam for WM_KEYUP:
-	// 0-15: Repeat count (1)
-	// 16-23: Scan code
-	// 24: Extended key
-	// 29: Context Code (0)
-	// 30: Previous Key State (1, always down before up)
-	// 31: Transition State (1, key is being released)
-	lparam := uintptr(1) | (uintptr(key) << 16) | (1 << 30) | (1 << 31)
+	lparam := makeKeyLParam(key, true)
 	return post(hwnd, WM_KEYUP, vk, lparam)
 }
 
@@ -73,13 +78,9 @@ func Press(hwnd uintptr, key Key) error {
 }
 
 // Type sends text using WM_CHAR.
-// This is the most reliable way for background window text input as it
-// bypasses the need for global modifier key states (Shift/Ctrl).
 func Type(hwnd uintptr, text string) error {
 	for _, r := range text {
-		// WM_CHAR accepts UTF-16 code unit.
 		if r > 0xFFFF {
-			// Handle surrogate pairs
 			r -= 0x10000
 			high := 0xD800 + (r >> 10)
 			low := 0xDC00 + (r & 0x3FF)
