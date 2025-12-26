@@ -7,18 +7,20 @@ import (
 	"github.com/rpdg/winput/window"
 )
 
-// SM_CXVIRTUALSCREEN = 78
-// SM_CYVIRTUALSCREEN = 79
-// SM_XVIRTUALSCREEN = 76
-// SM_YVIRTUALSCREEN = 77
+const (
+	smXVirtualScreen  = 76
+	smYVirtualScreen  = 77
+	smCxVirtualScreen = 78
+	smCyVirtualScreen = 79
+)
 
 // VirtualBounds returns the bounding rectangle of the entire virtual desktop.
 // This includes all monitors.
 func VirtualBounds() Rect {
-	x, _, _ := window.ProcGetSystemMetrics.Call(76)
-	y, _, _ := window.ProcGetSystemMetrics.Call(77)
-	w, _, _ := window.ProcGetSystemMetrics.Call(78)
-	h, _, _ := window.ProcGetSystemMetrics.Call(79)
+	x, _, _ := window.ProcGetSystemMetrics.Call(smXVirtualScreen)
+	y, _, _ := window.ProcGetSystemMetrics.Call(smYVirtualScreen)
+	w, _, _ := window.ProcGetSystemMetrics.Call(smCxVirtualScreen)
+	h, _, _ := window.ProcGetSystemMetrics.Call(smCyVirtualScreen)
 
 	return Rect{
 		Left:   int32(x),
@@ -41,8 +43,8 @@ func VirtualBounds() Rect {
 // 2. The capture process MUST be Per-Monitor DPI Aware (matching winput).
 // 3. Do NOT modify the returned negative coordinates; they are valid.
 func ImageToVirtual(imageX, imageY int32) (int32, int32) {
-	vx, _, _ := window.ProcGetSystemMetrics.Call(76) // SM_XVIRTUALSCREEN
-	vy, _, _ := window.ProcGetSystemMetrics.Call(77) // SM_YVIRTUALSCREEN
+	vx, _, _ := window.ProcGetSystemMetrics.Call(smXVirtualScreen)
+	vy, _, _ := window.ProcGetSystemMetrics.Call(smYVirtualScreen)
 
 	return imageX + int32(vx), imageY + int32(vy)
 }
@@ -82,17 +84,10 @@ func Monitors() ([]Monitor, error) {
 	return monitors, nil
 }
 
-type rectStruct struct {
-	Left   int32
-	Top    int32
-	Right  int32
-	Bottom int32
-}
-
 type monitorInfoExW struct {
 	Size    uint32
-	Monitor rectStruct
-	Work    rectStruct
+	Monitor Rect
+	Work    Rect
 	Flags   uint32
 	Device  [32]uint16
 }
