@@ -294,4 +294,25 @@ func TestMultiMonitorSupport(t *testing.T) {
 			})
 		}
 	})
+
+	// Test C: ImageToVirtual Consistency
+	t.Run("ImageToVirtualConsistency", func(t *testing.T) {
+		vBounds := screen.VirtualBounds()
+
+		// Simulate a point on the screenshot (e.g., 100, 100 from top-left)
+		imgX, imgY := int32(100), int32(100)
+
+		virtX, virtY := screen.ImageToVirtual(imgX, imgY)
+
+		expectedX := vBounds.Left + imgX
+		expectedY := vBounds.Top + imgY
+
+		if virtX != expectedX || virtY != expectedY {
+			t.Errorf("ImageToVirtual calculation mismatch. Expected (%d, %d), Got (%d, %d). Origin was (%d, %d)",
+				expectedX, expectedY, virtX, virtY, vBounds.Left, vBounds.Top)
+		} else {
+			t.Logf("ImageToVirtual correct: Image(%d, %d) + Origin(%d, %d) -> Virtual(%d, %d)",
+				imgX, imgY, vBounds.Left, vBounds.Top, virtX, virtY)
+		}
+	})
 }
