@@ -28,6 +28,25 @@ func VirtualBounds() Rect {
 	}
 }
 
+// ImageToVirtual converts coordinates from a "Full Virtual Desktop Screenshot"
+// to actual Windows Virtual Desktop coordinates.
+//
+// Use this when you capture the entire multi-monitor desktop as a single image
+// (origin 0,0) and find a match at (imageX, imageY).
+//
+// Returns (x, y) ready for use with winput.MoveMouseTo / winput.ClickMouseAt.
+//
+// Constraints:
+// 1. The image MUST be a capture of the entire virtual desktop (all monitors).
+// 2. The capture process MUST be Per-Monitor DPI Aware (matching winput).
+// 3. Do NOT modify the returned negative coordinates; they are valid.
+func ImageToVirtual(imageX, imageY int32) (int32, int32) {
+	vx, _, _ := window.ProcGetSystemMetrics.Call(76) // SM_XVIRTUALSCREEN
+	vy, _, _ := window.ProcGetSystemMetrics.Call(77) // SM_YVIRTUALSCREEN
+
+	return imageX + int32(vx), imageY + int32(vy)
+}
+
 // Monitors returns a list of all active monitors.
 func Monitors() ([]Monitor, error) {
 	var monitors []Monitor

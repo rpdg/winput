@@ -91,6 +91,7 @@ go run cmd/example/basic_message/main.go
 
 ### 2. Global Vision Automation (Electron / Games)
 For apps where HWND is unreliable (VS Code, Discord, Games). Uses absolute screen coordinates.
+**Tip**: Use `screen.ImageToVirtual(x, y)` to convert OpenCV screenshot coordinates to winput coordinates.
 ```bash
 go run cmd/example/global_vision/main.go
 ```

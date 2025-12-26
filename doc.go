@@ -27,7 +27,7 @@
 //   - Uses Scan Codes (Set 1) for maximum compatibility with low-level hooks and games.
 //
 // 5. Robust Error Handling:
-// Defines standard errors like ErrWindowNotFound, ErrDriverNotInstalled, ErrWindowNotVisible, and ErrDLLLoadFailed.
+// Defines standard errors like ErrWindowNotFound, ErrDriverNotInstalled, ErrPostMessageFailed.
 // It follows an "explicit failure" principle, where backend initialization errors are reported
 // on the first attempted action.
 //

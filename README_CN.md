@@ -91,6 +91,7 @@ go run cmd/example/basic_message/main.go
 
 ### 2. 全局视觉自动化 (Electron / 游戏)
 适用于 HWND 不可靠的应用 (VS Code, Discord)。使用绝对屏幕坐标。
+**提示**: 使用 `screen.ImageToVirtual(x, y)` 将 OpenCV 截图坐标转换为 winput 坐标。
 ```bash
 go run cmd/example/global_vision/main.go
 ```

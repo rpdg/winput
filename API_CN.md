@@ -56,8 +56,32 @@ var (
     ErrDriverNotInstalled = errors.New("driver not installed") // 驱动未安装 (仅 HID)
     ErrDLLLoadFailed      = errors.New("dll load failed")      // DLL 加载失败 (仅 HID)
     ErrPermissionDenied   = errors.New("permission denied")    // 权限不足
+    ErrPostMessageFailed  = errors.New("PostMessageW failed")  // PostMessageW 调用失败
 )
 ```
+
+## Screen 包 (`github.com/rpdg/winput/screen`)
+
+### func ImageToVirtual
+
+```go
+func ImageToVirtual(imageX, imageY int32) (int32, int32)
+```
+ImageToVirtual 将“完整虚拟桌面截图”中的坐标（OpenCV 匹配点）转换为 `MoveMouseTo` 可用的实际 Windows 虚拟桌面坐标。
+
+### func VirtualBounds
+
+```go
+func VirtualBounds() Rect
+```
+VirtualBounds 返回整个虚拟桌面的边界矩形。
+
+### func Monitors
+
+```go
+func Monitors() ([]Monitor, error)
+```
+Monitors 返回所有活动显示器及其几何信息的列表。
 
 ## 常量
 

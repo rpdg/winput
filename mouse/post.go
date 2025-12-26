@@ -122,6 +122,9 @@ func DoubleClick(hwnd uintptr, x, y int32) error {
 	return nil
 }
 
+// Scroll sends a vertical scroll message.
+// delta is usually a multiple of 120 (WHEEL_DELTA). Positive = forward/up, Negative = backward/down.
+// x, y are client coordinates where the scroll happens.
 func Scroll(hwnd uintptr, x, y int32, delta int32) error {
 	// WM_MOUSEWHEEL expects screen coordinates in LPARAM!
 	// Low-order word: x, High-order word: y

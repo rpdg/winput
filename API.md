@@ -71,8 +71,35 @@ var (
 
     // ErrPermissionDenied implies the operation failed due to system privilege restrictions (e.g. UIPI).
     ErrPermissionDenied = errors.New("permission denied")
+
+    // ErrPostMessageFailed implies the PostMessageW call returned 0 (e.g., queue full or invalid handle).
+    ErrPostMessageFailed = errors.New("PostMessageW failed")
 )
 ```
+
+## Screen Package (`github.com/rpdg/winput/screen`)
+
+### func ImageToVirtual
+
+```go
+func ImageToVirtual(imageX, imageY int32) (int32, int32)
+```
+ImageToVirtual converts coordinates from a "Full Virtual Desktop Screenshot" (OpenCV match) to actual Windows Virtual Desktop coordinates usable by `MoveMouseTo`.
+Requires the image to be a capture of the **entire** virtual desktop (origin 0,0 of the image corresponds to the top-left of the virtual canvas).
+
+### func VirtualBounds
+
+```go
+func VirtualBounds() Rect
+```
+VirtualBounds returns the bounding rectangle of the entire virtual desktop.
+
+### func Monitors
+
+```go
+func Monitors() ([]Monitor, error)
+```
+Monitors returns a list of all active monitors and their geometries.
 
 ## Constants
 
