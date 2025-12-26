@@ -374,17 +374,30 @@ func DoubleClick(x, y int32) error {
 	// 2. Stabilize (Wait for move to settle completely)
 	humanSleep(50)
 
-	// 3. Atomic Double Click Sequence (No Randomness)
-	// To ensure Windows recognizes this as a double click, we must respect the
-	// system's double-click time (usually 500ms) and spatial tolerance.
-	// We use fixed, short intervals to be safe and deterministic.
+	// Get system double click time
+	r, _, _ := window.ProcGetDoubleClickTime.Call()
+	sysDcTime := time.Duration(r) * time.Millisecond
+	if sysDcTime == 0 {
+		sysDcTime = 500 * time.Millisecond // Default fallback
+	}
 
+	// Use 40% of system time as interval, capped at min 30ms
+	interval := sysDcTime * 4 / 10
+	if interval < 30*time.Millisecond {
+		interval = 30 * time.Millisecond
+	}
+	
+	// Hold time for each click (short, crisp)
+	holdTime := 40 * time.Millisecond
+
+	// 3. Atomic Double Click Sequence (No Randomness)
+	
 	// First Click Down
 	down := interception.MouseStroke{State: interception.MouseStateLeftDown}
 	if err := interception.SendMouse(lCtx, lDev, &down); err != nil {
 		return err
 	}
-	time.Sleep(50 * time.Millisecond) // Fixed hold time
+	time.Sleep(holdTime)
 
 	// First Click Up
 	up := interception.MouseStroke{State: interception.MouseStateLeftUp}
@@ -393,13 +406,13 @@ func DoubleClick(x, y int32) error {
 	}
 	
 	// Interval
-	time.Sleep(50 * time.Millisecond) // Fixed interval
+	time.Sleep(interval)
 
 	// Second Click Down
 	if err := interception.SendMouse(lCtx, lDev, &down); err != nil {
 		return err
 	}
-	time.Sleep(50 * time.Millisecond) // Fixed hold time
+	time.Sleep(holdTime)
 
 	// Second Click Up
 	if err := interception.SendMouse(lCtx, lDev, &up); err != nil {

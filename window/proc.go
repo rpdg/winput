@@ -31,6 +31,7 @@ var (
 	ProcEnumDisplayMonitors = user32.NewProc("EnumDisplayMonitors")
 	ProcGetMonitorInfoW     = user32.NewProc("GetMonitorInfoW")
 	ProcGetSystemMetrics    = user32.NewProc("GetSystemMetrics")
+	ProcGetDoubleClickTime  = user32.NewProc("GetDoubleClickTime")
 
 	ProcGetDpiForWindow           = user32.NewProc("GetDpiForWindow") // Win10+
 	ProcSetProcessDpiAwarenessCtx = user32.NewProc("SetProcessDpiAwarenessContext")
