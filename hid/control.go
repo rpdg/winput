@@ -13,6 +13,7 @@ import (
 
 var ErrDriverNotInstalled = errors.New("interception driver not installed or accessible")
 
+// SetLibraryPath sets the custom path for the interception.dll library.
 func SetLibraryPath(path string) {
 	interception.SetLibraryPath(path)
 }
@@ -36,6 +37,7 @@ var (
 )
 
 // Init initializes the Interception context and finds devices.
+// It loads the DLL, creates a context, and scans for mouse and keyboard devices.
 func Init() error {
 	initMutex.Lock()
 	defer initMutex.Unlock()
@@ -77,6 +79,7 @@ func Init() error {
 }
 
 // Close destroys the Interception context and unloads the DLL.
+// It ensures that no further input operations can be performed.
 func Close() error {
 	initMutex.Lock()
 	defer initMutex.Unlock()
@@ -97,7 +100,7 @@ func Close() error {
 	return nil
 }
 
-// EnsureInit checks initialization state.
+// EnsureInit checks if the HID backend is initialized, and initializes it if not.
 func EnsureInit() error {
 	initMutex.RLock()
 	if initialized {
@@ -166,6 +169,7 @@ func max(a, b int32) int32 {
 	return b
 }
 
+// Move simulates mouse movement to the target screen coordinates using human-like trajectory.
 func Move(targetX, targetY int32) error {
 	lCtx, lDev, unlock, err := acquireMouse()
 	if err != nil {
@@ -251,6 +255,8 @@ func Move(targetX, targetY int32) error {
 	return nil
 }
 
+// Click simulates a left mouse button click at the current cursor position.
+// It triggers Move first to ensure correct context acquisition.
 func Click(x, y int32) error {
 	// Move handles locking internally, but we need lock for Click actions too.
 	// It's okay to release lock between Move and Click, or we can hold it.
@@ -282,6 +288,7 @@ func Click(x, y int32) error {
 	return nil
 }
 
+// ClickRight simulates a right mouse button click at the current cursor position.
 func ClickRight(x, y int32) error {
 	if err := Move(x, y); err != nil {
 		return err
@@ -309,6 +316,7 @@ func ClickRight(x, y int32) error {
 	return nil
 }
 
+// ClickMiddle simulates a middle mouse button click at the current cursor position.
 func ClickMiddle(x, y int32) error {
 	if err := Move(x, y); err != nil {
 		return err
@@ -336,6 +344,7 @@ func ClickMiddle(x, y int32) error {
 	return nil
 }
 
+// DoubleClick simulates a left mouse button double-click at the current cursor position.
 func DoubleClick(x, y int32) error {
 	if err := Click(x, y); err != nil {
 		return err
@@ -344,6 +353,7 @@ func DoubleClick(x, y int32) error {
 	return Click(x, y)
 }
 
+// Scroll simulates a vertical mouse wheel scroll.
 func Scroll(delta int32) error {
 	lCtx, lDev, unlock, err := acquireMouse()
 	if err != nil {
@@ -365,6 +375,7 @@ func Scroll(delta int32) error {
 // Keyboard
 // -----------------------------------------------------------------------------
 
+// KeyDown simulates a key down event for the specified scan code.
 func KeyDown(scanCode uint16) error {
 	lCtx, lDev, unlock, err := acquireKeyboard()
 	if err != nil {
@@ -382,6 +393,7 @@ func KeyDown(scanCode uint16) error {
 	return nil
 }
 
+// KeyUp simulates a key up event for the specified scan code.
 func KeyUp(scanCode uint16) error {
 	lCtx, lDev, unlock, err := acquireKeyboard()
 	if err != nil {
@@ -399,6 +411,7 @@ func KeyUp(scanCode uint16) error {
 	return nil
 }
 
+// Press simulates a key press (down then up) for the specified scan code.
 func Press(scanCode uint16) error {
 	// KeyDown and KeyUp will acquire/release locks individually.
 	// This is safe.

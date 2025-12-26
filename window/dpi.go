@@ -8,6 +8,9 @@ import (
 // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 is (HANDLE)(-4)
 var dpiAwarenessPerMonitorV2 = ^uintptr(3)
 
+// EnablePerMonitorDPI sets the current process to be Per-Monitor (v2) DPI aware.
+// This ensures that the application receives correct DPI information and does not
+// get virtualized coordinates from Windows.
 func EnablePerMonitorDPI() error {
 	if ProcSetProcessDpiAwarenessCtx.Find() != nil {
 		return fmt.Errorf("SetProcessDpiAwarenessContext not found")
@@ -19,6 +22,9 @@ func EnablePerMonitorDPI() error {
 	return nil
 }
 
+// GetDPI retrieves the DPI (dots per inch) for the specified window.
+// It attempts to use GetDpiForWindow (Win10+), GetDpiForMonitor (Win8.1+),
+// or falls back to GetDeviceCaps (Win7).
 func GetDPI(hwnd uintptr) (uint32, uint32, error) {
 	// 1. Try GetDpiForWindow (Win10+) - returns same value for X and Y usually
 	if ProcGetDpiForWindow.Find() == nil {
@@ -52,12 +58,15 @@ func GetDPI(hwnd uintptr) (uint32, uint32, error) {
 	return 96, 96, fmt.Errorf("cannot determine DPI")
 }
 
+// MonitorFromWindow retrieves a handle to the display monitor that has the
+// largest area of intersection with the bounding rectangle of a specified window.
 func MonitorFromWindow(hwnd uintptr) uintptr {
 	const MONITOR_DEFAULTTONEAREST = 2
 	r, _, _ := ProcMonitorFromWindow.Call(hwnd, MONITOR_DEFAULTTONEAREST)
 	return r
 }
 
+// GetDpiForMonitor retrieves the DPI for the specified monitor handle.
 func GetDpiForMonitor(hmonitor uintptr) (dpiX, dpiY uint32, err error) {
 	if ProcGetDpiForMonitor.Find() != nil {
 		return 96, 96, fmt.Errorf("GetDpiForMonitor not found")

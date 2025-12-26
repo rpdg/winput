@@ -1,5 +1,6 @@
 package keyboard
 
+// Key represents a hardware scan code.
 type Key uint16
 
 const (
@@ -91,6 +92,7 @@ const (
 	KeyDivide    Key = 0x35
 )
 
+// KeyDef represents a key definition mapping a rune to a scan code.
 type KeyDef struct {
 	Code    Key
 	Shifted bool
@@ -105,24 +107,24 @@ var runeMap = map[rune]KeyDef{
 	'f': {KeyF, false}, 'F': {KeyF, true},
 	'g': {KeyG, false}, 'G': {KeyG, true},
 	'h': {KeyH, false}, 'H': {KeyH, true},
-	'i': {KeyI, false}, 'I': {KeyI, true},
-	'j': {KeyJ, false}, 'J': {KeyJ, true},
-	'k': {KeyK, false}, 'K': {KeyK, true},
-	'l': {KeyL, false}, 'L': {KeyL, true},
-	'm': {KeyM, false}, 'M': {KeyM, true},
-	'n': {KeyN, false}, 'N': {KeyN, true},
-	'o': {KeyO, false}, 'O': {KeyO, true},
-	'p': {KeyP, false}, 'P': {KeyP, true},
-	'q': {KeyQ, false}, 'Q': {KeyQ, true},
-	'r': {KeyR, false}, 'R': {KeyR, true},
-	's': {KeyS, false}, 'S': {KeyS, true},
-	't': {KeyT, false}, 'T': {KeyT, true},
-	'u': {KeyU, false}, 'U': {KeyU, true},
-	'v': {KeyV, false}, 'V': {KeyV, true},
-	'w': {KeyW, false}, 'W': {KeyW, true},
-	'x': {KeyX, false}, 'X': {KeyX, true},
-	'y': {KeyY, false}, 'Y': {KeyY, true},
-	'z': {KeyZ, false}, 'Z': {KeyZ, true},
+	i': {KeyI, false}, 'I': {KeyI, true},
+	j': {KeyJ, false}, 'J': {KeyJ, true},
+	k': {KeyK, false}, 'K': {KeyK, true},
+	l': {KeyL, false}, 'L': {KeyL, true},
+	m': {KeyM, false}, 'M': {KeyM, true},
+	n': {KeyN, false}, 'N': {KeyN, true},
+	o': {KeyO, false}, 'O': {KeyO, true},
+	p': {KeyP, false}, 'P': {KeyP, true},
+	q': {KeyQ, false}, 'Q': {KeyQ, true},
+	r': {KeyR, false}, 'R': {KeyR, true},
+	s': {KeyS, false}, 'S': {KeyS, true},
+	t': {KeyT, false}, 'T': {KeyT, true},
+	u': {KeyU, false}, 'U': {KeyU, true},
+	v': {KeyV, false}, 'V': {KeyV, true},
+	w': {KeyW, false}, 'W': {KeyW, true},
+	x': {KeyX, false}, 'X': {KeyX, true},
+	y': {KeyY, false}, 'Y': {KeyY, true},
+	z': {KeyZ, false}, 'Z': {KeyZ, true},
 
 	'0': {Key0, false}, ')': {Key0, true},
 	'1': {Key1, false}, '!': {Key1, true},
@@ -140,7 +142,7 @@ var runeMap = map[rune]KeyDef{
 	'=': {KeyEqual, false}, '+': {KeyEqual, true},
 	'[': {KeyLBr, false}, '{': {KeyLBr, true},
 	']': {KeyRBr, false}, '}': {KeyRBr, true},
-	'\\': {KeyBackslash, false}, '|': {KeyBackslash, true},
+	'\': {KeyBackslash, false}, '|': {KeyBackslash, true},
 	';': {KeySemi, false}, ':': {KeySemi, true},
 	'\'': {KeyQuot, false}, '"': {KeyQuot, true},
 	',': {KeyComma, false}, '<': {KeyComma, true},
@@ -152,11 +154,13 @@ var runeMap = map[rune]KeyDef{
 	'\t': {KeyTab, false},
 }
 
+// LookupKey returns the Scan Code and whether Shift is required.
 func LookupKey(r rune) (Key, bool, bool) {
 	k, ok := runeMap[r]
 	return k.Code, k.Shifted, ok
 }
 
+// isExtended returns true if the key is an extended key (prefixed with E0).
 func isExtended(key Key) bool {
 	switch key {
 	case KeyInsert, KeyDelete,

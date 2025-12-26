@@ -60,10 +60,12 @@ func clipToInt16(v int32) int16 {
 	return int16(v)
 }
 
+// Move simulates a mouse move event to the specified client coordinates using PostMessage.
 func Move(hwnd uintptr, x, y int32) error {
 	return post(hwnd, WM_MOUSEMOVE, 0, makeLParam(x, y))
 }
 
+// Click simulates a left mouse button click at the specified client coordinates.
 func Click(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam); err != nil {
@@ -73,6 +75,7 @@ func Click(hwnd uintptr, x, y int32) error {
 	return post(hwnd, WM_LBUTTONUP, 0, lparam)
 }
 
+// ClickRight simulates a right mouse button click at the specified client coordinates.
 func ClickRight(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_RBUTTONDOWN, MK_RBUTTON, lparam); err != nil {
@@ -82,6 +85,7 @@ func ClickRight(hwnd uintptr, x, y int32) error {
 	return post(hwnd, WM_RBUTTONUP, 0, lparam)
 }
 
+// ClickMiddle simulates a middle mouse button click at the specified client coordinates.
 func ClickMiddle(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_MBUTTONDOWN, MK_MBUTTON, lparam); err != nil {
@@ -91,6 +95,7 @@ func ClickMiddle(hwnd uintptr, x, y int32) error {
 	return post(hwnd, WM_MBUTTONUP, 0, lparam)
 }
 
+// DoubleClick simulates a left mouse button double-click at the specified client coordinates.
 func DoubleClick(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
 	if err := post(hwnd, WM_LBUTTONDBLCLK, MK_LBUTTON, lparam); err != nil {
@@ -99,6 +104,8 @@ func DoubleClick(hwnd uintptr, x, y int32) error {
 	return post(hwnd, WM_LBUTTONUP, 0, lparam)
 }
 
+// Scroll simulates a vertical mouse wheel scroll at the specified coordinates.
+// delta must be a multiple of WHEEL_DELTA (120).
 func Scroll(hwnd uintptr, x, y int32, delta int32) error {
 	if delta%WHEEL_DELTA != 0 {
 		return ErrInvalidScrollDelta

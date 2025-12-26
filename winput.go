@@ -13,6 +13,7 @@ import (
 	"github.com/rpdg/winput/window"
 )
 
+// Window represents a handle to a window.
 type Window struct {
 	HWND uintptr
 }
@@ -21,6 +22,7 @@ type Window struct {
 // Window Discovery
 // -----------------------------------------------------------------------------
 
+// FindByTitle searches for a top-level window matching the exact title.
 func FindByTitle(title string) (*Window, error) {
 	hwnd, err := window.FindByTitle(title)
 	if err != nil {
@@ -29,6 +31,7 @@ func FindByTitle(title string) (*Window, error) {
 	return &Window{HWND: hwnd}, nil
 }
 
+// FindByClass searches for a top-level window matching the specified class name.
 func FindByClass(class string) (*Window, error) {
 	hwnd, err := window.FindByClass(class)
 	if err != nil {
@@ -37,6 +40,7 @@ func FindByClass(class string) (*Window, error) {
 	return &Window{HWND: hwnd}, nil
 }
 
+// FindByPID returns all top-level windows belonging to the specified Process ID.
 func FindByPID(pid uint32) ([]*Window, error) {
 	hwnds, err := window.FindByPID(pid)
 	if err != nil {
@@ -58,6 +62,7 @@ func FindByProcessName(name string) ([]*Window, error) {
 	return FindByPID(pid)
 }
 
+// FindChildByClass searches for a child window with the specified class name.
 func (w *Window) FindChildByClass(class string) (*Window, error) {
 	hwnd, err := window.FindChildByClass(w.HWND, class)
 	if err != nil {
@@ -70,10 +75,12 @@ func (w *Window) FindChildByClass(class string) (*Window, error) {
 // Window State
 // -----------------------------------------------------------------------------
 
+// IsValid checks if the window handle is valid.
 func (w *Window) IsValid() bool {
 	return window.IsValid(w.HWND)
 }
 
+// IsVisible checks if the window is visible and not minimized.
 func (w *Window) IsVisible() bool {
 	return window.IsVisible(w.HWND) && !window.IsIconic(w.HWND)
 }
@@ -92,10 +99,13 @@ func (w *Window) checkReady() error {
 // Backend Configuration
 // -----------------------------------------------------------------------------
 
+// Backend represents the input simulation backend.
 type Backend int
 
 const (
+	// BackendMessage uses Windows messages (PostMessage) for input simulation.
 	BackendMessage Backend = iota
+	// BackendHID uses the Interception driver for hardware-level input simulation.
 	BackendHID
 )
 
@@ -105,12 +115,14 @@ var (
 	inputMutex     sync.Mutex
 )
 
+// SetBackend sets the input simulation backend.
 func SetBackend(b Backend) {
 	backendMutex.Lock()
 	defer backendMutex.Unlock()
 	currentBackend = b
 }
 
+// SetHIDLibraryPath sets the path to the interception.dll library.
 func SetHIDLibraryPath(path string) {
 	hid.SetLibraryPath(path)
 }
@@ -201,6 +213,7 @@ func keyUpImpl(cb Backend, hwnd uintptr, k Key) error {
 // Input API (Mouse)
 // -----------------------------------------------------------------------------
 
+// Move simulates mouse movement to the specified client coordinates.
 func (w *Window) Move(x, y int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -213,6 +226,7 @@ func (w *Window) Move(x, y int32) error {
 	return moveImpl(getBackend(), w.HWND, x, y, false)
 }
 
+// MoveRel simulates relative mouse movement from the current cursor position.
 func (w *Window) MoveRel(dx, dy int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -225,6 +239,7 @@ func (w *Window) MoveRel(dx, dy int32) error {
 	return moveImpl(getBackend(), w.HWND, dx, dy, true)
 }
 
+// Click simulates a left mouse button click at the specified client coordinates.
 func (w *Window) Click(x, y int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -245,6 +260,7 @@ func (w *Window) Click(x, y int32) error {
 	return mouse.Click(w.HWND, x, y)
 }
 
+// ClickRight simulates a right mouse button click at the specified client coordinates.
 func (w *Window) ClickRight(x, y int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -265,6 +281,7 @@ func (w *Window) ClickRight(x, y int32) error {
 	return mouse.ClickRight(w.HWND, x, y)
 }
 
+// ClickMiddle simulates a middle mouse button click at the specified client coordinates.
 func (w *Window) ClickMiddle(x, y int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -285,6 +302,7 @@ func (w *Window) ClickMiddle(x, y int32) error {
 	return mouse.ClickMiddle(w.HWND, x, y)
 }
 
+// DoubleClick simulates a left mouse button double-click at the specified client coordinates.
 func (w *Window) DoubleClick(x, y int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -305,6 +323,7 @@ func (w *Window) DoubleClick(x, y int32) error {
 	return mouse.DoubleClick(w.HWND, x, y)
 }
 
+// Scroll simulates a vertical mouse wheel scroll.
 func (w *Window) Scroll(x, y int32, delta int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -325,6 +344,7 @@ func (w *Window) Scroll(x, y int32, delta int32) error {
 // Global Input API (Screen Coordinates)
 // -----------------------------------------------------------------------------
 
+// MoveMouseTo moves the mouse cursor to the specified absolute screen coordinates (Virtual Desktop).
 func MoveMouseTo(x, y int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -343,6 +363,7 @@ func MoveMouseTo(x, y int32) error {
 	return nil
 }
 
+// ClickMouseAt moves to the specified screen coordinates and performs a left click.
 func ClickMouseAt(x, y int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -456,6 +477,7 @@ const (
 	KeyDelete    = keyboard.KeyDelete
 )
 
+// KeyFromRune attempts to map a unicode character to a Key.
 func KeyFromRune(r rune) (Key, bool) {
 	k, _, ok := keyboard.LookupKey(r)
 	return k, ok
@@ -463,6 +485,7 @@ func KeyFromRune(r rune) (Key, bool) {
 
 // Public Wrappers using Lock
 
+// KeyDown sends a key down event to the window.
 func (w *Window) KeyDown(key Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -475,6 +498,7 @@ func (w *Window) KeyDown(key Key) error {
 	return keyDownImpl(getBackend(), w.HWND, key)
 }
 
+// KeyUp sends a key up event to the window.
 func (w *Window) KeyUp(key Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -487,6 +511,7 @@ func (w *Window) KeyUp(key Key) error {
 	return keyUpImpl(getBackend(), w.HWND, key)
 }
 
+// Press simulates a key press (down then up).
 func (w *Window) Press(key Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -504,6 +529,7 @@ func (w *Window) Press(key Key) error {
 	return keyUpImpl(getBackend(), w.HWND, key)
 }
 
+// PressHotkey presses a combination of keys (e.g., Ctrl+A).
 func (w *Window) PressHotkey(keys ...Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -531,6 +557,7 @@ func (w *Window) PressHotkey(keys ...Key) error {
 	return nil
 }
 
+// Type simulates typing text.
 func (w *Window) Type(text string) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -569,6 +596,7 @@ func (w *Window) Type(text string) error {
 
 // Global Wrappers
 
+// KeyDown simulates a global key down event.
 func KeyDown(k Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -578,6 +606,7 @@ func KeyDown(k Key) error {
 	return keyDownImpl(getBackend(), 0, k)
 }
 
+// KeyUp simulates a global key up event.
 func KeyUp(k Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -587,6 +616,7 @@ func KeyUp(k Key) error {
 	return keyUpImpl(getBackend(), 0, k)
 }
 
+// Press simulates a global key press (down then up).
 func Press(k Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -601,6 +631,7 @@ func Press(k Key) error {
 	return keyUpImpl(getBackend(), 0, k)
 }
 
+// PressHotkey simulates a global combination of keys.
 func PressHotkey(keys ...Key) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -630,7 +661,7 @@ var (
 	sendInputErr  error
 )
 
-// Global Type using SendInput (Unicode) for Message Backend
+// Type simulates typing text globally.
 func Type(text string) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -717,26 +748,32 @@ func sendUnicode(r rune) {
 // Coordinate & DPI
 // -----------------------------------------------------------------------------
 
+// GetCursorPos returns the current cursor position in screen coordinates.
 func GetCursorPos() (int32, int32, error) {
 	return window.GetCursorPos()
 }
 
+// EnablePerMonitorDPI sets the process to be Per-Monitor DPI aware.
 func EnablePerMonitorDPI() error {
 	return window.EnablePerMonitorDPI()
 }
 
+// DPI returns the DPI of the window.
 func (w *Window) DPI() (uint32, uint32, error) {
 	return window.GetDPI(w.HWND)
 }
 
+// ClientRect returns the client area dimensions of the window.
 func (w *Window) ClientRect() (width, height int32, err error) {
 	return window.GetClientRect(w.HWND)
 }
 
+// ScreenToClient converts screen coordinates to client coordinates.
 func (w *Window) ScreenToClient(x, y int32) (cx, cy int32, err error) {
 	return window.ScreenToClient(w.HWND, x, y)
 }
 
+// ClientToScreen converts client coordinates to screen coordinates.
 func (w *Window) ClientToScreen(x, y int32) (sx, sy int32, err error) {
 	return window.ClientToScreen(w.HWND, x, y)
 }

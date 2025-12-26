@@ -12,6 +12,7 @@ func utf16Ptr(s string) *uint16 {
 	return ptr
 }
 
+// FindByTitle searches for a top-level window matching the exact title.
 func FindByTitle(title string) (uintptr, error) {
 	ret, _, _ := ProcFindWindowW.Call(
 		0,
@@ -23,6 +24,7 @@ func FindByTitle(title string) (uintptr, error) {
 	return ret, nil
 }
 
+// FindByClass searches for a top-level window matching the specified class name.
 func FindByClass(class string) (uintptr, error) {
 	ret, _, _ := ProcFindWindowW.Call(
 		uintptr(unsafe.Pointer(utf16Ptr(class))),
@@ -34,6 +36,7 @@ func FindByClass(class string) (uintptr, error) {
 	return ret, nil
 }
 
+// FindChildByClass searches for a child window with the specified class name.
 func FindChildByClass(parent uintptr, class string) (uintptr, error) {
 	ret, _, _ := ProcFindWindowExW.Call(
 		parent,
@@ -47,6 +50,7 @@ func FindChildByClass(parent uintptr, class string) (uintptr, error) {
 	return ret, nil
 }
 
+// FindByPID returns all top-level windows belonging to the specified Process ID.
 func FindByPID(targetPid uint32) ([]uintptr, error) {
 	var hwnds []uintptr
 
@@ -96,6 +100,8 @@ type PROCESSENTRY32 struct {
 	ExeFile         [260]uint16
 }
 
+// FindPIDByName searches for a process ID by its executable name (e.g., "notepad.exe").
+// The comparison is case-insensitive.
 func FindPIDByName(name string) (uint32, error) {
 	const INVALID_HANDLE_VALUE = ^uintptr(0)
 

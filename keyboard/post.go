@@ -16,6 +16,7 @@ const (
 	MAPVK_VSC_TO_VK = 1
 )
 
+// MapScanCodeToVK converts a hardware scan code to a virtual-key code.
 func MapScanCodeToVK(sc Key) uintptr {
 	r, _, _ := window.ProcMapVirtualKeyW.Call(uintptr(sc), MAPVK_VSC_TO_VK)
 	return r
@@ -51,6 +52,7 @@ func makeKeyLParam(sc Key, isUp bool) uintptr {
 	return lparam
 }
 
+// KeyDown simulates a key down event for the specified window using PostMessage.
 func KeyDown(hwnd uintptr, key Key) error {
 	vk := MapScanCodeToVK(key)
 	if vk == 0 {
@@ -60,6 +62,7 @@ func KeyDown(hwnd uintptr, key Key) error {
 	return post(hwnd, WM_KEYDOWN, vk, lparam)
 }
 
+// KeyUp simulates a key up event for the specified window using PostMessage.
 func KeyUp(hwnd uintptr, key Key) error {
 	vk := MapScanCodeToVK(key)
 	if vk == 0 {
@@ -69,6 +72,7 @@ func KeyUp(hwnd uintptr, key Key) error {
 	return post(hwnd, WM_KEYUP, vk, lparam)
 }
 
+// Press simulates a key press (down then up) for the specified window using PostMessage.
 func Press(hwnd uintptr, key Key) error {
 	if err := KeyDown(hwnd, key); err != nil {
 		return err
@@ -77,7 +81,8 @@ func Press(hwnd uintptr, key Key) error {
 	return KeyUp(hwnd, key)
 }
 
-// Type sends text using WM_CHAR.
+// Type sends text to the specified window using WM_CHAR messages.
+// This is reliable for background input but does not support non-character keys.
 func Type(hwnd uintptr, text string) error {
 	for _, r := range text {
 		if r > 0xFFFF {
