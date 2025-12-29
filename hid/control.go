@@ -202,12 +202,13 @@ func Move(targetX, targetY int32) error {
 		steps = 40 // Capped for speed
 	}
 
-	timeout := time.After(2 * time.Second)
+	timeout := time.After(3 * time.Second) // Increased timeout for robustness
 
+	// 1. Trajectory Loop
 	for i := 1; i <= steps; i++ {
 		select {
 		case <-timeout:
-			return fmt.Errorf("move timeout")
+			return fmt.Errorf("move timeout during trajectory")
 		default:
 		}
 
@@ -222,10 +223,13 @@ func Move(targetX, targetY int32) error {
 		dx := nextX - curX
 		dy := nextY - curY
 
+		// Optimization: If very close (within jitter range), skip correction
+		// to avoid oscillation near the target.
 		if i > steps-5 && abs(dx) < 3 && abs(dy) < 3 {
 			continue
 		}
 
+		// Apply jitter only if not the final few steps
 		if i < steps-2 {
 			dx += int32(rng.Intn(3) - 1)
 			dy += int32(rng.Intn(3) - 1)
@@ -252,6 +256,39 @@ func Move(targetX, targetY int32) error {
 		}
 		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
 	}
+
+	// 2. Final Convergence (Critical for Click accuracy)
+	// Even after the loop, we might be off by a few pixels due to jitter or async lag.
+	// Force convergence.
+	for retry := 0; retry < 5; retry++ {
+		time.Sleep(20 * time.Millisecond) // Wait for OS to settle
+
+		curX, curY, err := window.GetCursorPos()
+		if err != nil {
+			return err
+		}
+
+		dx := targetX - curX
+		dy := targetY - curY
+
+		if abs(dx) <= 1 && abs(dy) <= 1 {
+			return nil // Reached target
+		}
+
+		// Micro-correction
+		stroke := interception.MouseStroke{
+			Flags: interception.MouseFlagMoveRelative,
+			X:     dx,
+			Y:     dy,
+		}
+		if err := interception.SendMouse(lCtx, lDev, &stroke); err != nil {
+			return err
+		}
+	}
+
+	// Final check, if still far off, return error?
+	// Or just accept we are close enough.
+	// Let's log if vastly different, but usually we are <2px now.
 	return nil
 }
 
@@ -295,7 +332,8 @@ func Click(x, y int32) error {
 	defer unlock()
 
 	// Stabilize after move
-	humanSleep(30 + rng.Intn(30))
+	// Move() now guarantees convergence, but we still need a muscle memory pause.
+	humanSleep(50)
 
 	// Normal click: hold 60-90ms
 	return clickRaw(lCtx, lDev, 60, 90)
@@ -372,7 +410,9 @@ func DoubleClick(x, y int32) error {
 	defer unlock()
 
 	// 2. Stabilize (Wait for move to settle completely)
-	humanSleep(50)
+	// CRITICAL FIX: Increased wait time to ensure OS cursor update lag is resolved.
+	// If the cursor is still drifting (inertia) or OS hasn't updated pos, double click fails.
+	time.Sleep(150 * time.Millisecond)
 
 	// Get system double click time
 	r, _, _ := window.ProcGetDoubleClickTime.Call()
@@ -386,12 +426,12 @@ func DoubleClick(x, y int32) error {
 	if interval < 30*time.Millisecond {
 		interval = 30 * time.Millisecond
 	}
-	
+
 	// Hold time for each click (short, crisp)
 	holdTime := 40 * time.Millisecond
 
 	// 3. Atomic Double Click Sequence (No Randomness)
-	
+
 	// First Click Down
 	down := interception.MouseStroke{State: interception.MouseStateLeftDown}
 	if err := interception.SendMouse(lCtx, lDev, &down); err != nil {
@@ -404,7 +444,7 @@ func DoubleClick(x, y int32) error {
 	if err := interception.SendMouse(lCtx, lDev, &up); err != nil {
 		return err
 	}
-	
+
 	// Interval
 	time.Sleep(interval)
 

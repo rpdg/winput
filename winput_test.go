@@ -214,8 +214,6 @@ func TestBackendHID(t *testing.T) {
 			t.Error("HID Move was too fast, trajectory simulation might be broken")
 		}
 
-		winput.ClickMouseAt(500, 500)
-
 		x, y, _ := winput.GetCursorPos()
 		if abs(x-500) > 5 || abs(y-500) > 5 {
 			// HID has jitter, allow error
@@ -224,13 +222,14 @@ func TestBackendHID(t *testing.T) {
 	})
 
 	t.Run("HID_Type", func(t *testing.T) {
-		if err := winput.Type("hidtest"); err != nil {
+		winput.ClickMouseAt(500, 500)
+		if err := winput.Type("hid test"); err != nil {
 			t.Errorf("HID Type failed: %v", err)
 		}
 	})
 
 	t.Run("HID_DBL_CLICK", func(t *testing.T) {
-		e := winput.DoubleClickMouseAt(130, 130)
+		e := winput.DoubleClickMouseAt(50, 50)
 		if e != nil {
 			t.Error("HID double click error")
 		}
