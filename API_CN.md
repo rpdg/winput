@@ -17,6 +17,7 @@
 *   [func Press](#func-press)
 *   [func PressHotkey](#func-presshotkey)
 *   [func Type](#func-type)
+*   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [type Backend](#type-backend)
 *   [type Key](#type-key)
     *   [func KeyFromRune](#func-keyfromrune)
@@ -191,6 +192,13 @@ PressHotkey 模拟全局组合键。
 func Type(text string) error
 ```
 Type 模拟全局文本输入（通过模拟按键序列）。
+
+### func CaptureVirtualDesktop
+
+```go
+func CaptureVirtualDesktop() (*image.RGBA, error)
+```
+CaptureVirtualDesktop (在 `screen` 包中) 使用 GDI 捕获整个虚拟桌面（所有显示器）。要求进程已开启 Per-Monitor DPI 感知。返回 `*image.RGBA` 对象。
 
 ## 类型
 

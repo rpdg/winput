@@ -23,27 +23,39 @@
     *   `KeyFromRune` 和 `Type` 函数目前假定为 **美国 QWERTY** 键盘布局。
 
 ## 视觉自动化 (Electron / 游戏)
-对于 **Electron** 应用 (如 VS Code, Discord) 或游戏，`HWND` 往往不可靠且忽略标准消息：
 
-1.  **不要使用 `FindBy...`**：窗口句柄通常只是一个容器。
-2.  **使用全局坐标**：通过视觉识别（如 OpenCV）获取屏幕坐标。
-3.  **使用全局输入**：
-    ```go
-    // 移动到绝对屏幕位置 (虚拟桌面坐标)
-    winput.MoveMouseTo(1920, 500)
-    winput.ClickMouseAt(1920, 500)
-    
-    // 全局输入 (不针对特定窗口)
-    winput.Type("Hello Electron!")
-    winput.Press(winput.KeyEnter)
-    ```
-4.  **使用 `winput/screen`**：辅助包用于查询屏幕边界。
-    ```go
-    import "github.com/rpdg/winput/screen"
-    
-    bounds := screen.VirtualBounds()
-    fmt.Printf("桌面边界: %d, %d", bounds.Right, bounds.Bottom)
-    ```
+适用于窗口句柄不可靠或需要基于图像识别的操作场景。
+
+```go
+import (
+	"github.com/rpdg/winput"
+	"github.com/rpdg/winput/screen"
+)
+
+func main() {
+	// 必须开启 DPI 感知以保证坐标精确
+	winput.EnablePerMonitorDPI()
+
+	// 1. 捕获整个虚拟桌面（包含所有显示器）
+	img, err := screen.CaptureVirtualDesktop()
+	if err != nil {
+		panic(err)
+	}
+	// img 是标准的 *image.RGBA，可直接用于 OpenCV/GoCV
+
+	// 2. 执行你的图像匹配逻辑 (伪代码)
+	// matchX, matchY := yourCVLib.Match(img, template)
+
+	// 3. 将图片坐标转换为虚拟桌面绝对坐标
+	targetX, targetY := screen.ImageToVirtual(int32(matchX), int32(matchY))
+
+	// 4. 移动并点击
+	winput.MoveMouseTo(targetX, targetY)
+	winput.ClickMouseAt(targetX, targetY)
+}
+```
+
+## API 参考手册
 
 ## 后端限制与权限
 
@@ -129,6 +141,15 @@ func main() {
 	// 3. 输入文本
 	w.Type("Hello World")
 	w.Press(winput.KeyEnter)
+
+	// 4. 全局输入 (不针对特定窗口)
+	winput.Type("Hello Electron!")
+	winput.Press(winput.KeyEnter)
+
+	// 5. 使用 winput/screen (查询屏幕边界)
+	// import "github.com/rpdg/winput/screen"
+	bounds := screen.VirtualBounds()
+	fmt.Printf("桌面边界: %d, %d\n", bounds.Right, bounds.Bottom)
 }
 ```
 

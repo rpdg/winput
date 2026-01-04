@@ -2,32 +2,37 @@ package window
 
 import (
 	"fmt"
-	"unsafe"
 )
 
 // DPI Awareness Contexts (Pseudo-Handles)
 // Win10 1607+
-var (
-	DPI_AWARENESS_CONTEXT_UNAWARE              = uintptr(0xFFFFFFFF) // -1
-	DPI_AWARENESS_CONTEXT_SYSTEM_AWARE         = uintptr(0xFFFFFFFE) // -2
-	DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE    = uintptr(0xFFFFFFFD) // -3 (V1)
-	DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = uintptr(0xFFFFFFFC) // -4 (V2)
-	DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED    = uintptr(0xFFFFFFFB) // -5
+// Using ^uintptr(0) to correctly represent -1 on both 32-bit and 64-bit systems.
+const (
+	DPI_AWARENESS_CONTEXT_UNAWARE              = ^uintptr(0) // -1
+	DPI_AWARENESS_CONTEXT_SYSTEM_AWARE         = ^uintptr(1) // -2
+	DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE    = ^uintptr(2) // -3
+	DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ^uintptr(3) // -4
+	DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED    = ^uintptr(4) // -5
 )
 
 // EnablePerMonitorDPI attempts to set the process to Per-Monitor DPI Aware (V2).
 // It falls back to V1 or System Aware on older systems if V2 is unavailable.
 func EnablePerMonitorDPI() error {
 	// Try SetProcessDpiAwarenessContext (Win10 1607+)
-	// Prefer V2
-	r, _, _ := ProcSetProcessDpiAwarenessCtx.Call(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
-	if r != 0 {
-		return nil
-	}
-	// Fallback to V1
-	r, _, _ = ProcSetProcessDpiAwarenessCtx.Call(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)
-	if r != 0 {
-		return nil
+	if err := ProcSetProcessDpiAwarenessCtx.Find(); err == nil {
+		// Prefer V2
+		r, _, _ := ProcSetProcessDpiAwarenessCtx.Call(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+		if r != 0 { // S_OK is not 0 for this API? Wait, check MSDN.
+			// MSDN: "If the function succeeds, the return value is TRUE." -> Non-zero.
+			// Wait, SetProcessDpiAwarenessContext returns BOOL.
+			// If it succeeds, it returns non-zero.
+			return nil
+		}
+		// Fallback to V1
+		r, _, _ = ProcSetProcessDpiAwarenessCtx.Call(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)
+		if r != 0 {
+			return nil
+		}
 	}
 
 	// Fallback for older Windows (8.1/10 early) - Shcore.dll
@@ -35,28 +40,29 @@ func EnablePerMonitorDPI() error {
 	procSetProcessDpiAwareness := shcore.NewProc("SetProcessDpiAwareness")
 	if procSetProcessDpiAwareness.Find() == nil {
 		r, _, _ := procSetProcessDpiAwareness.Call(2)
-		if r == 0 { // S_OK
+		if r == 0 { // S_OK = 0
 			return nil
 		}
 	}
 
-	// Fallback for Vista/8 - User32.dll
+	// Fallback for Vista/7/8 - User32.dll
 	// SetProcessDPIAware()
 	procSetProcessDPIAware := user32.NewProc("SetProcessDPIAware")
 	if procSetProcessDPIAware.Find() == nil {
 		r, _, _ := procSetProcessDPIAware.Call()
-		if r != 0 {
+		if r != 0 { // BOOL, non-zero is success
 			return nil
 		}
 	}
 
-	return fmt.Errorf("failed to set DPI awareness")
+	return fmt.Errorf("failed to set DPI awareness on this Windows version")
 }
 
 // GetDPI returns the DPI for the specified window.
 // It tries to use GetDpiForWindow (Win10 1607+), falling back to System DPI.
 func GetDPI(hwnd uintptr) (uint32, uint32, error) {
-	if ProcGetDpiForWindow.Find() == nil {
+	// Try GetDpiForWindow (Win10 1607+)
+	if err := ProcGetDpiForWindow.Find(); err == nil {
 		dpi, _, _ := ProcGetDpiForWindow.Call(hwnd)
 		if dpi != 0 {
 			return uint32(dpi), uint32(dpi), nil
@@ -71,8 +77,10 @@ func GetDPI(hwnd uintptr) (uint32, uint32, error) {
 	}
 	defer ProcReleaseDC.Call(hwnd, hdc)
 
-	const LOGPIXELSX = 88
-	const LOGPIXELSY = 90
+	const (
+		LOGPIXELSX = 88
+		LOGPIXELSY = 90
+	)
 
 	dpiX, _, _ := ProcGetDeviceCaps.Call(hdc, LOGPIXELSX)
 	dpiY, _, _ := ProcGetDeviceCaps.Call(hdc, LOGPIXELSY)
@@ -92,11 +100,10 @@ func GetDPI(hwnd uintptr) (uint32, uint32, error) {
 // pixels and not virtualized/scaled by the OS.
 func IsPerMonitorDPIAware() bool {
 	// API only available on Win10 1607+
-	if ProcGetProcessDpiAwarenessCtx.Find() != nil || ProcAreDpiAwarenessContextsEqual.Find() != nil {
-		// If API missing, we can't strictly check.
-		// We could fallback to GetProcessDpiAwareness from Shcore, but for simplicity
-		// and considering the target audience, we might assume false or true.
-		// Safest is false to warn user.
+	if err := ProcGetProcessDpiAwarenessCtx.Find(); err != nil {
+		return false
+	}
+	if err := ProcAreDpiAwarenessContextsEqual.Find(); err != nil {
 		return false
 	}
 
@@ -105,20 +112,13 @@ func IsPerMonitorDPIAware() bool {
 		return false
 	}
 
-	// Helper to check equality
-	areEqual := func(a, b uintptr) bool {
-		r, _, _ := ProcAreDpiAwarenessContextsEqual.Call(a, b)
-		return r != 0
-	}
-
-	// Accept V2 (Best)
-	if areEqual(ctx, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) {
-		return true
-	}
-	// Accept V1 (Good enough for coordinates)
-	if areEqual(ctx, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE) {
+	// Check if equal to V2 (Best)
+	r1, _, _ := ProcAreDpiAwarenessContextsEqual.Call(ctx, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+	if r1 != 0 {
 		return true
 	}
 
-	return false
+	// Check if equal to V1
+	r2, _, _ := ProcAreDpiAwarenessContextsEqual.Call(ctx, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)
+	return r2 != 0
 }

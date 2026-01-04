@@ -17,6 +17,7 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [func Press](#func-press)
 *   [func PressHotkey](#func-presshotkey)
 *   [func Type](#func-type)
+*   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [type Backend](#type-backend)
 *   [type Key](#type-key)
     *   [func KeyFromRune](#func-keyfromrune)
@@ -209,6 +210,13 @@ PressHotkey simulates a global combination of keys.
 func Type(text string) error
 ```
 Type simulates global text input by simulating keystrokes for each character.
+
+### func CaptureVirtualDesktop
+
+```go
+func CaptureVirtualDesktop() (*image.RGBA, error)
+```
+CaptureVirtualDesktop (in package `screen`) captures the entire virtual desktop (all monitors) using GDI. It requires the process to be Per-Monitor DPI Aware. Returns an `*image.RGBA`.
 
 ## Types
 

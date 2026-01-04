@@ -3,17 +3,24 @@ package screen
 import (
 	"fmt"
 	"image"
-	"syscall"
+	"runtime"
+	"sync"
 	"unsafe"
 
 	"github.com/rpdg/winput/window"
 )
 
-// GDI Constants & Types
+// GDI Constants
 const (
 	SRCCOPY        = 0x00CC0020
 	DIB_RGB_COLORS = 0
 	BI_RGB         = 0
+	
+	// GetSystemMetrics constants
+	SM_XVIRTUALSCREEN  = 76
+	SM_YVIRTUALSCREEN  = 77
+	SM_CXVIRTUALSCREEN = 78
+	SM_CYVIRTUALSCREEN = 79
 )
 
 type BITMAPINFOHEADER struct {
@@ -30,34 +37,56 @@ type BITMAPINFOHEADER struct {
 	BiClrImportant  uint32
 }
 
-// CaptureVirtualDesktop captures the entire virtual desktop using the efficient CreateDIBSection method.
-// Returns an *image.RGBA ready for OpenCV.
-//
-// Prerequisites:
-// The process MUST be Per-Monitor DPI Aware (V1 or V2). Call winput.EnablePerMonitorDPI() first.
+// CaptureOptions defines configuration for screen capture.
+type CaptureOptions struct {
+	PreserveAlpha bool
+	MaxMemoryMB   int // Max memory usage in MB, 0 means default limit (500MB)
+}
+
+var defaultOptions = CaptureOptions{
+	PreserveAlpha: false,
+	MaxMemoryMB:   500,
+}
+
+// CaptureVirtualDesktop captures the entire virtual desktop (all monitors).
+// It returns an *image.RGBA ready for OpenCV or other processing.
+// It requires the process to be Per-Monitor DPI Aware.
 func CaptureVirtualDesktop() (*image.RGBA, error) {
-	// 1. DPI Awareness Check (Strict)
+	return CaptureVirtualDesktopWithOptions(defaultOptions)
+}
+
+// CaptureVirtualDesktopWithOptions captures the virtual desktop with custom options.
+func CaptureVirtualDesktopWithOptions(opts CaptureOptions) (*image.RGBA, error) {
+	// 1. DPI Awareness Check
 	if !window.IsPerMonitorDPIAware() {
-		return nil, fmt.Errorf("process is not Per-Monitor DPI Aware; call winput.EnablePerMonitorDPI() first to ensure accurate coordinates")
+		return nil, fmt.Errorf("process is not Per-Monitor DPI Aware; call winput.EnablePerMonitorDPI() first")
 	}
 
 	// 2. Get Virtual Desktop Bounds
-	x, _, _ := window.ProcGetSystemMetrics.Call(76) // SM_XVIRTUALSCREEN
-	y, _, _ := window.ProcGetSystemMetrics.Call(77) // SM_YVIRTUALSCREEN
-	w, _, _ := window.ProcGetSystemMetrics.Call(78) // SM_CXVIRTUALSCREEN
-	h, _, _ := window.ProcGetSystemMetrics.Call(79) // SM_CYVIRTUALSCREEN
-	
+	x, _, _ := window.ProcGetSystemMetrics.Call(SM_XVIRTUALSCREEN)
+	y, _, _ := window.ProcGetSystemMetrics.Call(SM_YVIRTUALSCREEN)
+	w, _, _ := window.ProcGetSystemMetrics.Call(SM_CXVIRTUALSCREEN)
+	h, _, _ := window.ProcGetSystemMetrics.Call(SM_CYVIRTUALSCREEN)
+
 	width := int32(w)
 	height := int32(h)
 
-	// Safety check for huge resolutions
-	// 4 bytes per pixel. Limit to approx 500MB (e.g. 11000 x 11000)
-	if int64(width)*int64(height)*4 > 1024*1024*500 {
-		return nil, fmt.Errorf("resolution too large for single capture: %dx%d (exceeds 500MB)", width, height)
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("invalid screen dimensions: %dx%d", width, height)
+	}
+
+	// Memory check
+	limitMB := opts.MaxMemoryMB
+	if limitMB <= 0 {
+		limitMB = 500
+	}
+	totalBytes := int64(width) * int64(height) * 4
+	if totalBytes > int64(limitMB)*1024*1024 {
+		return nil, fmt.Errorf("resolution too large: %dx%d requires %d MB (limit: %d MB)",
+			width, height, totalBytes/(1024*1024), limitMB)
 	}
 
 	// 3. Create DCs
-	// GetDC(0) returns the DC for the entire virtual screen
 	hScreenDC, _, _ := window.ProcGetDC.Call(0)
 	if hScreenDC == 0 {
 		return nil, fmt.Errorf("GetDC failed")
@@ -71,7 +100,6 @@ func CaptureVirtualDesktop() (*image.RGBA, error) {
 	defer window.ProcDeleteDC.Call(hMemDC)
 
 	// 4. Create DIB Section
-	// We use a top-down DIB (negative height) so (0,0) is top-left.
 	bmi := BITMAPINFOHEADER{
 		BiSize:        uint32(unsafe.Sizeof(BITMAPINFOHEADER{})),
 		BiWidth:       width,
@@ -80,8 +108,8 @@ func CaptureVirtualDesktop() (*image.RGBA, error) {
 		BiBitCount:    32, // BGRA
 		BiCompression: BI_RGB,
 	}
-	
-	var ppvBits uintptr // Pointer to the raw pixel data
+
+	var ppvBits unsafe.Pointer // Pointer to the raw pixel data
 	hBitmap, _, _ := window.ProcCreateDIBSection.Call(
 		hMemDC,
 		uintptr(unsafe.Pointer(&bmi)),
@@ -89,63 +117,118 @@ func CaptureVirtualDesktop() (*image.RGBA, error) {
 		uintptr(unsafe.Pointer(&ppvBits)),
 		0, 0,
 	)
-	if hBitmap == 0 {
+	if hBitmap == 0 || ppvBits == nil {
 		return nil, fmt.Errorf("CreateDIBSection failed")
 	}
-	defer window.ProcDeleteObject.Call(hBitmap)
 
 	// 5. Select Bitmap into MemDC
 	oldObj, _, _ := window.ProcSelectObject.Call(hMemDC, hBitmap)
 	if oldObj == 0 {
+		window.ProcDeleteObject.Call(hBitmap)
 		return nil, fmt.Errorf("SelectObject failed")
 	}
-	// Restore old object before deleting MemDC
-	defer window.ProcSelectObject.Call(hMemDC, oldObj)
 
 	// 6. BitBlt: Copy Screen -> Memory -> DIB
-	// Because hBitmap is selected in hMemDC, this writes directly to ppvBits!
 	ret, _, _ := window.ProcBitBlt.Call(
 		hMemDC,
 		0, 0, uintptr(width), uintptr(height),
 		hScreenDC,
-		uintptr(int32(x)), uintptr(int32(y)), // Source coords on virtual screen
+		uintptr(int32(x)), uintptr(int32(y)), // Source coords
 		SRCCOPY,
 	)
-	if ret == 0 {
-		return nil, fmt.Errorf("BitBlt failed")
+
+	var img *image.RGBA
+	var err error
+
+	if ret != 0 {
+		// 7. Convert to Go Image (Copy before destroying DIB)
+		img, err = convertToRGBA(ppvBits, int(width), int(height), opts.PreserveAlpha)
+	} else {
+		err = fmt.Errorf("BitBlt failed")
 	}
 
-	// 7. Convert to Go Image
-	// ppvBits points to the raw BGRA data.
-	totalBytes := int(width) * int(height) * 4
+	// 8. Cleanup Resources
+	window.ProcSelectObject.Call(hMemDC, oldObj) // Restore old object
+	window.ProcDeleteObject.Call(hBitmap)        // Delete DIB
+
+	return img, err
+}
+
+func convertToRGBA(ppvBits unsafe.Pointer, width, height int, preserveAlpha bool) (*image.RGBA, error) {
+	if ppvBits == nil {
+		return nil, fmt.Errorf("invalid pixel buffer pointer")
+	}
+
+	totalBytes := width * height * 4
 	
-	// Create a Go slice backed by the C array (Unsafe but efficient for reading)
-	// Warning: We must copy this data because hBitmap will be destroyed when we return.
-	srcBytes := unsafe.Slice((*byte)(unsafe.Pointer(ppvBits)), totalBytes)
-	
-	// Alloc new buffer for Go image
+	// Create slice backed by C memory (Go 1.17+)
+	// This is safe because we copy immediately.
+	srcBytes := unsafe.Slice((*byte)(ppvBits), totalBytes)
+
+	// Allocate new Go managed memory
 	dstBytes := make([]byte, totalBytes)
 
-	// BGRA -> RGBA conversion loop
-	for i := 0; i < totalBytes; i += 4 {
-		b := srcBytes[i]
-		g := srcBytes[i+1]
-		r := srcBytes[i+2]
-		
-		dstBytes[i]   = r
-		dstBytes[i+1] = g
-		dstBytes[i+2] = b
-		// Force Alpha to opaque (255) for OpenCV template matching stability.
-		// DWM windows might have transparent pixels, but for automation matching,
-		// we usually want solid colors.
-		dstBytes[i+3] = 255 
+	// Use parallel conversion for large images (> 1MB)
+	if totalBytes > 1024*1024 {
+		convertBGRAtoRGBAParallel(srcBytes, dstBytes, preserveAlpha)
+	} else {
+		convertBGRAtoRGBASerial(srcBytes, dstBytes, preserveAlpha)
 	}
 
-	img := &image.RGBA{
+	return &image.RGBA{
 		Pix:    dstBytes,
-		Stride: int(width * 4),
-		Rect:   image.Rect(0, 0, int(width), int(height)),
+		Stride: width * 4,
+		Rect:   image.Rect(0, 0, width, height),
+	}, nil
+}
+
+func convertBGRAtoRGBASerial(src, dst []byte, preserveAlpha bool) {
+	// Simple serial loop
+	// Bounds check elimination hint: len(src) == len(dst)
+	_ = dst[len(src)-1]
+	
+	for i := 0; i < len(src); i += 4 {
+		b := src[i]
+		g := src[i+1]
+		r := src[i+2]
+		a := src[i+3]
+
+		dst[i] = r
+		dst[i+1] = g
+		dst[i+2] = b
+		if preserveAlpha {
+			dst[i+3] = a
+		} else {
+			dst[i+3] = 255
+		}
+	}
+}
+
+func convertBGRAtoRGBAParallel(src, dst []byte, preserveAlpha bool) {
+	numCPU := runtime.NumCPU()
+	if numCPU < 2 {
+		convertBGRAtoRGBASerial(src, dst, preserveAlpha)
+		return
 	}
 
-	return img, nil
+	// Ensure chunk size aligns with 4 bytes (pixel boundary)
+	// totalBytes is guaranteed to be multiple of 4
+	chunkSize := (len(src) / numCPU) &^ 3 // Round down to multiple of 4
+	
+	var wg sync.WaitGroup
+	wg.Add(numCPU)
+
+	for i := 0; i < numCPU; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		if i == numCPU-1 {
+			end = len(src) // Last chunk takes the rest
+		}
+
+		go func(s, e int) {
+			defer wg.Done()
+			convertBGRAtoRGBASerial(src[s:e], dst[s:e], preserveAlpha)
+		}(start, end)
+	}
+	wg.Wait()
 }
