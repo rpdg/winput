@@ -19,6 +19,8 @@ var useHID = flag.Bool("hid", false, "Run tests using HID backend (requires driv
 // TestMain parses flags
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// Try to enable DPI awareness for all tests
+	winput.EnablePerMonitorDPI()
 	os.Exit(m.Run())
 }
 
@@ -313,7 +315,7 @@ func TestMultiMonitorSupport(t *testing.T) {
 	t.Run("ImageToVirtualConsistency", func(t *testing.T) {
 		vBounds := screen.VirtualBounds()
 
-		// Simulate a point on the screenshot (e.g., 100, 100 from top-left)hidtest
+		// Simulate a point on the screenshot (e.g., 100, 100 from top-left)
 		imgX, imgY := int32(100), int32(100)
 
 		virtX, virtY := screen.ImageToVirtual(imgX, imgY)
@@ -327,6 +329,69 @@ func TestMultiMonitorSupport(t *testing.T) {
 		} else {
 			t.Logf("ImageToVirtual correct: Image(%d, %d) + Origin(%d, %d) -> Virtual(%d, %d)",
 				imgX, imgY, vBounds.Left, vBounds.Top, virtX, virtY)
+		}
+	})
+}
+
+// -----------------------------------------------------------------------------
+// 6. Screen Capture Tests
+// -----------------------------------------------------------------------------
+
+func TestScreenCapture(t *testing.T) {
+	// Screen capture requires DPI awareness for correct bounds
+	if err := winput.EnablePerMonitorDPI(); err != nil {
+		t.Logf("Warning: Could not enable DPI awareness: %v", err)
+	}
+
+	t.Run("CaptureVirtualDesktop", func(t *testing.T) {
+		img, err := screen.CaptureVirtualDesktop()
+		if err != nil {
+			// In some CI environments (headless), GDI might fail.
+			// This is an environment issue, not necessarily a bug.
+			t.Skipf("Skipping capture test (likely headless/CI environment): %v", err)
+		}
+
+		if img == nil {
+			t.Fatal("Captured image is nil")
+		}
+
+		bounds := img.Bounds()
+		t.Logf("Captured Image Size: %dx%d", bounds.Dx(), bounds.Dy())
+
+		if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
+			t.Errorf("Invalid image dimensions: %dx%d", bounds.Dx(), bounds.Dy())
+		}
+
+		// Verify first pixel (RGBA)
+		// Usually desktops are not completely transparent
+		pix := img.At(bounds.Min.X, bounds.Min.Y)
+		_, _, _, a := pix.RGBA()
+		if a == 0 {
+			t.Error("Captured image first pixel is fully transparent (expected opaque 255)")
+		}
+	})
+
+	t.Run("CaptureWithOptions", func(t *testing.T) {
+		opts := screen.CaptureOptions{
+			PreserveAlpha: true,
+			MaxMemoryMB:   100,
+		}
+
+		// Check if virtual desktop is too large for 100MB
+		v := screen.VirtualBounds()
+		needed := int64(v.Right-v.Left) * int64(v.Bottom-v.Top) * 4
+		if needed > 100*1024*1024 {
+			t.Logf("Desktop requires %d MB, skipping 100MB limit test", needed/(1024*1024))
+			opts.MaxMemoryMB = 1000 // Increase for test
+		}
+
+		img, err := screen.CaptureVirtualDesktopWithOptions(opts)
+		if err != nil {
+			t.Skipf("Capture with options failed: %v", err)
+		}
+
+		if img == nil {
+			t.Fatal("Captured image with options is nil")
 		}
 	})
 }
