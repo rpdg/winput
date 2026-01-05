@@ -195,14 +195,14 @@ KeyUp simulates a global key up event.
 ```go
 func Press(k Key) error
 ```
-Press simulates a global key press (Down + Up).
+Press simulates a global key press (down then up) with a short delay.
 
 ### func PressHotkey
 
 ```go
 func PressHotkey(keys ...Key) error
 ```
-PressHotkey simulates a global combination of keys.
+PressHotkey simulates a key combination (e.g., Ctrl+C). It presses keys in order, waits 50ms, then releases them in reverse order.
 
 ### func Type
 

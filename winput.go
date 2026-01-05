@@ -587,7 +587,7 @@ func (w *Window) PressHotkey(keys ...Key) error {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 	for i := len(keys) - 1; i >= 0; i-- {
 		if err := keyUpImpl(cb, w.HWND, keys[i]); err != nil {
 			return err
@@ -686,7 +686,7 @@ func PressHotkey(keys ...Key) error {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 	for i := len(keys) - 1; i >= 0; i-- {
 		if err := keyUpImpl(cb, 0, keys[i]); err != nil {
 			return err

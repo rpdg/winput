@@ -177,14 +177,14 @@ KeyUp 模拟全局按键抬起事件。
 ```go
 func Press(k Key) error
 ```
-Press 模拟一次全局按键（按下+抬起）。
+Press 模拟一次全局按键（按下后抬起），中间有短暂延迟。
 
 ### func PressHotkey
 
 ```go
 func PressHotkey(keys ...Key) error
 ```
-PressHotkey 模拟全局组合键。
+PressHotkey 模拟组合键（如 Ctrl+C）。它按顺序按下所有键，保持 50ms，然后按相反顺序释放。
 
 ### func Type
 
