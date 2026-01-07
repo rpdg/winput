@@ -91,7 +91,10 @@ go get github.com/rpdg/winput
 2.  确保 `interception.dll` 存在。默认在当前目录或 PATH 中查找，也可以指定路径：
     ```go
     winput.SetHIDLibraryPath("libs/interception.dll")
-    winput.SetBackend(winput.BackendHID)
+    if err := winput.SetBackend(winput.BackendHID); err != nil {
+        // 处理错误（例如回退到消息后端）
+        panic(err)
+    }
     ```
 
 ## 使用示例
@@ -168,17 +171,15 @@ func main() {
 健壮的错误处理示例：
 
 ```go
-// 尝试切换到 HID 模式
-winput.SetBackend(winput.BackendHID)
+// SetBackend 现在会立即检查驱动环境。
+if err := winput.SetBackend(winput.BackendHID); err != nil {
+    log.Printf("HID 后端不可用: %v。将继续使用默认的消息后端。", err)
+    // 默认即为 BackendMessage，无需额外设置。
+}
 
-// 执行动作
-err := w.Click(100, 100)
-
-// 检查是否是因为驱动未安装
-if errors.Is(err, winput.ErrDriverNotInstalled) {
-    log.Println("HID 驱动未安装，降级到消息后端...")
-    winput.SetBackend(winput.BackendMessage)
-    w.Click(100, 100) // 重试
+// 之后的调用将使用成功设置的后端。
+if err := w.Click(100, 100); err != nil {
+    log.Fatal(err)
 }
 ```
 
@@ -198,17 +199,17 @@ dpi, _ := w.DPI()
 fmt.Printf("目标窗口 DPI: %d (缩放比: %.2f%%)\n", dpi, float64(dpi)/96.0*100)
 ```
 
-### 2. HID 后端与自动降级
+### 2. HID Backend with Fallback
 在游戏或反作弊场景使用 HID，在普通应用使用 Message。
 
 ```go
-winput.SetBackend(winput.BackendHID)
-err := w.Type("password")
-if err != nil {
-    // 如果 HID 失败，切回 Message 模式
-    winput.SetBackend(winput.BackendMessage)
-    w.Type("password")
+// 尝试启用 HID 后端
+if err := winput.SetBackend(winput.BackendHID); err != nil {
+    log.Println("HID 初始化失败，使用默认的消息后端:", err)
+    // 无需额外操作，默认即为 BackendMessage
 }
+
+w.Type("password") // 使用当前激活的后端工作
 ```
 
 ### 3. 按键映射细节

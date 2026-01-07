@@ -17,7 +17,12 @@ func main() {
 	// 1. Setup HID
 	// You can specify path to dll if not in current dir
 	winput.SetHIDLibraryPath("interception.dll")
-	winput.SetBackend(winput.BackendHID)
+	if err := winput.SetBackend(winput.BackendHID); err != nil {
+		if errors.Is(err, winput.ErrDriverNotInstalled) {
+			log.Fatal("❌ Interception driver not found. Please install it.")
+		}
+		log.Fatalf("❌ HID Setup failed: %v", err)
+	}
 
 	// 2. Find Window (Optional in HID mode, but good for relative coords)
 	w, err := winput.FindByProcessName("notepad.exe")
@@ -35,9 +40,6 @@ func main() {
 	fmt.Println("👉 Moving Mouse (Human-like trajectory)...")
 	// Moves to (100, 100) inside the window
 	if err := target.Move(100, 100); err != nil {
-		if errors.Is(err, winput.ErrDriverNotInstalled) {
-			log.Fatal("❌ Interception driver not found. Please install it.")
-		}
 		log.Fatal(err)
 	}
 

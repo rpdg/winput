@@ -90,7 +90,10 @@ To use the HID backend:
 2.  Place `interception.dll` in your app directory, or specify its path:
     ```go
     winput.SetHIDLibraryPath("libs/interception.dll")
-    winput.SetBackend(winput.BackendHID)
+    if err := winput.SetBackend(winput.BackendHID); err != nil {
+        // Handle error (e.g. fallback to Message backend)
+        panic(err)
+    }
     ```
 
 ## Usage Examples
@@ -167,15 +170,15 @@ winput avoids silent failures. Common errors you should handle:
 Example of robust error handling:
 
 ```go
+// SetBackend now fails fast if the driver or DLL is missing.
 if err := winput.SetBackend(winput.BackendHID); err != nil {
-    // This won't fail immediately, but checkBackend will fail on first action
+    log.Printf("HID backend not available: %v. Falling back to Message backend.", err)
+    // No need to explicitly set BackendMessage, as it is the default.
 }
 
-err := w.Click(100, 100)
-if errors.Is(err, winput.ErrDriverNotInstalled) {
-    log.Println("HID driver missing, falling back to Message backend...")
-    winput.SetBackend(winput.BackendMessage)
-    w.Click(100, 100) // Retry
+// All subsequent calls will use the successfully set backend.
+if err := w.Click(100, 100); err != nil {
+    log.Fatal(err)
 }
 ```
 
@@ -200,13 +203,13 @@ fmt.Printf("Target Window DPI: %d (Scale: %.2f%%)
 Use HID for games/anti-cheat, fallback to Message for standard apps.
 
 ```go
-winput.SetBackend(winput.BackendHID)
-err := w.Type("password")
-if err != nil {
-    // If HID fails (e.g. driver not installed), switch back
-    winput.SetBackend(winput.BackendMessage)
-    w.Type("password")
+// Try to enable HID backend
+if err := winput.SetBackend(winput.BackendHID); err != nil {
+    log.Println("HID init failed, using default Message backend:", err)
+    // No action needed, default is already BackendMessage
 }
+
+w.Type("password") // Works with whatever backend is active
 ```
 
 ### 3. Key Mapping Details

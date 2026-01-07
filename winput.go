@@ -116,10 +116,24 @@ var (
 )
 
 // SetBackend sets the input simulation backend.
-func SetBackend(b Backend) {
+// If BackendHID is selected, it attempts to initialize the Interception driver immediately.
+// Returns an error if the driver or DLL cannot be loaded.
+func SetBackend(b Backend) error {
 	backendMutex.Lock()
 	defer backendMutex.Unlock()
+
+	if b == BackendHID {
+		// Eager initialization: Fail fast if driver/DLL is missing
+		if err := hid.Init(); err != nil {
+			if errors.Is(err, hid.ErrDriverNotInstalled) {
+				return ErrDriverNotInstalled
+			}
+			return fmt.Errorf("%w: %v", ErrDLLLoadFailed, err)
+		}
+	}
+
 	currentBackend = b
+	return nil
 }
 
 // SetHIDLibraryPath sets the path to the interception.dll library.

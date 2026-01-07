@@ -136,9 +136,9 @@ GetCursorPos 返回鼠标光标当前的绝对屏幕坐标。
 ### func SetBackend
 
 ```go
-func SetBackend(b Backend)
+func SetBackend(b Backend) error
 ```
-SetBackend 配置全局输入注入方法。
+SetBackend 设置输入模拟后端。如果选择 `BackendHID`，它会立即尝试初始化驱动，如果失败（如驱动未安装）则返回错误。
 
 ### func SetHIDLibraryPath
 

@@ -151,9 +151,9 @@ GetCursorPos returns the current absolute screen coordinates of the mouse cursor
 ### func SetBackend
 
 ```go
-func SetBackend(b Backend)
+func SetBackend(b Backend) error
 ```
-SetBackend configures the global input injection method.
+SetBackend sets the input simulation backend. If `BackendHID` is selected, it attempts to initialize the driver immediately and returns an error if it fails (e.g. driver not installed).
 
 ### func SetHIDLibraryPath
 
