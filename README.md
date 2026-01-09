@@ -221,18 +221,40 @@ w.Type("password") // Works with whatever backend is active
 - **Supported**: A-Z, 0-9, Common Symbols (`!`, `@`, `#`...), Space, Enter, Tab.
 - **Auto-Shift**: `Type("A")` automatically sends `Shift Down` -> `a Down` -> `a Up` -> `Shift Up`.
 
+
+
 ## Comparison
 
-| Feature | winput (Go) | C# Interceptor Wrappers | Python winput (ctypes) |
-| :--- | :--- | :--- | :--- |
-| **Backends** | **Dual (HID + Message)** | HID (Interception) Only | Message (User32) Only |
-| **API Style** | Object-Oriented (`w.Click`) | Low-level (`SendInput`) | Function-based |
-| **Dependency** | None (Default) / Driver (HID) | Driver Required | None |
-| **Safety** | Explicit Errors | Exceptions / Silent | Silent / Return Codes |
-| **DPI Aware** | ✅ Yes | ❌ Manual calc needed | ❌ Manual calc needed |
+| Feature        | winput (Go)                   | C# Interceptor Wrappers | Python winput (ctypes) |
+| :------------- | :---------------------------- | :---------------------- | :--------------------- |
+| **Backends**   | **Dual (HID + Message)**      | HID (Interception) Only | Message (User32) Only  |
+| **API Style**  | Object-Oriented (`w.Click`)   | Low-level (`SendInput`) | Function-based         |
+| **Dependency** | None (Default) / Driver (HID) | Driver Required         | None                   |
+| **Safety**     | Explicit Errors               | Exceptions / Silent     | Silent / Return Codes  |
+| **DPI Aware**  | ✅ Yes                         | ❌ Manual calc needed    | ❌ Manual calc needed   |
 
 *   **vs Python winput**: Python's version is great for simple automation but lacks the kernel-level injection capability required for games or stubborn applications.
 *   **vs C# Interceptor**: Most C# wrappers expose the raw driver API. `winput` abstracts this into high-level actions (Click, Type) and adds coordinate translation logic.
+
+
+
+## Selection Guide: winput vs robotgo
+
+| Feature | robotgo | winput |
+| :--- | :--- | :--- |
+| **Input Level** | OS Synthetic (`SendInput` / Events) | **Kernel Driver** (`Interception`) + OS Message |
+| **Background Control** | ❌ Fails often | ✅ **Native Support** (PostMessage) |
+| **Anti-Cheat / Protected Apps** | ❌ Blocked | ✅ **Bypasses most protections** (HID level) |
+| **Coordinate System** | Implicit / Device-dependent | **Explicit Virtual Desktop** (DPI-aware) |
+| **Visual Integration** | Basic | **Engineered for OpenCV/OCR** (Capture -> Map -> Input) |
+| **Cross-Platform** | ✅ (Win/Mac/Linux) | ❌ (Windows Optimized) |
+| **Use Case** | Quick scripts, simple GUI automation | **Engineering-grade automation**, Games, Electron, Background tasks |
+
+**Summary**:
+*   Use **robotgo** for quick, cross-platform scripts where reliability in edge cases (games, background) is not critical.
+*   Use **winput** when you need **determinism**, **driver-level control**, or need to interact with **background windows**, **games**, or **Electron apps** that ignore standard input injection.
+
+
 
 ## License
 
