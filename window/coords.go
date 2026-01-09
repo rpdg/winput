@@ -80,6 +80,8 @@ func ClientToScreen(hwnd uintptr, x, y int32) (sx, sy int32, err error) {
 }
 
 // GetCursorPos retrieves the cursor's position, in screen coordinates.
+// The coordinates are relative to the primary monitor (0,0).
+// Returns negative values if the cursor is on a monitor to the left or above the primary monitor.
 func GetCursorPos() (x, y int32, err error) {
 	var pt POINT
 	r, _, _ := ProcGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
