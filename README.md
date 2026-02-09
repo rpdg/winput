@@ -1,6 +1,14 @@
 # winput
 
+
+---
+<p align="center">
+ <a href="README_CN.md">🇨🇳 中文</a> 
+</p>
+---
+
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rpdg/winput)
+
 
 **winput** is a lightweight, high-performance Go library for Windows background input automation.
 
