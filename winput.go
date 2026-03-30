@@ -10,6 +10,7 @@ import (
 	"github.com/rpdg/winput/hid"
 	"github.com/rpdg/winput/keyboard"
 	"github.com/rpdg/winput/mouse"
+	"github.com/rpdg/winput/uia"
 	"github.com/rpdg/winput/window"
 )
 
@@ -69,6 +70,47 @@ func (w *Window) FindChildByClass(class string) (*Window, error) {
 		return nil, err
 	}
 	return &Window{HWND: hwnd}, nil
+}
+
+// Text returns the current text/value of the target window or control.
+// It is most reliable for standard Win32 text controls such as Edit and RichEdit.
+func (w *Window) Text() (string, error) {
+	if !w.IsValid() {
+		return "", ErrWindowGone
+	}
+
+	text, err := window.GetText(w.HWND)
+	if err != nil {
+		return "", ErrReadTextFailed
+	}
+	return text, nil
+}
+
+// Value returns the current best-effort textual value of the target window or control.
+// It first tries Win32 text retrieval, then falls back to UI Automation for modern controls.
+func (w *Window) Value() (string, error) {
+	if !w.IsValid() {
+		return "", ErrWindowGone
+	}
+
+	text, err := window.GetText(w.HWND)
+	if err == nil && text != "" {
+		return text, nil
+	}
+
+	text, err = uia.GetText(w.HWND)
+	if err == nil {
+		return text, nil
+	}
+
+	if text == "" {
+		text, winErr := window.GetText(w.HWND)
+		if winErr == nil {
+			return text, nil
+		}
+	}
+
+	return "", ErrReadTextFailed
 }
 
 // -----------------------------------------------------------------------------

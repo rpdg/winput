@@ -19,6 +19,7 @@
 //   - Window-Centric: Operations on *Window use client coordinates.
 //   - Global Input: MoveMouseTo/ClickMouseAt/Type for absolute virtual desktop coordinates (useful for Electron/Games).
 //   - Child Windows: FindChildByClass for targeting specific controls (e.g. "Edit" in Notepad).
+//   - Text Reading: Text() for standard Win32 controls, Value() for best-effort reads with UI Automation fallback.
 //   - Screen Package: winput/screen helpers for querying monitor bounds and virtual desktop geometry.
 //   - DPI Awareness: Per-Monitor v2 support for accurate mapping.
 //

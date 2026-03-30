@@ -42,7 +42,9 @@ Package `winput` provides a high-level interface for Windows background input au
     *   [func (*Window) PressHotkey](#func-window-presshotkey)
     *   [func (*Window) ScreenToClient](#func-window-screentoclient)
     *   [func (*Window) Scroll](#func-window-scroll)
+    *   [func (*Window) Text](#func-window-text)
     *   [func (*Window) Type](#func-window-type)
+    *   [func (*Window) Value](#func-window-value)
 
 ---
 
@@ -76,6 +78,9 @@ var (
 
     // ErrPostMessageFailed implies the PostMessageW call returned 0 (e.g., queue full or invalid handle).
     ErrPostMessageFailed = errors.New("PostMessageW failed")
+
+    // ErrReadTextFailed implies reading text from the target window/control failed.
+    ErrReadTextFailed = errors.New("failed to read window text")
 )
 ```
 
@@ -338,6 +343,13 @@ func (w *Window) Scroll(x, y int32, delta int32) error
 ```
 Scroll performs a vertical mouse wheel scroll at the specified coordinates.
 
+#### func (*Window) Text
+
+```go
+func (w *Window) Text() (string, error)
+```
+Text returns the current text of the target window/control using standard Win32 text retrieval. It is primarily intended for controls such as `Edit` and `RichEdit`.
+
 #### func (*Window) KeyDown
 
 ```go
@@ -372,6 +384,13 @@ PressHotkey presses a combination of keys in order and releases them in reverse 
 func (w *Window) Type(text string) error
 ```
 Types a string, automatically handling Shift modifiers.
+
+#### func (*Window) Value
+
+```go
+func (w *Window) Value() (string, error)
+```
+Value returns the current best-effort textual value of the target window/control. It first tries the Win32 text path used by `Text()`, then falls back to Windows UI Automation for modern controls when needed.
 
 #### func (*Window) DPI
 

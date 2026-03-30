@@ -12,6 +12,7 @@
 
 *   **纯 Go 实现 (无 CGO)**: 使用动态 DLL 加载，编译不需要 GCC 环境。
 *   **窗口为中心 (Window-Centric)**: 所有操作均基于 `Window` 对象，无需直接操作 HWND。
+*   **读取控件文本**: `Text()` 可读取标准 Win32 文本控件，`Value()` 会在必要时回退到 UI Automation 以适配更多现代 UI。
 *   **后台输入 (Background Input)**:
     *   **消息后端 (Message Backend)**: 直接向窗口消息队列发送事件。无需窗口焦点，也不移动物理鼠标。
     *   **HID 后端 (HID Backend)**: 使用 [Interception](https://github.com/oblitum/Interception) 驱动模拟底层硬件输入。
@@ -154,20 +155,32 @@ func main() {
 		log.Fatal(err)
 	}
 
+	edit, err := w.FindChildByClass("Edit")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// 2. 点击 (左键)
-	if err := w.Click(100, 100); err != nil {
+	if err := edit.Click(100, 100); err != nil {
 		log.Fatal(err)
 	}
 
 	// 3. 输入文本
-	w.Type("Hello World")
-	w.Press(winput.KeyEnter)
+	edit.Type("Hello World")
+	edit.Press(winput.KeyEnter)
 
-	// 4. 全局输入 (不针对特定窗口)
+	// 4. 读取标准文本控件内容
+	value, err := edit.Text()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("当前文本:", value)
+
+	// 5. 全局输入 (不针对特定窗口)
 	winput.Type("Hello Electron!")
 	winput.Press(winput.KeyEnter)
 
-	// 5. 使用 winput/screen (查询屏幕边界)
+	// 6. 使用 winput/screen (查询屏幕边界)
 	// import "github.com/rpdg/winput/screen"
 	bounds := screen.VirtualBounds()
 	fmt.Printf("桌面边界: %d, %d\n", bounds.Right, bounds.Bottom)

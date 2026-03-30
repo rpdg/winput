@@ -44,6 +44,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	value, err := edit.Text()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("✅ Read back text: %q\n", value)
+
 	// Press Hotkey (Select All: Ctrl+A)
 	// fmt.Println("👉 Testing Hotkey (Ctrl+A)...")
 	// edit.PressHotkey(winput.KeyCtrl, winput.KeyA)

@@ -1,6 +1,7 @@
 package winput_test
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -50,6 +51,24 @@ func setupTestApp(t *testing.T) (*winput.Window, *exec.Cmd) {
 	}
 
 	return targetWin, cmd
+}
+
+func findNotepadTextControl(w *winput.Window) (*winput.Window, error) {
+	candidates := []string{
+		"RichEditD2DPT",
+		"Edit",
+		"RichEdit20W",
+		"RICHEDIT50W",
+	}
+
+	for _, class := range candidates {
+		child, err := w.FindChildByClass(class)
+		if err == nil {
+			return child, nil
+		}
+	}
+
+	return nil, errors.New("notepad text control not found")
 }
 
 func cleanupTestApp(cmd *exec.Cmd) {
@@ -208,6 +227,52 @@ func TestKeyboardInput(t *testing.T) {
 		// Ctrl + A via window object
 		if err := w.PressHotkey(winput.KeyCtrl, winput.KeyA); err != nil {
 			t.Errorf("Window.PressHotkey failed: %v", err)
+		}
+	})
+}
+
+func TestWindowTextRead(t *testing.T) {
+	winput.SetBackend(winput.BackendMessage)
+
+	w, cmd := setupTestApp(t)
+	defer cleanupTestApp(cmd)
+
+	textControl, err := findNotepadTextControl(w)
+	if err != nil {
+		t.Skipf("Skipping text-read test: %v", err)
+	}
+
+	const expected = "hello from text read"
+	if err := textControl.Type(expected); err != nil {
+		t.Fatalf("Window.Type failed: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	t.Run("Text", func(t *testing.T) {
+		got, err := textControl.Text()
+		if err != nil {
+			t.Fatalf("Text failed: %v", err)
+		}
+		if got != expected {
+			t.Fatalf("unexpected text. got %q", got)
+		}
+	})
+
+	t.Run("Value", func(t *testing.T) {
+		got, err := textControl.Value()
+		if err != nil {
+			t.Fatalf("Value failed: %v", err)
+		}
+		if got != expected {
+			t.Fatalf("unexpected value. got %q", got)
+		}
+	})
+
+	t.Run("InvalidHandle", func(t *testing.T) {
+		invalid := &winput.Window{}
+		_, err := invalid.Text()
+		if !errors.Is(err, winput.ErrWindowGone) {
+			t.Fatalf("expected ErrWindowGone, got %v", err)
 		}
 	})
 }

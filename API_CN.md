@@ -45,7 +45,9 @@
     *   [func (*Window) PressHotkey](#func-window-presshotkey)
     *   [func (*Window) ScreenToClient](#func-window-screentoclient)
     *   [func (*Window) Scroll](#func-window-scroll)
+    *   [func (*Window) Text](#func-window-text)
     *   [func (*Window) Type](#func-window-type)
+    *   [func (*Window) Value](#func-window-value)
 
 ---
 
@@ -62,6 +64,7 @@ var (
     ErrDLLLoadFailed      = errors.New("dll load failed")      // DLL 加载失败 (仅 HID)
     ErrPermissionDenied   = errors.New("permission denied")    // 权限不足
     ErrPostMessageFailed  = errors.New("PostMessageW failed")  // PostMessageW 调用失败
+    ErrReadTextFailed     = errors.New("failed to read window text") // 读取文本失败
 )
 ```
 
@@ -323,6 +326,13 @@ func (w *Window) Scroll(x, y int32, delta int32) error
 ```
 Scroll 在指定坐标执行鼠标滚轮滚动。
 
+#### func (*Window) Text
+
+```go
+func (w *Window) Text() (string, error)
+```
+Text 使用标准 Win32 文本读取路径获取目标窗口/控件的当前文本。主要适用于 `Edit`、`RichEdit` 等标准 Win32 文本控件。
+
 #### func (*Window) KeyDown
 
 ```go
@@ -357,6 +367,13 @@ PressHotkey 执行组合键（如 Ctrl+A）。
 func (w *Window) Type(text string) error
 ```
 输入字符串，自动处理大写字母和符号的 Shift 切换。
+
+#### func (*Window) Value
+
+```go
+func (w *Window) Value() (string, error)
+```
+Value 返回目标窗口/控件当前的“最佳努力”文本值。它会先尝试 `Text()` 所使用的 Win32 读取路径，必要时再回退到 Windows UI Automation 读取现代控件。
 
 #### func (*Window) DPI
 

@@ -33,4 +33,7 @@ var (
 
 	// ErrPostMessageFailed implies the PostMessageW call returned 0.
 	ErrPostMessageFailed = window.ErrPostMessageFailed
+
+	// ErrReadTextFailed implies the library could not read text from the target window/control.
+	ErrReadTextFailed = window.ErrReadTextFailed
 )

@@ -18,6 +18,7 @@ It provides a unified, window-centric API that abstracts the underlying input me
 
 *   **Pure Go (No CGO)**: Uses dynamic DLL loading. No GCC required for compilation.
 *   **Window-Centric API**: Operations are performed on `Window` objects, not raw HWNDs.
+*   **Read Text from Controls**: Use `Text()` for standard Win32 controls and `Value()` for best-effort reads with UI Automation fallback on modern controls.
 *   **Background Input**: 
     *   **Message Backend**: Sends inputs directly to window message queues. Works without window focus or mouse cursor movement.
     *   **HID Backend**: Uses the [Interception](https://github.com/oblitum/Interception) driver to simulate hardware input at the kernel level.
@@ -147,20 +148,32 @@ func main() {
 		log.Fatal(err)
 	}
 
+	edit, err := w.FindChildByClass("Edit")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// 2. Click (Left Button)
-	if err := w.Click(100, 100); err != nil {
+	if err := edit.Click(100, 100); err != nil {
 		log.Fatal(err)
 	}
 
 	// 3. Type text
-	w.Type("Hello World")
-	w.Press(winput.KeyEnter)
+	edit.Type("Hello World")
+	edit.Press(winput.KeyEnter)
 
-	// 4. Global Input (Target independent)
+	// 4. Read text from a standard child text control
+	value, err := edit.Text()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Current text:", value)
+
+	// 5. Global Input (Target independent)
 	winput.Type("Hello Electron!")
 	winput.Press(winput.KeyEnter)
 
-	// 5. Using winput/screen (Boundary query)
+	// 6. Using winput/screen (Boundary query)
 	// import "github.com/rpdg/winput/screen"
 	bounds := screen.VirtualBounds()
 	fmt.Printf("Virtual Desktop Bounds: %d, %d\n", bounds.Right, bounds.Bottom)
