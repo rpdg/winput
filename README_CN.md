@@ -68,6 +68,15 @@ func main() {
 
 ## API 参考手册
 
+## 可选扩展
+
+浏览器自动化能力被明确隔离在主模块之外。
+如果你需要通过 `rod` 访问 Chromium / Electron 的 DOM，请单独引入扩展模块：
+
+```bash
+go get github.com/rpdg/winput/ext/rodx
+```
+
 
 
 ## 后端限制与权限

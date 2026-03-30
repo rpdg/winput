@@ -69,6 +69,15 @@ func main() {
 
 ## API Reference
 
+## Optional Extensions
+
+Browser automation is intentionally kept out of the core module.
+If you need Chromium / Electron DOM access via `rod`, install the separate extension module:
+
+```bash
+go get github.com/rpdg/winput/ext/rodx
+```
+
 ## Backend Limitations & Permissions
 
 ### Message Backend
