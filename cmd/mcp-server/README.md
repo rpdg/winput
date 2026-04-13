@@ -44,6 +44,30 @@ See [docs/mcp-tools.md](/D:/Works/Personal/GoLang/winput/docs/mcp-tools.md) for 
 The repository now includes a minimal server skeleton in `main.go` and an internal adapter package.
 The current implementation focuses on the initial low-level tool catalog and in-memory target registry rather than a full agent runtime.
 
+## Protocol Shape
+
+The server currently exposes:
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+Transport:
+- stdio
+- JSON-RPC messages
+- `Content-Length` framed payloads
+
+`tools/list` returns:
+- tool metadata
+- `inputSchema`
+- `outputSchema`
+- `errorSchema`
+- side-effect annotations
+
+`tools/call` returns:
+- typed `structuredContent`
+- text `content`
+- stable structured error data on failure
+
 ## Safety Defaults
 
 By default, mutating and sensitive tools are blocked.
@@ -58,3 +82,8 @@ Current policy:
 - read-only tools are enabled by default
 - state-changing tools require `-allow-mutations`
 - sensitive tools require `-allow-sensitive`
+
+## Documentation
+
+- adapter design: [docs/mcp-tools.md](/D:/Works/Personal/GoLang/winput/docs/mcp-tools.md)
+- example session: [docs/mcp-example-session.md](/D:/Works/Personal/GoLang/winput/docs/mcp-example-session.md)

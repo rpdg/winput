@@ -14,6 +14,15 @@
 
 It provides a unified, window-centric API that abstracts the underlying input mechanism, allowing seamless switching between standard Window Messages (`PostMessage`) and kernel-level injection (`Interception` driver).
 
+## Positioning
+
+`winput` has two intended layers:
+- a focused Go library for Windows input automation
+- an in-repo MCP adapter layer for exposing stable low-level tools to external AI systems
+
+The core library remains the primary contract for Go developers.
+If you want to expose `winput` directly to AI agents, use the MCP adapter instead of embedding agent runtime semantics into the library API.
+
 ## Features
 
 *   **Pure Go (No CGO)**: Uses dynamic DLL loading. No GCC required for compilation.
@@ -77,6 +86,56 @@ If you need Chromium / Electron DOM access via `rod`, install the separate exten
 ```bash
 go get github.com/rpdg/winput/ext/rodx
 ```
+
+## MCP Server
+
+This repository also includes a minimal MCP server adapter under [cmd/mcp-server](/D:/Works/Personal/GoLang/winput/cmd/mcp-server).
+It exposes a stable subset of `winput` capabilities over stdio JSON-RPC with `Content-Length` framing.
+
+Start the server in read-only mode:
+
+```bash
+go run ./cmd/mcp-server
+```
+
+Enable mutating tools such as `click` and `type_text`:
+
+```bash
+go run ./cmd/mcp-server -allow-mutations
+```
+
+Enable mutating and sensitive tools such as `switch_backend`:
+
+```bash
+go run ./cmd/mcp-server -allow-mutations -allow-sensitive
+```
+
+Current MCP tool catalog:
+- `find_window`
+- `find_child`
+- `click`
+- `double_click`
+- `right_click`
+- `move_mouse`
+- `type_text`
+- `press_key`
+- `press_hotkey`
+- `read_text`
+- `capture_screen`
+- `switch_backend`
+- `get_cursor_pos`
+- `get_virtual_bounds`
+
+Notes:
+- discovery tools return an opaque `target_id` instead of raw HWND values
+- `find_window` and `find_child` also return stable runtime metadata such as visibility, client size, and DPI when available
+- tool metadata includes `inputSchema`, `outputSchema`, and `errorSchema`
+- mutating and sensitive tools are blocked by default
+
+Further MCP details:
+- adapter design: [docs/mcp-tools.md](/D:/Works/Personal/GoLang/winput/docs/mcp-tools.md)
+- example framed session: [docs/mcp-example-session.md](/D:/Works/Personal/GoLang/winput/docs/mcp-example-session.md)
+- server entrypoint notes: [cmd/mcp-server/README.md](/D:/Works/Personal/GoLang/winput/cmd/mcp-server/README.md)
 
 ## Backend Limitations & Permissions
 

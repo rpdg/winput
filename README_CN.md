@@ -6,6 +6,15 @@
 
 它提供了一套统一的、以窗口为中心的 API，抽象了底层的输入机制，支持在标准的 Windows 消息 (`PostMessage`) 和内核级注入 (`Interception` 驱动) 之间无缝切换。
 
+## 定位
+
+`winput` 现在有两层明确定位：
+- 面向 Go 开发者的 Windows 输入自动化底层库
+- 面向外部 AI 的 MCP adapter 层
+
+对 Go 使用者来说，核心库 API 仍然是主契约。
+如果你希望把 `winput` 直接暴露给 AI agent，建议使用仓库内的 MCP adapter，而不是把 agent runtime 语义直接塞进核心库 API。
+
 
 
 ## 功能特性
@@ -76,6 +85,56 @@ func main() {
 ```bash
 go get github.com/rpdg/winput/ext/rodx
 ```
+
+## MCP Server
+
+本仓库还包含一个最小可用的 MCP server adapter，位于 [cmd/mcp-server](/D:/Works/Personal/GoLang/winput/cmd/mcp-server)。
+它通过 `stdio JSON-RPC + Content-Length` 帧方式，对外暴露一组稳定的低层 tool。
+
+只读模式启动：
+
+```bash
+go run ./cmd/mcp-server
+```
+
+开启会修改状态的 tool，例如 `click`、`type_text`：
+
+```bash
+go run ./cmd/mcp-server -allow-mutations
+```
+
+同时开启修改类和敏感类 tool，例如 `switch_backend`：
+
+```bash
+go run ./cmd/mcp-server -allow-mutations -allow-sensitive
+```
+
+当前 MCP tool 列表：
+- `find_window`
+- `find_child`
+- `click`
+- `double_click`
+- `right_click`
+- `move_mouse`
+- `type_text`
+- `press_key`
+- `press_hotkey`
+- `read_text`
+- `capture_screen`
+- `switch_backend`
+- `get_cursor_pos`
+- `get_virtual_bounds`
+
+补充说明：
+- discovery 类 tool 返回的是不透明 `target_id`，不会直接暴露 HWND
+- `find_window` 和 `find_child` 会尽量返回稳定的运行时元数据，例如可见性、client 尺寸、DPI
+- tool 元数据里包含 `inputSchema`、`outputSchema`、`errorSchema`
+- 默认会拦截修改类和敏感类 tool
+
+相关文档：
+- adapter 设计：[docs/mcp-tools.md](/D:/Works/Personal/GoLang/winput/docs/mcp-tools.md)
+- 协议会话示例：[docs/mcp-example-session.md](/D:/Works/Personal/GoLang/winput/docs/mcp-example-session.md)
+- server 入口说明：[cmd/mcp-server/README.md](/D:/Works/Personal/GoLang/winput/cmd/mcp-server/README.md)
 
 
 
