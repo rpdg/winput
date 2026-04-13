@@ -86,6 +86,8 @@ Each MCP tool should provide:
 - side-effect metadata
 - confirmation requirement metadata where needed
 
+The server should also keep the runtime wire shape stable by using fixed response envelopes and typed structured payloads rather than ad hoc `map[string]any` payloads.
+
 Recommended side-effect levels:
 - `read_only`
 - `state_change`
@@ -147,6 +149,7 @@ The repository now includes:
 - in-memory `target_id` registry for window and child-window flows
 - safety gates for mutating and sensitive tools
 - framed `Content-Length` request and response transport
+- fixed typed response envelopes for initialization, tool listing, tool results, and structured error data
 
 Example protocol usage is documented in `docs/mcp-example-session.md`.
 
