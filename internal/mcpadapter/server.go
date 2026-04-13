@@ -30,12 +30,6 @@ type JSONRPCResponse struct {
 	Error   *JSONRPCErrorObj `json:"error,omitempty"`
 }
 
-type JSONRPCErrorObj struct {
-	Code    int            `json:"code"`
-	Message string         `json:"message"`
-	Data    map[string]any `json:"data,omitempty"`
-}
-
 type Server struct {
 	catalog         []Tool
 	registry        *Registry
@@ -78,7 +72,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 				Error: &JSONRPCErrorObj{
 					Code:    -32700,
 					Message: "parse error",
-					Data:    map[string]any{"details": err.Error()},
+					Data:    &JSONRPCErrorData{Details: err.Error()},
 				},
 			}); writeErr != nil {
 				return writeErr
@@ -101,13 +95,13 @@ func (s *Server) handleRequest(ctx context.Context, req JSONRPCRequest) JSONRPCR
 
 	switch req.Method {
 	case "initialize":
-		resp.Result = map[string]any{
-			"protocolVersion": "2025-04-01",
-			"serverInfo": map[string]any{
-				"name":    "winput-mcp",
-				"version": "0.1.0",
+		resp.Result = InitializeResult{
+			ProtocolVersion: "2025-04-01",
+			ServerInfo: ServerInfo{
+				Name:    "winput-mcp",
+				Version: "0.1.0",
 			},
-			"capabilities": map[string]any{
+			Capabilities: map[string]any{
 				"tools": map[string]any{},
 			},
 		}
@@ -115,9 +109,7 @@ func (s *Server) handleRequest(ctx context.Context, req JSONRPCRequest) JSONRPCR
 	case "notifications/initialized":
 		return resp
 	case "tools/list":
-		resp.Result = map[string]any{
-			"tools": s.catalog,
-		}
+		resp.Result = ToolListResult{Tools: s.catalog}
 		return resp
 	case "tools/call":
 		var params ToolCallParams
@@ -138,7 +130,7 @@ func (s *Server) handleRequest(ctx context.Context, req JSONRPCRequest) JSONRPCR
 	}
 }
 
-func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[string]any, error) {
+func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, error) {
 	if err := s.checkToolAccess(params.Name); err != nil {
 		return nil, err
 	}
@@ -155,9 +147,9 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		}
 		target := s.registry.AddWindow(win, args.alias())
 		result := describeWindowTarget(target, win)
-		result["title"] = args.Title
-		result["class"] = args.Class
-		result["process_name"] = args.ProcessName
+		result.Title = args.Title
+		result.Class = args.Class
+		result.ProcessName = args.ProcessName
 		return toolResult(result), nil
 	case "find_child":
 		var args FindChildArgs
@@ -174,8 +166,8 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		}
 		target := s.registry.AddWindow(child, args.Class)
 		result := describeWindowTarget(target, child)
-		result["class"] = args.Class
-		result["parent_target_id"] = args.ParentTargetID
+		result.Class = args.Class
+		result.ParentTargetID = args.ParentTargetID
 		return toolResult(result), nil
 	case "click":
 		var args ClickArgs
@@ -199,7 +191,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true}), nil
+		return toolResult(OKResult{OK: true}), nil
 	case "double_click":
 		var args ClickArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -212,7 +204,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err := target.DoubleClick(args.X, args.Y); err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true}), nil
+		return toolResult(OKResult{OK: true}), nil
 	case "right_click":
 		var args ClickArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -225,7 +217,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err := target.ClickRight(args.X, args.Y); err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true}), nil
+		return toolResult(OKResult{OK: true}), nil
 	case "move_mouse":
 		var args ClickArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -238,7 +230,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err := target.Move(args.X, args.Y); err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true}), nil
+		return toolResult(OKResult{OK: true}), nil
 	case "type_text":
 		var args TypeTextArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -251,7 +243,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err := target.Type(args.Text); err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true}), nil
+		return toolResult(OKResult{OK: true}), nil
 	case "press_key":
 		var args PressKeyArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -268,7 +260,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err := target.Press(key); err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true}), nil
+		return toolResult(OKResult{OK: true}), nil
 	case "press_hotkey":
 		var args PressHotkeyArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -289,7 +281,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err := target.PressHotkey(keys...); err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true}), nil
+		return toolResult(OKResult{OK: true}), nil
 	case "read_text":
 		var args ReadTextArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -308,17 +300,14 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"text": text}), nil
+		return toolResult(ReadTextResult{Text: text}), nil
 	case "capture_screen":
 		img, err := screen.CaptureVirtualDesktop()
 		if err != nil {
 			return nil, mapLibraryError(err)
 		}
 		bounds := img.Bounds()
-		return toolResult(map[string]any{
-			"width":  bounds.Dx(),
-			"height": bounds.Dy(),
-		}), nil
+		return toolResult(CaptureScreenResult{Width: bounds.Dx(), Height: bounds.Dy()}), nil
 	case "switch_backend":
 		var args SwitchBackendArgs
 		if err := decodeArgs(params.Arguments, &args); err != nil {
@@ -336,21 +325,16 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (map[strin
 		if err := winput.SetBackend(backend); err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"ok": true, "backend": args.Backend}), nil
+		return toolResult(SwitchBackendResult{OK: true, Backend: args.Backend}), nil
 	case "get_cursor_pos":
 		x, y, err := winput.GetCursorPos()
 		if err != nil {
 			return nil, mapLibraryError(err)
 		}
-		return toolResult(map[string]any{"x": x, "y": y}), nil
+		return toolResult(CursorPosResult{X: x, Y: y}), nil
 	case "get_virtual_bounds":
 		rect := screen.VirtualBounds()
-		return toolResult(map[string]any{
-			"left":   rect.Left,
-			"top":    rect.Top,
-			"right":  rect.Right,
-			"bottom": rect.Bottom,
-		}), nil
+		return toolResult(VirtualBoundsResult{Left: rect.Left, Top: rect.Top, Right: rect.Right, Bottom: rect.Bottom}), nil
 	default:
 		return nil, invalidRequestError("validation_error", fmt.Errorf("unknown tool: %s", params.Name))
 	}
@@ -444,17 +428,16 @@ func decodeArgs[T any](args map[string]any, out *T) error {
 	return json.Unmarshal(buf, out)
 }
 
-func toolResult(data map[string]any) map[string]any {
-	buf, _ := json.Marshal(data)
-	return map[string]any{
-		"structuredContent": data,
-		"content": []map[string]any{
+func toolResult[T any](data T) ToolCallResult[T] {
+	return ToolCallResult[T]{
+		StructuredContent: data,
+		Content: []ToolContentItem{
 			{
-				"type": "text",
-				"text": string(buf),
+				Type: "text",
+				Text: marshalTextPayload(data),
 			},
 		},
-		"isError": false,
+		IsError: false,
 	}
 }
 
@@ -462,7 +445,7 @@ func invalidParams(err error) *JSONRPCErrorObj {
 	return &JSONRPCErrorObj{
 		Code:    -32602,
 		Message: "invalid params",
-		Data:    map[string]any{"details": err.Error()},
+		Data:    &JSONRPCErrorData{Details: err.Error()},
 	}
 }
 
@@ -507,10 +490,10 @@ func toJSONRPCError(err error) *JSONRPCErrorObj {
 		return &JSONRPCErrorObj{
 			Code:    -32000,
 			Message: coded.Message,
-			Data: map[string]any{
-				"code":      coded.Code,
-				"retryable": coded.Retryable,
-				"details":   errorDetails(coded.Cause),
+			Data: &JSONRPCErrorData{
+				Code:      coded.Code,
+				Retryable: coded.Retryable,
+				Details:   errorDetails(coded.Cause),
 			},
 		}
 	}
@@ -701,30 +684,30 @@ func keyFromName(name string) (winput.Key, error) {
 	}
 }
 
-func describeWindowTarget(target *WindowTarget, win *winput.Window) map[string]any {
-	result := map[string]any{
-		"target_id":  target.ID,
-		"kind":       target.Kind,
-		"is_valid":   false,
-		"is_visible": false,
+func describeWindowTarget(target *WindowTarget, win *winput.Window) WindowTargetResult {
+	result := WindowTargetResult{
+		TargetID:  target.ID,
+		Kind:      target.Kind,
+		IsValid:   false,
+		IsVisible: false,
 	}
 	if win == nil {
 		return result
 	}
 
-	result["is_valid"] = win.IsValid()
-	result["is_visible"] = win.IsVisible()
+	result.IsValid = win.IsValid()
+	result.IsVisible = win.IsVisible()
 
 	if width, height, err := win.ClientRect(); err == nil {
-		result["client_width"] = width
-		result["client_height"] = height
+		result.ClientWidth = width
+		result.ClientHeight = height
 	}
 	if dpiX, dpiY, err := win.DPI(); err == nil {
-		result["dpi_x"] = dpiX
-		result["dpi_y"] = dpiY
+		result.DPIX = dpiX
+		result.DPIY = dpiY
 	}
 	if target.Alias != "" {
-		result["alias"] = target.Alias
+		result.Alias = target.Alias
 	}
 	return result
 }

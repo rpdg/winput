@@ -79,14 +79,11 @@ func TestToolsListIncludesSchemas(t *testing.T) {
 		Method:  "tools/list",
 	})
 
-	result, ok := resp.Result.(map[string]any)
+	result, ok := resp.Result.(ToolListResult)
 	if !ok {
 		t.Fatalf("unexpected result type: %#v", resp.Result)
 	}
-	toolsRaw, ok := result["tools"].([]Tool)
-	if !ok {
-		t.Fatalf("unexpected tools type: %#v", result["tools"])
-	}
+	toolsRaw := result.Tools
 	if len(toolsRaw) == 0 {
 		t.Fatal("expected non-empty tool catalog")
 	}
@@ -184,12 +181,12 @@ func TestMCPServerSmoke(t *testing.T) {
 	if initResp.Error != nil {
 		t.Fatalf("initialize error: %#v", initResp.Error)
 	}
-	initResult, ok := initResp.Result.(map[string]any)
+	initResult, ok := initResp.Result.(InitializeResult)
 	if !ok {
 		t.Fatalf("unexpected initialize result: %#v", initResp.Result)
 	}
-	if initResult["protocolVersion"] != "2025-04-01" {
-		t.Fatalf("unexpected protocolVersion: %#v", initResult["protocolVersion"])
+	if initResult.ProtocolVersion != "2025-04-01" {
+		t.Fatalf("unexpected protocolVersion: %#v", initResult.ProtocolVersion)
 	}
 
 	send(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`)
@@ -197,23 +194,19 @@ func TestMCPServerSmoke(t *testing.T) {
 	if listResp.Error != nil {
 		t.Fatalf("tools/list error: %#v", listResp.Error)
 	}
-	listResult, ok := listResp.Result.(map[string]any)
+	listResult, ok := listResp.Result.(ToolListResult)
 	if !ok {
 		t.Fatalf("unexpected tools/list result: %#v", listResp.Result)
 	}
-	toolsAny, ok := listResult["tools"].([]any)
-	if !ok || len(toolsAny) == 0 {
-		t.Fatalf("unexpected tools payload: %#v", listResult["tools"])
+	toolsAny := listResult.Tools
+	if len(toolsAny) == 0 {
+		t.Fatalf("unexpected tools payload: %#v", listResult.Tools)
 	}
 	var foundBounds bool
-	for _, item := range toolsAny {
-		tool, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if tool["name"] == "get_virtual_bounds" {
+	for _, tool := range toolsAny {
+		if tool.Name == "get_virtual_bounds" {
 			foundBounds = true
-			if tool["outputSchema"] == nil || tool["errorSchema"] == nil {
+			if tool.OutputSchema == nil || tool.ErrorSchema == nil {
 				t.Fatalf("tool missing schema metadata: %#v", tool)
 			}
 		}
@@ -227,18 +220,12 @@ func TestMCPServerSmoke(t *testing.T) {
 	if callResp.Error != nil {
 		t.Fatalf("get_virtual_bounds error: %#v", callResp.Error)
 	}
-	callResult, ok := callResp.Result.(map[string]any)
+	callResult, ok := callResp.Result.(ToolCallResult[VirtualBoundsResult])
 	if !ok {
 		t.Fatalf("unexpected get_virtual_bounds result: %#v", callResp.Result)
 	}
-	structured, ok := callResult["structuredContent"].(map[string]any)
-	if !ok {
-		t.Fatalf("missing structuredContent: %#v", callResult)
-	}
-	for _, field := range []string{"left", "top", "right", "bottom"} {
-		if _, ok := structured[field]; !ok {
-			t.Fatalf("missing %s in structuredContent: %#v", field, structured)
-		}
+	if callResult.StructuredContent.Right == 0 && callResult.StructuredContent.Bottom == 0 {
+		t.Fatalf("unexpected structuredContent: %#v", callResult.StructuredContent)
 	}
 
 	send(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"click","arguments":{"target_id":"window-1","x":1,"y":1}}}`)
@@ -246,7 +233,7 @@ func TestMCPServerSmoke(t *testing.T) {
 	if blockedResp.Error == nil {
 		t.Fatal("expected click to be blocked by default")
 	}
-	if blockedResp.Error.Data["code"] != "unsafe_operation" {
+	if blockedResp.Error.Data == nil || blockedResp.Error.Data.Code != "unsafe_operation" {
 		t.Fatalf("unexpected blocked error: %#v", blockedResp.Error)
 	}
 }
@@ -279,5 +266,33 @@ func readFramedResponse(reader *bufio.Reader) (*JSONRPCResponse, error) {
 	if err := json.Unmarshal(payload, &resp); err != nil {
 		return nil, err
 	}
+	resp.Result = decodeKnownResult(resp.Result)
 	return &resp, nil
+}
+
+func decodeKnownResult(v any) any {
+	switch data := v.(type) {
+	case map[string]any:
+		if _, ok := data["protocolVersion"]; ok {
+			buf, _ := json.Marshal(data)
+			var out InitializeResult
+			_ = json.Unmarshal(buf, &out)
+			return out
+		}
+		if _, ok := data["tools"]; ok {
+			buf, _ := json.Marshal(data)
+			var out ToolListResult
+			_ = json.Unmarshal(buf, &out)
+			return out
+		}
+		if structured, ok := data["structuredContent"].(map[string]any); ok {
+			if _, ok := structured["left"]; ok {
+				buf, _ := json.Marshal(data)
+				var out ToolCallResult[VirtualBoundsResult]
+				_ = json.Unmarshal(buf, &out)
+				return out
+			}
+		}
+	}
+	return v
 }
