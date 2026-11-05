@@ -1,6 +1,7 @@
 package keyboard
 
 import (
+	"errors"
 	"fmt"
 	"syscall"
 	"time"
@@ -16,10 +17,50 @@ const (
 	MAPVK_VSC_TO_VK = 1
 )
 
-// MapScanCodeToVK converts a hardware scan code to a virtual-key code.
+// ErrUnsupportedKey means the Key encoding or the resulting virtual key is
+// invalid. winput.ErrUnsupportedKey aliases this sentinel.
+var ErrUnsupportedKey = errors.New("unsupported key or character")
+
+var numpadVirtualKeys = map[uint8]uintptr{
+	0x52: 0x60, // VK_NUMPAD0
+	0x4F: 0x61, // VK_NUMPAD1
+	0x50: 0x62, // VK_NUMPAD2
+	0x51: 0x63, // VK_NUMPAD3
+	0x4B: 0x64, // VK_NUMPAD4
+	0x4C: 0x65, // VK_NUMPAD5
+	0x4D: 0x66, // VK_NUMPAD6
+	0x47: 0x67, // VK_NUMPAD7
+	0x48: 0x68, // VK_NUMPAD8
+	0x49: 0x69, // VK_NUMPAD9
+	0x53: 0x6E, // VK_DECIMAL
+}
+
+// MapScanCodeToVK converts a key to a virtual-key code using type 1
+// (MAPVK_VSC_TO_VK). It returns 0 when the key is invalid.
 func MapScanCodeToVK(sc Key) uintptr {
-	r, _, _ := window.ProcMapVirtualKeyW.Call(uintptr(sc), MAPVK_VSC_TO_VK)
-	return r
+	vk, _ := VirtualKey(sc)
+	return vk
+}
+
+// VirtualKey returns the virtual key for the PostMessage wParam.
+// Numpad 0-9 and decimal are explicit because MapVirtualKeyW cannot
+// distinguish them from the extended navigation keys. Everything else uses
+// MapVirtualKeyW type 1.
+func VirtualKey(key Key) (uintptr, bool) {
+	scan, extended, ok := key.Decode()
+	if !ok {
+		return 0, false
+	}
+	if !extended {
+		if vk, ok := numpadVirtualKeys[scan]; ok {
+			return vk, true
+		}
+	}
+	r, _, _ := window.ProcMapVirtualKeyW.Call(uintptr(key), MAPVK_VSC_TO_VK)
+	if r == 0 {
+		return 0, false
+	}
+	return r, true
 }
 
 func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
@@ -33,15 +74,15 @@ func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
 	return nil
 }
 
-func makeKeyLParam(sc Key, isUp bool) uintptr {
+func makeKeyLParam(scan uint8, extended bool, isUp bool) uintptr {
 	var lparam uintptr
 	// Repeat count = 1
 	lparam |= 1
 	// Scan code (bits 16-23)
-	lparam |= (uintptr(sc) & 0xFF) << 16
+	lparam |= uintptr(scan) << 16
 
 	// Extended key flag (bit 24)
-	if isExtended(sc) {
+	if extended {
 		lparam |= 1 << 24
 	}
 
@@ -54,22 +95,28 @@ func makeKeyLParam(sc Key, isUp bool) uintptr {
 
 // KeyDown simulates a key down event for the specified window using PostMessage.
 func KeyDown(hwnd uintptr, key Key) error {
-	vk := MapScanCodeToVK(key)
-	if vk == 0 {
-		return fmt.Errorf("unsupported key: %d", key)
+	scan, extended, ok := key.Decode()
+	if !ok {
+		return ErrUnsupportedKey
 	}
-	lparam := makeKeyLParam(key, false)
-	return post(hwnd, WM_KEYDOWN, vk, lparam)
+	vk, ok := VirtualKey(key)
+	if !ok {
+		return ErrUnsupportedKey
+	}
+	return post(hwnd, WM_KEYDOWN, vk, makeKeyLParam(scan, extended, false))
 }
 
 // KeyUp simulates a key up event for the specified window using PostMessage.
 func KeyUp(hwnd uintptr, key Key) error {
-	vk := MapScanCodeToVK(key)
-	if vk == 0 {
-		return fmt.Errorf("unsupported key: %d", key)
+	scan, extended, ok := key.Decode()
+	if !ok {
+		return ErrUnsupportedKey
 	}
-	lparam := makeKeyLParam(key, true)
-	return post(hwnd, WM_KEYUP, vk, lparam)
+	vk, ok := VirtualKey(key)
+	if !ok {
+		return ErrUnsupportedKey
+	}
+	return post(hwnd, WM_KEYUP, vk, makeKeyLParam(scan, extended, true))
 }
 
 // Press simulates a key press (down then up) for the specified window using PostMessage.

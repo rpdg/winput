@@ -200,11 +200,6 @@ func TestKeyboardInput(t *testing.T) {
 	t.Run("TypeString", func(t *testing.T) {
 		text := "Hello winput"
 		if err := winput.Type(text); err != nil {
-			// In CI/Headless environments, SendInput (Global Type) often fails.
-			// This is not a library bug but an environment limitation.
-			if err.Error() == "SendInput self-test failed; unsupported in this context" {
-				t.Skipf("Skipping Global Type test: %v", err)
-			}
 			t.Errorf("Type failed: %v", err)
 		}
 	})

@@ -12,6 +12,13 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [func SetHIDLibraryPath](#func-sethidlibrarypath)
 *   [func MoveMouseTo](#func-movemouseto)
 *   [func ClickMouseAt](#func-clickmouseat)
+*   [func MouseDown](#func-mousedown)
+*   [func MouseUp](#func-mouseup)
+*   [func ClickMouse](#func-clickmouse)
+*   [func MoveMouseBy](#func-movemouseby)
+*   [func MoveMouseToExact](#func-movemousetoexact)
+*   [func ScrollWheel](#func-scrollwheel)
+*   [func PressFor](#func-pressfor)
 *   [func KeyDown](#func-keydown)
 *   [func KeyUp](#func-keyup)
 *   [func Press](#func-press)
@@ -20,6 +27,7 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
 *   [type Backend](#type-backend)
+*   [type MouseButton](#type-mousebutton)
 *   [type Key](#type-key)
     *   [func KeyFromRune](#func-keyfromrune)
 *   [type Window](#type-window)
@@ -196,6 +204,62 @@ func ClickMiddleMouseAt(x, y int32) error
 ```
 ClickMiddleMouseAt moves the mouse to the specified screen coordinates and performs a middle click.
 
+### func MouseDown
+
+```go
+func MouseDown(button MouseButton) error
+```
+
+MouseDown presses the specified button at the current cursor position without moving. Invalid button identities return `ErrInvalidMouseButton`. The input mutex covers this call only; a down/move/up sequence across separate calls is not atomic.
+
+### func MouseUp
+
+```go
+func MouseUp(button MouseButton) error
+```
+
+MouseUp releases the specified button at the current cursor position without moving. Invalid button identities return `ErrInvalidMouseButton`. The input mutex covers this call only; a down/move/up sequence across separate calls is not atomic.
+
+### func ClickMouse
+
+```go
+func ClickMouse() error
+```
+
+ClickMouse performs a left click at the current cursor position without moving. Under `BackendMessage` it uses `mouse_event`, which has no return value, so button-event delivery failures are not observable.
+
+### func MoveMouseBy
+
+```go
+func MoveMouseBy(dx, dy int32) error
+```
+
+MoveMouseBy moves the cursor by a delta. Under `BackendHID` this is one relative stroke. Under `BackendMessage` it reads the cursor, adds the delta using `int64`, and calls `SetCursorPos`; success means the system accepted the resulting coordinate.
+
+### func MoveMouseToExact
+
+```go
+func MoveMouseToExact(x, y int32) error
+```
+
+MoveMouseToExact performs one absolute move. It rejects points outside the virtual desktop with `ErrOutsideVirtualDesktop`. The HID path sends one absolute stroke over the virtual desktop, waits 12ms, and verifies the process-space cursor within one pixel; failure returns `ErrMoveNotConverged`. The one-pixel check is a reading in the process coordinate space, not a physical-pixel proof (RISK-001). The message path calls `SetCursorPos`, where success means the system accepted the call; it does not use that normalization and does not wait.
+
+### func ScrollWheel
+
+```go
+func ScrollWheel(steps int) error
+```
+
+ScrollWheel scrolls by whole wheel steps. Positive steps scroll forward, negative steps backward. Zero and values outside `[-273, 273]` return `ErrInvalidScrollSteps` before multiplication. The message backend uses `mouse_event`; the HID backend sends one wheel stroke. Neither moves the cursor.
+
+### func PressFor
+
+```go
+func PressFor(key Key, duration time.Duration) error
+```
+
+PressFor holds a global key for the requested duration. Durations below 10ms return `ErrInvalidPressDuration`. The message backend uses scan-code `SendInput`; the HID backend sends a hardware key stroke. A failed key-up is retried once.
+
 ### func DoubleClickMouseAt
 
 ```go
@@ -256,6 +320,14 @@ CaptureRegion (in package `screen`) captures a specific region of the virtual de
 It internally calls `CaptureVirtualDesktop`, converts coordinates, and performs a safe crop.
 
 ## Types
+
+### type MouseButton
+
+```go
+type MouseButton uint8
+```
+
+MouseButton identifies a mouse button. The exported identities are `MouseLeft`, `MouseRight`, and `MouseMiddle`. Driver-specific values are mapped internally.
 
 ### type Window
 
@@ -341,7 +413,9 @@ DoubleClick performs a left mouse button double-click.
 ```go
 func (w *Window) Scroll(x, y int32, delta int32) error
 ```
-Scroll performs a vertical mouse wheel scroll at the specified coordinates.
+Scroll performs a vertical mouse wheel scroll at the specified client coordinates.
+
+Under `BackendMessage` it posts `WM_MOUSEWHEEL` to this window. Under `BackendHID` it returns `ErrDirectedScrollUnsupported` because a hardware wheel event cannot be addressed to a specific window; use `ScrollWheel` for hardware-level scrolling.
 
 #### func (*Window) Text
 

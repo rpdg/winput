@@ -36,6 +36,8 @@
 // 6. Thread Safety:
 // All public input methods are thread-safe and serialized using an internal mutex. This prevents state pollution
 // (e.g., mixing Shift states from concurrent operations) and race conditions when switching backends.
+// The mutex covers one public input call. A sequence such as MouseDown, Move, and MouseUp spans multiple
+// calls and is not atomic; callers that need that atomicity must serialize the whole sequence.
 //
 // Example:
 //
@@ -56,7 +58,12 @@
 //		// 3. Perform actions (using default Message backend)
 //		w.Click(100, 100)       // Left click
 //		w.ClickRight(100, 100)  // Right click
-//		w.Scroll(100, 100, 120) // Vertical scroll
+//		w.Scroll(100, 100, 120) // Vertical scroll (message backend only)
+//
+//		// Window.Scroll posts WM_MOUSEWHEEL to the target window. Under
+//		// BackendHID it returns ErrDirectedScrollUnsupported because a
+//		// hardware wheel event cannot be addressed to a specific window.
+//		// Use ScrollWheel for hardware-level whole-step scrolling.
 //
 //		w.Type("Hello World!")  // Automatically handles Shift for 'H', 'W', and '!'
 //		w.Press(winput.KeyEnter)

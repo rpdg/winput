@@ -29,7 +29,7 @@ const (
 	WHEEL_DELTA = 120
 )
 
-var ErrInvalidScrollDelta = errors.New("scroll delta must be a multiple of WHEEL_DELTA (120)")
+var ErrInvalidScrollDelta = errors.New("scroll delta out of int16 range")
 
 // Helper to check for errors and wrap errno
 func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
@@ -60,6 +60,39 @@ func clipToInt16(v int32) int16 {
 	return int16(v)
 }
 
+func wheelDelta(delta int32) (int16, error) {
+	if delta < -32768 || delta > 32767 {
+		return 0, ErrInvalidScrollDelta
+	}
+	return int16(delta), nil
+}
+
+// buttonMessage is one message in a button sequence.
+type buttonMessage struct {
+	msg    uint32
+	wparam uintptr
+}
+
+// doubleClickSequence is the four-step window double-click sequence.
+func doubleClickSequence() [4]buttonMessage {
+	return [4]buttonMessage{
+		{WM_LBUTTONDOWN, MK_LBUTTON},
+		{WM_LBUTTONUP, 0},
+		{WM_LBUTTONDBLCLK, MK_LBUTTON},
+		{WM_LBUTTONUP, 0},
+	}
+}
+
+func postButtonUp(hwnd uintptr, msg uint32, lparam uintptr) error {
+	if err := post(hwnd, msg, 0, lparam); err != nil {
+		// The button is logically down until this message arrives; retry once.
+		if err2 := post(hwnd, msg, 0, lparam); err2 != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Move simulates a mouse move event to the specified client coordinates using PostMessage.
 func Move(hwnd uintptr, x, y int32) error {
 	return post(hwnd, WM_MOUSEMOVE, 0, makeLParam(x, y))
@@ -72,7 +105,7 @@ func Click(hwnd uintptr, x, y int32) error {
 		return err
 	}
 	time.Sleep(10 * time.Millisecond)
-	return post(hwnd, WM_LBUTTONUP, 0, lparam)
+	return postButtonUp(hwnd, WM_LBUTTONUP, lparam)
 }
 
 // ClickRight simulates a right mouse button click at the specified client coordinates.
@@ -82,7 +115,7 @@ func ClickRight(hwnd uintptr, x, y int32) error {
 		return err
 	}
 	time.Sleep(10 * time.Millisecond)
-	return post(hwnd, WM_RBUTTONUP, 0, lparam)
+	return postButtonUp(hwnd, WM_RBUTTONUP, lparam)
 }
 
 // ClickMiddle simulates a middle mouse button click at the specified client coordinates.
@@ -92,23 +125,37 @@ func ClickMiddle(hwnd uintptr, x, y int32) error {
 		return err
 	}
 	time.Sleep(10 * time.Millisecond)
-	return post(hwnd, WM_MBUTTONUP, 0, lparam)
+	return postButtonUp(hwnd, WM_MBUTTONUP, lparam)
 }
 
 // DoubleClick simulates a left mouse button double-click at the specified client coordinates.
 func DoubleClick(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
-	if err := post(hwnd, WM_LBUTTONDBLCLK, MK_LBUTTON, lparam); err != nil {
+	for i, step := range doubleClickSequence() {
+		err := post(hwnd, step.msg, step.wparam, lparam)
+		if err == nil {
+			continue
+		}
+		// Only the two button-up steps are retried, and only that step.
+		if i == 1 || i == 3 {
+			if err2 := post(hwnd, step.msg, step.wparam, lparam); err2 == nil {
+				continue
+			}
+		}
 		return err
 	}
-	return post(hwnd, WM_LBUTTONUP, 0, lparam)
+	return nil
 }
 
 // Scroll simulates a vertical mouse wheel scroll at the specified coordinates.
-// delta must be a multiple of WHEEL_DELTA (120).
+// delta must fit in an int16. A zero delta is a no-op.
 func Scroll(hwnd uintptr, x, y int32, delta int32) error {
-	if delta%WHEEL_DELTA != 0 {
-		return ErrInvalidScrollDelta
+	if delta == 0 {
+		return nil
+	}
+	d, err := wheelDelta(delta)
+	if err != nil {
+		return err
 	}
 
 	sx, sy, err := window.ClientToScreen(hwnd, x, y)
@@ -116,8 +163,8 @@ func Scroll(hwnd uintptr, x, y int32, delta int32) error {
 		return err
 	}
 
-	// High-order word is signed delta
-	wparam := uintptr(uint16(0)) | (uintptr(int16(delta)) << 16)
+	// High-order word is the signed delta.
+	wparam := uintptr(uint16(d)) << 16
 	lparam := makeLParam(sx, sy)
 
 	return post(hwnd, WM_MOUSEWHEEL, wparam, lparam)

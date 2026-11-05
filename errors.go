@@ -3,6 +3,8 @@ package winput
 import (
 	"errors"
 
+	"github.com/rpdg/winput/hid"
+	"github.com/rpdg/winput/keyboard"
 	"github.com/rpdg/winput/window"
 )
 
@@ -17,7 +19,7 @@ var (
 	ErrWindowNotVisible = errors.New("window is not visible")
 
 	// ErrUnsupportedKey implies the character cannot be mapped to a key.
-	ErrUnsupportedKey = errors.New("unsupported key or character")
+	ErrUnsupportedKey = keyboard.ErrUnsupportedKey
 
 	// ErrBackendUnavailable implies the selected backend (e.g. HID) failed to initialize.
 	ErrBackendUnavailable = errors.New("input backend unavailable")
@@ -36,4 +38,35 @@ var (
 
 	// ErrReadTextFailed implies the library could not read text from the target window/control.
 	ErrReadTextFailed = window.ErrReadTextFailed
+
+	// ErrMoveNotConverged means the HID cursor did not reach the requested
+	// tolerance. winput.ErrMoveNotConverged aliases hid.ErrMoveNotConverged.
+	ErrMoveNotConverged = hid.ErrMoveNotConverged
+
+	// ErrOutsideVirtualDesktop means the target point is outside the virtual desktop.
+	ErrOutsideVirtualDesktop = hid.ErrOutsideVirtualDesktop
+
+	// ErrSendInputFailed means SendInput inserted zero events.
+	ErrSendInputFailed = errors.New("SendInput inserted no events")
+
+	// ErrSendInputPartial means SendInput inserted only the key-down event,
+	// and the compensating key-up was inserted successfully.
+	ErrSendInputPartial = errors.New("SendInput partially inserted and was repaired")
+
+	// ErrSendInputStuck means SendInput inserted only the key-down event,
+	// and the compensating key-up could not be inserted.
+	ErrSendInputStuck = errors.New("SendInput partially inserted and could not be repaired")
+
+	// ErrDirectedScrollUnsupported means the HID backend cannot direct a wheel
+	// event to a specific window.
+	ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling")
+
+	// ErrInvalidMouseButton means the MouseButton value is not one of the exported identities.
+	ErrInvalidMouseButton = errors.New("invalid mouse button")
+
+	// ErrInvalidScrollSteps means ScrollWheel steps are zero or outside [-273, 273].
+	ErrInvalidScrollSteps = errors.New("scroll steps must be non-zero and within [-273, 273]")
+
+	// ErrInvalidPressDuration means PressFor was given less than 10ms.
+	ErrInvalidPressDuration = errors.New("press duration must be at least 10ms")
 )

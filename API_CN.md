@@ -12,6 +12,13 @@
 *   [func SetHIDLibraryPath](#func-sethidlibrarypath)
 *   [func MoveMouseTo](#func-movemouseto)
 *   [func ClickMouseAt](#func-clickmouseat)
+*   [func MouseDown](#func-mousedown)
+*   [func MouseUp](#func-mouseup)
+*   [func ClickMouse](#func-clickmouse)
+*   [func MoveMouseBy](#func-movemouseby)
+*   [func MoveMouseToExact](#func-movemousetoexact)
+*   [func ScrollWheel](#func-scrollwheel)
+*   [func PressFor](#func-pressfor)
 *   [func ClickRightMouseAt](#func-clickrightmouseat)
 *   [func ClickMiddleMouseAt](#func-clickmiddlemouseat)
 *   [func DoubleClickMouseAt](#func-doubleclickmouseat)
@@ -23,6 +30,7 @@
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
 *   [type Backend](#type-backend)
+*   [type MouseButton](#type-mousebutton)
 *   [type Key](#type-key)
     *   [func KeyFromRune](#func-keyfromrune)
 *   [type Window](#type-window)
@@ -179,6 +187,62 @@ func ClickMiddleMouseAt(x, y int32) error
 ```
 ClickMiddleMouseAt 将鼠标移动到指定屏幕坐标并执行中键点击。
 
+### func MouseDown
+
+```go
+func MouseDown(button MouseButton) error
+```
+
+MouseDown 在当前光标位置按下指定按钮，不移动光标。非法按钮返回 `ErrInvalidMouseButton`。输入互斥锁只覆盖这一次调用；按下、移动、抬起分成多次调用时不是原子操作。
+
+### func MouseUp
+
+```go
+func MouseUp(button MouseButton) error
+```
+
+MouseUp 在当前光标位置抬起指定按钮，不移动光标。非法按钮返回 `ErrInvalidMouseButton`。输入互斥锁只覆盖这一次调用；按下、移动、抬起分成多次调用时不是原子操作。
+
+### func ClickMouse
+
+```go
+func ClickMouse() error
+```
+
+ClickMouse 在当前光标位置执行左键单击，不移动光标。`BackendMessage` 下使用 `mouse_event`，该调用没有返回值，因此按钮事件的投递失败不可观测。
+
+### func MoveMouseBy
+
+```go
+func MoveMouseBy(dx, dy int32) error
+```
+
+MoveMouseBy 按增量移动光标。`BackendHID` 发送一条相对笔画。`BackendMessage` 读取当前光标，用 `int64` 相加后调用 `SetCursorPos`；成功表示系统接受了新坐标。
+
+### func MoveMouseToExact
+
+```go
+func MoveMouseToExact(x, y int32) error
+```
+
+MoveMouseToExact 执行一次绝对移动。虚拟桌面外的点返回 `ErrOutsideVirtualDesktop`。HID 路径发送一条虚拟桌面绝对笔画，等待 12ms，并按本进程坐标复核 1 像素；失败返回 `ErrMoveNotConverged`。这个 1 像素是本进程坐标空间里的读数，不是物理像素证明（RISK-001）。消息路径调用 `SetCursorPos`，成功表示系统接受了调用；它不使用这套归一化，也不等待。
+
+### func ScrollWheel
+
+```go
+func ScrollWheel(steps int) error
+```
+
+ScrollWheel 按整格滚动。正数向前，负数向后。`0` 和 `[-273, 273]` 之外的值在乘法之前返回 `ErrInvalidScrollSteps`。消息后端使用 `mouse_event`，HID 后端发送一条滚轮笔画。两者都不移动光标。
+
+### func PressFor
+
+```go
+func PressFor(key Key, duration time.Duration) error
+```
+
+PressFor 全局按住指定键，时长短于 10ms 返回 `ErrInvalidPressDuration`。消息后端使用扫描码 `SendInput`，HID 后端发送硬件按键。抬起失败会再试一次。
+
 ### func DoubleClickMouseAt
 
 ```go
@@ -239,6 +303,14 @@ CaptureRegion (在 `screen` 包中) 捕获虚拟桌面的指定区域。
 内部调用 `CaptureVirtualDesktop`，转换坐标并执行安全裁剪。
 
 ## 类型
+
+### type MouseButton
+
+```go
+type MouseButton uint8
+```
+
+MouseButton 表示鼠标按钮身份。公开值为 `MouseLeft`、`MouseRight`、`MouseMiddle`；驱动相关数值由库内部映射。
 
 ### type Window
 
@@ -324,7 +396,9 @@ DoubleClick 执行鼠标左键双击。
 ```go
 func (w *Window) Scroll(x, y int32, delta int32) error
 ```
-Scroll 在指定坐标执行鼠标滚轮滚动。
+Scroll 在指定客户区坐标执行鼠标滚轮滚动。
+
+`BackendMessage` 会把 `WM_MOUSEWHEEL` 投递给目标窗口。`BackendHID` 返回 `ErrDirectedScrollUnsupported`，因为硬件滚轮事件无法定向到某个窗口；需要硬件级整格滚动时使用 `ScrollWheel`。
 
 #### func (*Window) Text
 

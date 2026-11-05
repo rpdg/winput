@@ -1,3 +1,7 @@
+// Package hid drives the Interception backend.
+//
+// The exported functions are not safe for concurrent use. Callers must
+// serialize them. winput does this with its inputMutex.
 package hid
 
 import (
@@ -8,10 +12,17 @@ import (
 	"time"
 
 	"github.com/rpdg/winput/hid/interception"
+	"github.com/rpdg/winput/keyboard"
+	"github.com/rpdg/winput/screen"
 	"github.com/rpdg/winput/window"
 )
 
-var ErrDriverNotInstalled = errors.New("interception driver not installed or accessible")
+var (
+	ErrDriverNotInstalled    = errors.New("interception driver not installed or accessible")
+	ErrMoveNotConverged      = errors.New("HID move did not converge")
+	ErrOutsideVirtualDesktop = errors.New("target outside virtual desktop")
+	ErrInvalidScrollDelta    = errors.New("scroll delta out of int16 range")
+)
 
 // SetLibraryPath sets the custom path for the interception.dll library.
 func SetLibraryPath(path string) {
@@ -21,9 +32,6 @@ func SetLibraryPath(path string) {
 const (
 	MaxInterceptionDevices = 20
 )
-
-// Use a local random source instead of global rand
-var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 var (
 	ctx         interception.Context
@@ -116,7 +124,7 @@ func humanSleep(base int) {
 	if maxJitter == 0 {
 		maxJitter = 1
 	}
-	jitter := rng.Intn(maxJitter*2+1) - maxJitter
+	jitter := rand.Intn(maxJitter*2+1) - maxJitter
 
 	duration := base + jitter
 	if duration < 0 {
@@ -169,8 +177,25 @@ func max(a, b int32) int32 {
 	return b
 }
 
+// humanArrived is the arrival contract for MoveMouseTo's human-like path.
+// Two pixels of drift are accepted; three pixels on either axis are not.
+func humanArrived(dx, dy int32) bool {
+	return abs(dx) < 3 && abs(dy) < 3
+}
+
+// insideVirtualBounds reports whether (x, y) is inside the half-open virtual
+// desktop rectangle [Left, Right) x [Top, Bottom).
+func insideVirtualBounds(x, y int32, b screen.Rect) bool {
+	return x >= b.Left && x < b.Right && y >= b.Top && y < b.Bottom
+}
+
 // Move simulates mouse movement to the target screen coordinates using human-like trajectory.
 func Move(targetX, targetY int32) error {
+	bounds := screen.VirtualBounds()
+	if !insideVirtualBounds(targetX, targetY, bounds) {
+		return ErrOutsideVirtualDesktop
+	}
+
 	lCtx, lDev, unlock, err := acquireMouse()
 	if err != nil {
 		return err
@@ -231,8 +256,8 @@ func Move(targetX, targetY int32) error {
 
 		// Apply jitter only if not the final few steps
 		if i < steps-2 {
-			dx += int32(rng.Intn(3) - 1)
-			dy += int32(rng.Intn(3) - 1)
+			dx += int32(rand.Intn(3) - 1)
+			dy += int32(rand.Intn(3) - 1)
 		}
 
 		if dx == 0 && dy == 0 {
@@ -271,8 +296,8 @@ func Move(targetX, targetY int32) error {
 		dx := targetX - curX
 		dy := targetY - curY
 
-		if abs(dx) <= 1 && abs(dy) <= 1 {
-			return nil // Reached target
+		if humanArrived(dx, dy) {
+			return nil // Reached target within the human-path tolerance
 		}
 
 		// Micro-correction
@@ -286,6 +311,28 @@ func Move(targetX, targetY int32) error {
 		}
 	}
 
+	// The fifth correction was not observed. Read the cursor once more before
+	// deciding success; the loop above does not re-read after its last send.
+	curX, curY, err := window.GetCursorPos()
+	if err != nil {
+		return err
+	}
+	if humanArrived(targetX-curX, targetY-curY) {
+		return nil
+	}
+	return ErrMoveNotConverged
+}
+
+// releaseButton sends a button-up stroke once and retries once on failure.
+// The first error is preserved when both attempts fail.
+func releaseButton(ctx interception.Context, dev interception.Device, state uint16) error {
+	up := interception.MouseStroke{State: state}
+	if err := interception.SendMouse(ctx, dev, &up); err != nil {
+		time.Sleep(6 * time.Millisecond)
+		if err2 := interception.SendMouse(ctx, dev, &up); err2 != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -294,7 +341,7 @@ func Move(targetX, targetY int32) error {
 // minHold/maxHold define the duration (ms) the button remains pressed.
 func clickRaw(ctx interception.Context, dev interception.Device, minHold, maxHold int) error {
 	// Pre-click delay (muscle memory) - small jitter
-	humanSleep(20 + rng.Intn(20))
+	humanSleep(20 + rand.Intn(20))
 
 	down := interception.MouseStroke{State: interception.MouseStateLeftDown}
 	if err := interception.SendMouse(ctx, dev, &down); err != nil {
@@ -304,15 +351,11 @@ func clickRaw(ctx interception.Context, dev interception.Device, minHold, maxHol
 	// Hold time
 	hold := minHold
 	if maxHold > minHold {
-		hold += rng.Intn(maxHold - minHold)
+		hold += rand.Intn(maxHold - minHold)
 	}
 	time.Sleep(time.Duration(hold) * time.Millisecond)
 
-	up := interception.MouseStroke{State: interception.MouseStateLeftUp}
-	if err := interception.SendMouse(ctx, dev, &up); err != nil {
-		return err
-	}
-	return nil
+	return releaseButton(ctx, dev, interception.MouseStateLeftUp)
 }
 
 // Click simulates a left mouse button click at the current cursor position.
@@ -357,11 +400,7 @@ func ClickRight(x, y int32) error {
 
 	humanSleep(60)
 
-	up := interception.MouseStroke{State: interception.MouseStateRightUp}
-	if err := interception.SendMouse(lCtx, lDev, &up); err != nil {
-		return err
-	}
-	return nil
+	return releaseButton(lCtx, lDev, interception.MouseStateRightUp)
 }
 
 // ClickMiddle simulates a middle mouse button click at the current cursor position.
@@ -385,11 +424,7 @@ func ClickMiddle(x, y int32) error {
 
 	humanSleep(60)
 
-	up := interception.MouseStroke{State: interception.MouseStateMiddleUp}
-	if err := interception.SendMouse(lCtx, lDev, &up); err != nil {
-		return err
-	}
-	return nil
+	return releaseButton(lCtx, lDev, interception.MouseStateMiddleUp)
 }
 
 // DoubleClick simulates a left mouse button double-click at the current cursor position.
@@ -467,46 +502,102 @@ func DoubleClick(x, y int32) error {
 		return err
 	}
 
-	// 6. 验证光标位置（可选——用于诊断与重试）
-	curX, curY, err := window.GetCursorPos()
-	if err == nil {
-		if abs(curX-x) > 1 || abs(curY-y) > 1 {
-			// 若位置偏移过大，可做一次重试（仅一次）
-			// 记录日志以便后续分析（此处用 fmt.Println 作示例）
-			fmt.Printf("DoubleClick: pos drift detected cur=(%d,%d) want=(%d,%d); retrying once\n", curX, curY, x, y)
+	return nil
+}
 
-			// 再做一次严格双击（不再递归）
-			// 先强制SetCursorPos
-			r, _, _ := window.ProcSetCursorPos.Call(uintptr(x), uintptr(y))
-			if r == 0 {
-				return fmt.Errorf("SetCursorPos failed on retry")
-			}
-			time.Sleep(12 * time.Millisecond)
+// MoveRelative sends one relative mouse stroke.
+func MoveRelative(dx, dy int32) error {
+	lCtx, lDev, unlock, err := acquireMouse()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
-			// 重试序列
-			if err := sendOnce(&down); err != nil {
-				return err
-			}
-			time.Sleep(hold)
-			if err := sendOnce(&up); err != nil {
-				return err
-			}
-			time.Sleep(interval)
-			if err := sendOnce(&down); err != nil {
-				return err
-			}
-			time.Sleep(hold)
-			if err := sendOnce(&up); err != nil {
-				return err
-			}
-		}
+	stroke := interception.MouseStroke{
+		Flags: interception.MouseFlagMoveRelative,
+		X:     dx,
+		Y:     dy,
+	}
+	return interception.SendMouse(lCtx, lDev, &stroke)
+}
+
+// MoveExact sends one absolute stroke over the virtual desktop, waits 12ms,
+// and verifies the result within one pixel in the process coordinate space.
+func MoveExact(targetX, targetY int32) error {
+	bounds := screen.VirtualBounds()
+	width := int64(bounds.Right - bounds.Left)
+	height := int64(bounds.Bottom - bounds.Top)
+	if width < 2 || height < 2 {
+		return fmt.Errorf("virtual desktop too small for absolute movement")
+	}
+	if !insideVirtualBounds(targetX, targetY, bounds) {
+		return ErrOutsideVirtualDesktop
 	}
 
+	nx := int32((int64(targetX) - int64(bounds.Left)) * 65535 / (width - 1))
+	ny := int32((int64(targetY) - int64(bounds.Top)) * 65535 / (height - 1))
+
+	lCtx, lDev, unlock, err := acquireMouse()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	stroke := interception.MouseStroke{
+		State: 0,
+		Flags: interception.MouseFlagMoveAbsolute | interception.MouseFlagMoveVirtualDesktop,
+		X:     nx,
+		Y:     ny,
+	}
+	if err := interception.SendMouse(lCtx, lDev, &stroke); err != nil {
+		return err
+	}
+
+	time.Sleep(12 * time.Millisecond)
+	curX, curY, err := window.GetCursorPos()
+	if err != nil {
+		return err
+	}
+	if abs(targetX-curX) > 1 || abs(targetY-curY) > 1 {
+		return ErrMoveNotConverged
+	}
 	return nil
+}
+
+// Button sends one button state stroke without moving the cursor.
+func Button(state uint16) error {
+	lCtx, lDev, unlock, err := acquireMouse()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	stroke := interception.MouseStroke{State: state}
+	return interception.SendMouse(lCtx, lDev, &stroke)
+}
+
+const (
+	minScrollDelta = -32768
+	maxScrollDelta = 32767
+)
+
+func wheelDelta(delta int32) (int16, error) {
+	if delta < minScrollDelta || delta > maxScrollDelta {
+		return 0, ErrInvalidScrollDelta
+	}
+	return int16(delta), nil
 }
 
 // Scroll simulates a vertical mouse wheel scroll.
 func Scroll(delta int32) error {
+	if delta == 0 {
+		return nil
+	}
+	rolling, err := wheelDelta(delta)
+	if err != nil {
+		return err
+	}
+
 	lCtx, lDev, unlock, err := acquireMouse()
 	if err != nil {
 		return err
@@ -515,7 +606,7 @@ func Scroll(delta int32) error {
 
 	stroke := interception.MouseStroke{
 		State:   interception.MouseStateWheel,
-		Rolling: int16(delta),
+		Rolling: rolling,
 	}
 	if err := interception.SendMouse(lCtx, lDev, &stroke); err != nil {
 		return err
@@ -527,18 +618,39 @@ func Scroll(delta int32) error {
 // Keyboard
 // -----------------------------------------------------------------------------
 
+// keyStroke decodes a Key into an Interception key stroke. The E0 flag is
+// applied to both down and up events.
+func keyStroke(scanCode uint16, up bool) (interception.KeyStroke, error) {
+	scan, extended, ok := keyboard.Key(scanCode).Decode()
+	if !ok {
+		return interception.KeyStroke{}, keyboard.ErrUnsupportedKey
+	}
+	state := uint16(interception.KeyStateDown)
+	if up {
+		state = interception.KeyStateUp
+	}
+	if extended {
+		state |= interception.KeyStateE0
+	}
+	return interception.KeyStroke{
+		Code:  uint16(scan),
+		State: state,
+	}, nil
+}
+
 // KeyDown simulates a key down event for the specified scan code.
 func KeyDown(scanCode uint16) error {
+	s, err := keyStroke(scanCode, false)
+	if err != nil {
+		return err
+	}
+
 	lCtx, lDev, unlock, err := acquireKeyboard()
 	if err != nil {
 		return err
 	}
 	defer unlock()
 
-	s := interception.KeyStroke{
-		Code:  scanCode,
-		State: interception.KeyStateDown,
-	}
 	if err := interception.SendKey(lCtx, lDev, &s); err != nil {
 		return err
 	}
@@ -547,16 +659,17 @@ func KeyDown(scanCode uint16) error {
 
 // KeyUp simulates a key up event for the specified scan code.
 func KeyUp(scanCode uint16) error {
+	s, err := keyStroke(scanCode, true)
+	if err != nil {
+		return err
+	}
+
 	lCtx, lDev, unlock, err := acquireKeyboard()
 	if err != nil {
 		return err
 	}
 	defer unlock()
 
-	s := interception.KeyStroke{
-		Code:  scanCode,
-		State: interception.KeyStateUp,
-	}
 	if err := interception.SendKey(lCtx, lDev, &s); err != nil {
 		return err
 	}

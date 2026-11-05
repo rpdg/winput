@@ -116,8 +116,9 @@ const (
 	MouseStateMiddleUp   = 0x020
 	MouseStateWheel      = 0x400
 
-	MouseFlagMoveRelative = 0x000
-	MouseFlagMoveAbsolute = 0x001
+	MouseFlagMoveRelative       = 0x000
+	MouseFlagMoveAbsolute       = 0x001
+	MouseFlagMoveVirtualDesktop = 0x002
 )
 
 // Constants for Keyboard
