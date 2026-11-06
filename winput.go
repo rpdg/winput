@@ -1049,6 +1049,32 @@ func KeyFromRune(r rune) (Key, bool) {
 	return k, ok
 }
 
+// defaultPressHold is the hold time for Press when the caller supplies no
+// interval: the time between the successful key-down and the release. It is a
+// separate concept from keyboard.DefaultTypeGap (the Type character gap);
+// changing one must not change the other.
+const defaultPressHold = 30 * time.Millisecond
+
+// resolveInterval parses the optional interval variadic. No argument yields
+// fallback with explicit == false. Exactly one non-negative argument yields
+// that value with explicit == true (0 means "no sleep at this point"). A
+// negative value or more than one argument returns ErrInvalidInterval. The
+// returned error is meant to fail the caller before it locks inputMutex or
+// presses anything.
+func resolveInterval(interval []time.Duration, fallback time.Duration) (d time.Duration, explicit bool, err error) {
+	switch len(interval) {
+	case 0:
+		return fallback, false, nil
+	case 1:
+		if interval[0] < 0 {
+			return 0, false, ErrInvalidInterval
+		}
+		return interval[0], true, nil
+	default:
+		return 0, false, ErrInvalidInterval
+	}
+}
+
 // Public Wrappers using Lock
 
 // KeyDown sends a key down event to the window.
@@ -1078,7 +1104,19 @@ func (w *Window) KeyUp(key Key) error {
 }
 
 // Press simulates a key press (down then up).
-func (w *Window) Press(key Key) (err error) {
+//
+// The optional interval is the hold time: the delay between a successful
+// key-down and the release. It is not a Type character gap and not a "typing
+// speed" knob. The two backends both honor it. Without an argument the hold is
+// defaultPressHold; an explicit 0 means no sleep between down and up. A
+// negative interval or more than one interval returns ErrInvalidInterval
+// before any key is pressed.
+func (w *Window) Press(key Key, interval ...time.Duration) (err error) {
+	hold, _, err := resolveInterval(interval, defaultPressHold)
+	if err != nil {
+		return err
+	}
+
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -1103,7 +1141,9 @@ func (w *Window) Press(key Key) (err error) {
 	); err != nil {
 		return err
 	}
-	time.Sleep(30 * time.Millisecond)
+	if hold > 0 {
+		time.Sleep(hold)
+	}
 	return nil
 }
 
@@ -1148,7 +1188,21 @@ func (w *Window) PressHotkey(keys ...Key) (err error) {
 }
 
 // Type simulates typing text.
-func (w *Window) Type(text string) error {
+//
+// The optional interval is the character gap: on both backends it is the idle
+// time between characters, not a whole typing rhythm and not a Press hold.
+// An explicit 30ms is not the same as no argument on HID: the message backend
+// sleeps the gap between runes in both cases, while HID keeps its fixed hold
+// and sleeps the gap between character releases only when the caller supplied
+// an interval. The last rune is not followed by an extra sleep, and consecutive
+// Type calls do not sleep between each other. A negative interval or more than
+// one interval returns ErrInvalidInterval before any character is sent.
+func (w *Window) Type(text string, interval ...time.Duration) error {
+	gap, explicit, err := resolveInterval(interval, keyboard.DefaultTypeGap)
+	if err != nil {
+		return err
+	}
+
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -1160,24 +1214,33 @@ func (w *Window) Type(text string) error {
 
 	cb := getBackend()
 	if cb == BackendMessage {
-		// Use WM_CHAR for reliability in background
-		return keyboard.Type(w.HWND, text)
+		// Use WM_CHAR for reliability in background; the only sleep on this
+		// path lives inside TypeWithInterval.
+		return keyboard.TypeWithInterval(w.HWND, text, gap)
 	}
 
-	return typeHID(text)
+	return typeHID(text, gap, explicit)
 }
 
 // typeHID types text with the HID backend. The whole string is validated
 // before the first key is pressed; each character's Shift state is released
 // before the next character starts.
-func typeHID(text string) error {
+//
+// gap is the idle time between the releases of consecutive characters and is
+// applied only when explicit is true: an unspecified interval adds no gap
+// (Type(text) keeps today's rhythm of defaultPressHold per character with no
+// idle time between), while Type(text, d) sleeps d after each character's
+// Release returns. gap == 0 therefore only suppresses the extra gap; it never
+// removes the fixed hold before Release.
+func typeHID(text string, gap time.Duration, explicit bool) error {
 	for _, r := range text {
 		if _, _, ok := keyboard.LookupKey(r); !ok {
 			return ErrUnsupportedKey
 		}
 	}
 
-	for _, r := range text {
+	runes := []rune(text)
+	for i, r := range runes {
 		k, shifted, _ := keyboard.LookupKey(r)
 		scope := &inputScope{}
 		err := func() (err error) {
@@ -1199,11 +1262,14 @@ func typeHID(text string) error {
 			); err != nil {
 				return err
 			}
-			time.Sleep(30 * time.Millisecond)
+			time.Sleep(defaultPressHold)
 			return nil
 		}()
 		if err != nil {
 			return err
+		}
+		if explicit && gap > 0 && i < len(runes)-1 {
+			time.Sleep(gap)
 		}
 	}
 	return nil
@@ -1232,7 +1298,17 @@ func KeyUp(k Key) error {
 }
 
 // Press simulates a global key press (down then up).
-func Press(k Key) (err error) {
+//
+// The optional interval is the hold time (delay between a successful key-down
+// and the release) and is honored on both backends. An explicit 0 means no
+// sleep between down and up. A negative interval or more than one interval
+// returns ErrInvalidInterval before any key is pressed.
+func Press(k Key, interval ...time.Duration) (err error) {
+	hold, _, err := resolveInterval(interval, defaultPressHold)
+	if err != nil {
+		return err
+	}
+
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := checkBackend(); err != nil {
@@ -1254,7 +1330,9 @@ func Press(k Key) (err error) {
 	); err != nil {
 		return err
 	}
-	time.Sleep(30 * time.Millisecond)
+	if hold > 0 {
+		time.Sleep(hold)
+	}
 	return nil
 }
 
@@ -1290,7 +1368,20 @@ func PressHotkey(keys ...Key) (err error) {
 }
 
 // Type simulates typing text globally.
-func Type(text string) error {
+//
+// The optional interval is the character gap on both backends (a Press hold
+// on HID is fixed and does not read this argument). An explicit 30ms is not
+// the same as no argument on HID: the message backend sleeps the gap between
+// runes in both cases, while HID keeps its fixed hold and sleeps the gap
+// between character releases only when the caller supplied an interval. The
+// last rune is not followed by an extra sleep. A negative interval or more
+// than one interval returns ErrInvalidInterval before any character is sent.
+func Type(text string, interval ...time.Duration) error {
+	gap, explicit, err := resolveInterval(interval, keyboard.DefaultTypeGap)
+	if err != nil {
+		return err
+	}
+
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := checkBackend(); err != nil {
@@ -1299,14 +1390,17 @@ func Type(text string) error {
 
 	cb := getBackend()
 	if cb == BackendHID {
-		return typeHID(text)
+		return typeHID(text, gap, explicit)
 	}
 
-	for _, r := range text {
+	runes := []rune(text)
+	for i, r := range runes {
 		if err := sendUnicode(r); err != nil {
 			return err
 		}
-		time.Sleep(30 * time.Millisecond)
+		if i < len(runes)-1 && gap > 0 {
+			time.Sleep(gap)
+		}
 	}
 	return nil
 }

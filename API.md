@@ -126,6 +126,13 @@ var (
 
     // ErrInvalidPressDuration means PressFor was given less than 10ms.
     ErrInvalidPressDuration = errors.New("press duration must be at least 10ms")
+
+    // ErrInvalidInterval aliases keyboard.ErrInvalidInterval
+    // ("interval must be a single non-negative duration"). Press and Type
+    // return it when the optional interval is negative or more than one
+    // argument is supplied. It is deliberately distinct from
+    // ErrInvalidPressDuration: an interval of 0 is legal.
+    ErrInvalidInterval = keyboard.ErrInvalidInterval
 )
 ```
 
@@ -329,9 +336,13 @@ KeyUp simulates a global key up event.
 ### func Press
 
 ```go
-func Press(k Key) error
+func Press(k Key, interval ...time.Duration) error
 ```
-Press simulates a global key press (down then up) with a short delay.
+Press simulates a global key press (down then up). The optional `interval` is
+the hold time (delay between a successful key-down and the release) and is
+honored on both backends; without it the hold is 30ms. `Press(key, 0)` does
+not sleep between down and up. A negative interval, or more than one interval,
+returns `ErrInvalidInterval` before any key is pressed.
 
 ### func PressHotkey
 
@@ -343,9 +354,15 @@ PressHotkey simulates a key combination (e.g., Ctrl+C). It presses keys in order
 ### func Type
 
 ```go
-func Type(text string) error
+func Type(text string, interval ...time.Duration) error
 ```
 Type simulates global text input by simulating keystrokes for each character.
+The optional `interval` is the character gap on both backends. On the message
+backend the gap is slept between runes (30ms by default); the last rune is not
+followed by an extra sleep. On HID the fixed per-character hold is unchanged
+and an explicit interval is slept between character releases; without an
+argument no extra gap is added after each release. A negative interval, or more
+than one interval, returns `ErrInvalidInterval` before any character is sent.
 
 ### func CaptureVirtualDesktop
 

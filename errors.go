@@ -76,4 +76,11 @@ var (
 
 	// ErrInvalidPressDuration means PressFor was given less than 10ms.
 	ErrInvalidPressDuration = errors.New("press duration must be at least 10ms")
+
+	// ErrInvalidInterval means a variable interval argument to Press or Type
+	// was negative or there was more than one argument. It is defined in
+	// keyboard because keyboard.TypeWithInterval returns it too. It is
+	// deliberately not the same sentinel as ErrInvalidPressDuration: an
+	// interval of 0 is legal, and a second interval argument is an error.
+	ErrInvalidInterval = keyboard.ErrInvalidInterval
 )

@@ -79,6 +79,9 @@ func TestErrorAliases(t *testing.T) {
 	if ErrUnsupportedKey != keyboard.ErrUnsupportedKey {
 		t.Fatal("ErrUnsupportedKey is not the keyboard sentinel")
 	}
+	if ErrInvalidInterval != keyboard.ErrInvalidInterval {
+		t.Fatal("ErrInvalidInterval is not the keyboard sentinel")
+	}
 	if ErrMoveNotConverged != hid.ErrMoveNotConverged {
 		t.Fatal("ErrMoveNotConverged is not the hid sentinel")
 	}
@@ -90,6 +93,51 @@ func TestErrorAliases(t *testing.T) {
 	}
 	if ErrInvalidScrollDelta == hid.ErrInvalidScrollDelta {
 		t.Fatal("HID scroll sentinel collapsed into the mouse sentinel")
+	}
+	if ErrInvalidInterval == ErrInvalidPressDuration {
+		t.Fatal("interval sentinel collapsed into the press-duration sentinel")
+	}
+	if errors.Is(ErrInvalidInterval, ErrInvalidPressDuration) {
+		t.Fatal("ErrInvalidInterval must not be recognisable as ErrInvalidPressDuration")
+	}
+}
+
+func TestResolveInterval(t *testing.T) {
+	const fallback = 17 * time.Millisecond
+	cases := []struct {
+		name         string
+		interval     []time.Duration
+		wantD        time.Duration
+		wantExplicit bool
+		wantErr      bool
+	}{
+		{"no args", nil, fallback, false, false},
+		{"empty slice", []time.Duration{}, fallback, false, false},
+		{"zero", []time.Duration{0}, 0, true, false},
+		{"positive", []time.Duration{5 * time.Millisecond}, 5 * time.Millisecond, true, false},
+		{"negative", []time.Duration{-time.Millisecond}, 0, false, true},
+		{"two args", []time.Duration{0, time.Second}, 0, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d, explicit, err := resolveInterval(tc.interval, fallback)
+			if d != tc.wantD || explicit != tc.wantExplicit {
+				t.Fatalf("resolveInterval() = (%v, %v), want (%v, %v)",
+					d, explicit, tc.wantD, tc.wantExplicit)
+			}
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("resolveInterval() returned %v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, ErrInvalidInterval) {
+				t.Fatalf("resolveInterval() error = %v, want ErrInvalidInterval", err)
+			}
+			if errors.Is(err, ErrInvalidPressDuration) {
+				t.Fatalf("resolveInterval() error must not be ErrInvalidPressDuration")
+			}
+		})
 	}
 }
 
@@ -268,6 +316,7 @@ func TestScrollWheelValidation(t *testing.T) {
 		}
 	}
 }
+
 
 func TestPressForRejectsShortDuration(t *testing.T) {
 	for _, d := range []time.Duration{9 * time.Millisecond, 0, -time.Millisecond} {

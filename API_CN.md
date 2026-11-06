@@ -86,6 +86,9 @@ var (
     ErrInvalidScrollDelta = mouse.ErrInvalidScrollDelta        // 滚轮增量超出 int16
     ErrInvalidScrollSteps = errors.New("scroll steps must be non-zero and within [-273, 273]") // ScrollWheel 步数非法
     ErrInvalidPressDuration = errors.New("press duration must be at least 10ms") // PressFor 时长短于 10ms
+    // 别名 keyboard.ErrInvalidInterval（"interval must be a single non-negative duration"）。
+    // Press / Type 的可选间隔为负数或参数多于一个时返回它。它与 ErrInvalidPressDuration 有意区分：间隔 0 是合法的。
+    ErrInvalidInterval     = keyboard.ErrInvalidInterval
 )
 ```
 
@@ -288,9 +291,9 @@ KeyUp 模拟全局按键抬起事件。
 ### func Press
 
 ```go
-func Press(k Key) error
+func Press(k Key, interval ...time.Duration) error
 ```
-Press 模拟一次全局按键（按下后抬起），中间有短暂延迟。
+Press 模拟一次全局按键（按下后抬起）。可选的 `interval` 是按住时间（按下成功后到抬起之间的延迟），两条后端都生效；不传时按住 30ms。`Press(key, 0)` 在按下与抬起之间不睡眠。间隔为负数或参数多于一个时，在任何按键之前返回 `ErrInvalidInterval`。
 
 ### func PressHotkey
 
@@ -302,9 +305,9 @@ PressHotkey 模拟组合键（如 Ctrl+C）。它按顺序按下所有键，保�
 ### func Type
 
 ```go
-func Type(text string) error
+func Type(text string, interval ...time.Duration) error
 ```
-Type 模拟全局文本输入（通过模拟按键序列）。
+Type 模拟全局文本输入（通过模拟按键序列）。可选的 `interval` 在两条后端都是字符间隙。消息后端在连续 rune 之间睡眠该间隙（默认 30ms），最后一个 rune 之后不再多睡。HID 每个字符的固定按住不变，只有传入显式间隔时才会在字符松开后再睡一段；不传参数则不增加额外间隙。间隔为负数或参数多于一个时，在任何字符发送之前返回 `ErrInvalidInterval`。
 
 ### func CaptureVirtualDesktop
 
@@ -445,9 +448,9 @@ KeyUp 向窗口发送按键抬起事件。
 #### func (*Window) Press
 
 ```go
-func (w *Window) Press(key Key) error
+func (w *Window) Press(key Key, interval ...time.Duration) error
 ```
-Press 模拟一次完整的按键过程。
+Press 模拟一次完整的按键过程。可选的 `interval` 在两条后端都是按住时间（按下成功后到抬起之间的延迟）；不传时按住 30ms。`Press(key, 0)` 不睡眠。间隔为负数或参数多于一个时，在任何按键之前返回 `ErrInvalidInterval`。
 
 #### func (*Window) PressHotkey
 
@@ -462,9 +465,9 @@ PressHotkey 执行组合键（如 Ctrl+A）。
 #### func (*Window) Type
 
 ```go
-func (w *Window) Type(text string) error
+func (w *Window) Type(text string, interval ...time.Duration) error
 ```
-输入字符串，自动处理大写字母和符号的 Shift 切换。
+输入字符串，自动处理大写字母和符号的 Shift 切换。可选的 `interval` 是字符间隙：消息后端在连续 rune 之间睡眠该间隙（默认 30ms，内部走 `keyboard.TypeWithInterval`），最后一个 rune 之后不再多睡；HID 每个字符的固定按住不变，只有传入显式间隔时才会在字符松开后再睡一段。间隔为负数或参数多于一个时，在任何字符发送之前返回 `ErrInvalidInterval`。
 
 #### func (*Window) Value
 
