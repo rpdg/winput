@@ -23,6 +23,7 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [func KeyUp](#func-keyup)
 *   [func Press](#func-press)
 *   [func PressHotkey](#func-presshotkey)
+*   [func PasteByClipboard](#func-pastebyclipboard)
 *   [func Type](#func-type)
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
@@ -133,6 +134,15 @@ var (
     // argument is supplied. It is deliberately distinct from
     // ErrInvalidPressDuration: an interval of 0 is legal.
     ErrInvalidInterval = keyboard.ErrInvalidInterval
+
+    // ErrEmptyPasteText means PasteByClipboard was called with an empty string.
+    // The clipboard is not opened and no key is sent.
+    ErrEmptyPasteText = errors.New("paste text is empty")
+
+    // ErrClipboardFailed aliases window.ErrClipboardFailed.
+    // Means a clipboard open, read, write, or restore failed. The error text
+    // never includes clipboard contents.
+    ErrClipboardFailed = window.ErrClipboardFailed
 )
 ```
 
@@ -363,6 +373,37 @@ followed by an extra sleep. On HID the fixed per-character hold is unchanged
 and an explicit interval is slept between character releases; without an
 argument no extra gap is added after each release. A negative interval, or more
 than one interval, returns `ErrInvalidInterval` before any character is sent.
+
+### func PasteByClipboard
+
+```go
+func PasteByClipboard(text string) error
+```
+PasteByClipboard pastes text into the current foreground window using Ctrl+V.
+It takes no HWND: the keystrokes go to whatever window is in the foreground
+when the call runs.
+
+A nil return does **not** mean the foreground program has received the new
+text. It only means the Ctrl+V events were queued and the previous Unicode
+clipboard text was restored without error. `SendInput` returns once the events
+are queued and does not wait for the foreground to process the paste, so there
+is no synchronization point proving the foreground read the clipboard before
+it was restored. A non-nil return does not prove the keys were not inserted
+either: the key can have succeeded while the restore failed, in which case
+`errors.Is` can recognize both `ErrClipboardFailed` and `ErrSendInputFailed`
+on the same error. To know whether a control accepted the text, observe that
+control separately.
+
+The clipboard is temporarily replaced and only `CF_UNICODETEXT` is put back.
+If the system had no Unicode format (including a clipboard that only held an
+image, or a `CF_TEXT` the system could convert), a bare empty Unicode buffer is
+restored and the original non-text formats do not return. New text has a lone
+`\n` normalized to `\r\n` before it is written; restored text is written
+byte-for-byte as it was read. Empty text fails with `ErrEmptyPasteText` before
+the clipboard is opened and before any key is sent. PasteByClipboard is not a
+replacement for `Type`; controls that reject paste (for example password
+fields) will not succeed.
+
 
 ### func CaptureVirtualDesktop
 

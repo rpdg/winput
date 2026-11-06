@@ -50,6 +50,16 @@ var (
 	ProcGetDpiForMonitor       = shcore.NewProc("GetDpiForMonitor")
 	ProcGetProcessDpiAwareness = shcore.NewProc("GetProcessDpiAwareness")
 
+	// Clipboard (user32.dll). All procedures exist on supported Windows; the
+	// clipboard functions Find them before each call and turn a missing
+	// procedure into ErrClipboardFailed instead of panicking.
+	ProcOpenClipboard              = user32.NewProc("OpenClipboard")
+	ProcCloseClipboard             = user32.NewProc("CloseClipboard")
+	ProcEmptyClipboard             = user32.NewProc("EmptyClipboard")
+	ProcGetClipboardData           = user32.NewProc("GetClipboardData")
+	ProcSetClipboardData           = user32.NewProc("SetClipboardData")
+	ProcIsClipboardFormatAvailable = user32.NewProc("IsClipboardFormatAvailable")
+
 	ProcGetDC     = user32.NewProc("GetDC")
 	ProcReleaseDC = user32.NewProc("ReleaseDC")
 
@@ -66,6 +76,13 @@ var (
 	ProcMapVirtualKeyW = user32.NewProc("MapVirtualKeyW")
 
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+
+	// Global memory (kernel32.dll), used for the clipboard HGLOBAL handoff.
+	ProcGlobalAlloc  = kernel32.NewProc("GlobalAlloc")
+	ProcGlobalLock   = kernel32.NewProc("GlobalLock")
+	ProcGlobalUnlock = kernel32.NewProc("GlobalUnlock")
+	ProcGlobalSize   = kernel32.NewProc("GlobalSize")
+	ProcGlobalFree   = kernel32.NewProc("GlobalFree")
 
 	ProcCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
 	ProcProcess32First           = kernel32.NewProc("Process32FirstW")

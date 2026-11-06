@@ -1340,6 +1340,14 @@ func Press(k Key, interval ...time.Duration) (err error) {
 func PressHotkey(keys ...Key) (err error) {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
+	return pressHotkeyLocked(keys...)
+}
+
+// pressHotkeyLocked is the body of global PressHotkey run while inputMutex is
+// held. It must never call a public input function that would lock inputMutex
+// again, including Press, PressHotkey, Type and PressFor. PasteByClipboard
+// uses it so the clipboard swap and the Ctrl+V stay inside the same lock.
+func pressHotkeyLocked(keys ...Key) (err error) {
 	if err := checkBackend(); err != nil {
 		return err
 	}

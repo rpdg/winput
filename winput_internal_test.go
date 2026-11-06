@@ -12,6 +12,7 @@ import (
 	"github.com/rpdg/winput/keyboard"
 	"github.com/rpdg/winput/mouse"
 	"github.com/rpdg/winput/screen"
+	"github.com/rpdg/winput/window"
 )
 
 func TestInputLayout(t *testing.T) {
@@ -81,6 +82,9 @@ func TestErrorAliases(t *testing.T) {
 	}
 	if ErrInvalidInterval != keyboard.ErrInvalidInterval {
 		t.Fatal("ErrInvalidInterval is not the keyboard sentinel")
+	}
+	if ErrClipboardFailed != window.ErrClipboardFailed {
+		t.Fatal("ErrClipboardFailed is not the window sentinel")
 	}
 	if ErrMoveNotConverged != hid.ErrMoveNotConverged {
 		t.Fatal("ErrMoveNotConverged is not the hid sentinel")
@@ -317,6 +321,27 @@ func TestScrollWheelValidation(t *testing.T) {
 	}
 }
 
+func TestValidatePasteText(t *testing.T) {
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"", true},
+		{" ", false},
+		{"a", false},
+		{"\n", false},
+	}
+	for _, tc := range cases {
+		err := validatePasteText(tc.text)
+		if tc.want {
+			if !errors.Is(err, ErrEmptyPasteText) {
+				t.Errorf("validatePasteText(%q) = %v, want ErrEmptyPasteText", tc.text, err)
+			}
+		} else if err != nil {
+			t.Errorf("validatePasteText(%q) = %v, want nil", tc.text, err)
+		}
+	}
+}
 
 func TestPressForRejectsShortDuration(t *testing.T) {
 	for _, d := range []time.Duration{9 * time.Millisecond, 0, -time.Millisecond} {

@@ -83,4 +83,13 @@ var (
 	// deliberately not the same sentinel as ErrInvalidPressDuration: an
 	// interval of 0 is legal, and a second interval argument is an error.
 	ErrInvalidInterval = keyboard.ErrInvalidInterval
+
+	// ErrEmptyPasteText means PasteByClipboard was called with an empty string.
+	// The clipboard is not opened and no key is sent.
+	ErrEmptyPasteText = errors.New("paste text is empty")
+
+	// ErrClipboardFailed means a clipboard open, read, write, or restore
+	// failed. It aliases window.ErrClipboardFailed; the error text never
+	// includes clipboard contents.
+	ErrClipboardFailed = window.ErrClipboardFailed
 )

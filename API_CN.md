@@ -26,6 +26,7 @@
 *   [func KeyUp](#func-keyup)
 *   [func Press](#func-press)
 *   [func PressHotkey](#func-presshotkey)
+*   [func PasteByClipboard](#func-pastebyclipboard)
 *   [func Type](#func-type)
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
@@ -89,6 +90,10 @@ var (
     // 别名 keyboard.ErrInvalidInterval（"interval must be a single non-negative duration"）。
     // Press / Type 的可选间隔为负数或参数多于一个时返回它。它与 ErrInvalidPressDuration 有意区分：间隔 0 是合法的。
     ErrInvalidInterval     = keyboard.ErrInvalidInterval
+    // ErrEmptyPasteText 表示用空字符串调用 PasteByClipboard。剪贴板不会被打开，也不会发送按键。
+    ErrEmptyPasteText      = errors.New("paste text is empty")
+    // 别名 window.ErrClipboardFailed。表示剪贴板打开、读取、写入或恢复失败。错误文本从不包含剪贴板内容。
+    ErrClipboardFailed     = window.ErrClipboardFailed
 )
 ```
 
@@ -308,6 +313,18 @@ PressHotkey 模拟组合键（如 Ctrl+C）。它按顺序按下所有键，保�
 func Type(text string, interval ...time.Duration) error
 ```
 Type 模拟全局文本输入（通过模拟按键序列）。可选的 `interval` 在两条后端都是字符间隙。消息后端在连续 rune 之间睡眠该间隙（默认 30ms），最后一个 rune 之后不再多睡。HID 每个字符的固定按住不变，只有传入显式间隔时才会在字符松开后再睡一段；不传参数则不增加额外间隙。间隔为负数或参数多于一个时，在任何字符发送之前返回 `ErrInvalidInterval`。
+
+### func PasteByClipboard
+
+```go
+func PasteByClipboard(text string) error
+```
+PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口。它不接收 `HWND`：按键进入调用发生时已经是前台的窗口。
+
+返回 nil **并不表示**前台程序已经收到新文本。nil 只表示 Ctrl+V 事件已经入队，并且先前剪贴板上的 Unicode 文本已经恢复且没有错误。`SendInput` 在事件入队时返回，并不等待前台处理粘贴，因此在恢复之前不存在「前台已经读完剪贴板」的同步点。返回非 nil 也不表示按键没有插入：按键可能已经成功而恢复失败，此时 `errors.Is` 能在同一个错误上同时认出 `ErrClipboardFailed` 与 `ErrSendInputFailed`。要确认控件是否收下文字，必须另行观察那个控件。
+
+剪贴板会被临时替换，结束后只放回 `CF_UNICODETEXT`。若系统当时没有 Unicode 格式（包括剪贴板上只有图片，或只有可被系统转换的 `CF_TEXT`），恢复的是空 Unicode 缓冲，原有的非文本格式不会回来。新文本中单独的 `\n` 会先被规范成 `\r\n` 再写入；恢复的文本按读到的内容原样写回。空文本在打开剪贴板、发送任何按键之前以 `ErrEmptyPasteText` 失败。PasteByClipboard 不是 `Type` 的替代品；拒绝粘贴的控件（例如密码框）不会因此成功。
+
 
 ### func CaptureVirtualDesktop
 
