@@ -52,6 +52,84 @@ func TestMutatingToolsBlockedByDefault(t *testing.T) {
 	}
 }
 
+func TestPingReturnsEmptyResult(t *testing.T) {
+	server := NewServer(Config{})
+	resp := server.handleRequest(context.Background(), JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage("42"),
+		Method:  "ping",
+	})
+	if resp.Error != nil {
+		t.Fatalf("ping error: %#v", resp.Error)
+	}
+	if resp.Result == nil {
+		t.Fatal("expected non-nil empty ping result")
+	}
+}
+
+func TestNegotiateProtocolVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		offered []string
+		want    string
+	}{
+		{"no offer", nil, defaultProtocolVersion},
+		{"empty offer", []string{}, defaultProtocolVersion},
+		{"supported single", []string{"2025-03-26"}, "2025-03-26"},
+		{"newest wins", []string{"2024-11-05", "2025-06-18"}, "2025-06-18"},
+		{"unsupported only", []string{"2025-01-01"}, defaultProtocolVersion},
+		{"mixed unsupported and supported", []string{"2025-09-01", "2025-04-01"}, "2025-04-01"},
+		{"blank entry ignored", []string{""}, defaultProtocolVersion},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := negotiateProtocolVersion(tt.offered); got != tt.want {
+				t.Fatalf("negotiateProtocolVersion(%v) = %q, want %q", tt.offered, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInitializeNegotiatesOfferedVersion(t *testing.T) {
+	server := NewServer(Config{})
+	resp := server.handleRequest(context.Background(), JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage("1"),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2025-03-26"}`),
+	})
+	if resp.Error != nil {
+		t.Fatalf("initialize error: %#v", resp.Error)
+	}
+	result, ok := resp.Result.(InitializeResult)
+	if !ok {
+		t.Fatalf("unexpected result: %#v", resp.Result)
+	}
+	if result.ProtocolVersion != "2025-03-26" {
+		t.Fatalf("expected negotiated 2025-03-26, got %q", result.ProtocolVersion)
+	}
+}
+
+func TestInitializeAcceptsProtocolVersionsArray(t *testing.T) {
+	server := NewServer(Config{})
+	resp := server.handleRequest(context.Background(), JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage("1"),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersions":["2025-03-26","2025-11-25"]}`),
+	})
+	if resp.Error != nil {
+		t.Fatalf("initialize error: %#v", resp.Error)
+	}
+	result, ok := resp.Result.(InitializeResult)
+	if !ok {
+		t.Fatalf("unexpected result: %#v", resp.Result)
+	}
+	if result.ProtocolVersion != "2025-11-25" {
+		t.Fatalf("expected negotiated 2025-11-25, got %q", result.ProtocolVersion)
+	}
+}
+
 func TestWriteResponseContentLength(t *testing.T) {
 	var out bytes.Buffer
 	resp := JSONRPCResponse{
@@ -187,6 +265,15 @@ func TestMCPServerSmoke(t *testing.T) {
 	}
 	if initResult.ProtocolVersion != "2025-04-01" {
 		t.Fatalf("unexpected protocolVersion: %#v", initResult.ProtocolVersion)
+	}
+
+	send(`{"jsonrpc":"2.0","id":9,"method":"ping"}`)
+	pingResp := readResp()
+	if pingResp.Error != nil {
+		t.Fatalf("ping error: %#v", pingResp.Error)
+	}
+	if pingResp.Result == nil {
+		t.Fatal("expected empty ping result")
 	}
 
 	send(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`)

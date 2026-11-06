@@ -95,8 +95,15 @@ func (s *Server) handleRequest(ctx context.Context, req JSONRPCRequest) JSONRPCR
 
 	switch req.Method {
 	case "initialize":
+		var params InitializeParams
+		// Malformed params fall back to the default protocol version.
+		_ = decodeParams(req.Params, &params)
+		offered := params.ProtocolVersions
+		if params.ProtocolVersion != "" {
+			offered = append(offered, params.ProtocolVersion)
+		}
 		resp.Result = InitializeResult{
-			ProtocolVersion: "2025-04-01",
+			ProtocolVersion: negotiateProtocolVersion(offered),
 			ServerInfo: ServerInfo{
 				Name:    "winput-mcp",
 				Version: "0.1.0",
@@ -105,6 +112,9 @@ func (s *Server) handleRequest(ctx context.Context, req JSONRPCRequest) JSONRPCR
 				"tools": map[string]any{},
 			},
 		}
+		return resp
+	case "ping":
+		resp.Result = map[string]any{}
 		return resp
 	case "notifications/initialized":
 		return resp
@@ -128,6 +138,39 @@ func (s *Server) handleRequest(ctx context.Context, req JSONRPCRequest) JSONRPCR
 		resp.Error = &JSONRPCErrorObj{Code: -32601, Message: "method not found"}
 		return resp
 	}
+}
+
+// defaultProtocolVersion is reported when the client offers no version this
+// server honors. It matches the version the server previously returned.
+const defaultProtocolVersion = "2025-04-01"
+
+// supportedProtocolVersions are the protocol revisions this tool-only server
+// can honor, oldest to newest. Tool discovery, tool calls, and ping are stable
+// across all of them.
+var supportedProtocolVersions = []string{
+	"2024-11-05",
+	"2025-03-26",
+	"2025-04-01",
+	"2025-06-18",
+	"2025-11-25",
+}
+
+// negotiateProtocolVersion returns the newest client-offered version this
+// server supports, falling back to defaultProtocolVersion when there is no
+// overlap.
+func negotiateProtocolVersion(offered []string) string {
+	has := make(map[string]struct{}, len(offered))
+	for _, v := range offered {
+		if v != "" {
+			has[v] = struct{}{}
+		}
+	}
+	for i := len(supportedProtocolVersions) - 1; i >= 0; i-- {
+		if _, ok := has[supportedProtocolVersions[i]]; ok {
+			return supportedProtocolVersions[i]
+		}
+	}
+	return defaultProtocolVersion
 }
 
 func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, error) {

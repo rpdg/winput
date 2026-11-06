@@ -150,8 +150,33 @@ The repository now includes:
 - safety gates for mutating and sensitive tools
 - framed `Content-Length` request and response transport
 - fixed typed response envelopes for initialization, tool listing, tool results, and structured error data
+- JSON-RPC `ping` handling and protocol version negotiation in `initialize`
 
 Example protocol usage is documented in `docs/mcp-example-session.md`.
+
+## Decision Record — Third-Party MCP SDK (2026-11-06)
+
+**Decision: keep the hand-rolled protocol layer; do not adopt `github.com/mark3labs/mcp-go` for now.**
+
+Facts (evidence, not estimates):
+
+- `go.mod` declares `go 1.22` and currently has **zero external dependencies**.
+- Latest `mcp-go` release (v1.5.0, under active maintenance) requires **`go 1.25.5`** and pulls six direct dependencies (`google/jsonschema-go`, `google/uuid`, `santhosh-tekuri/jsonschema/v6`, `spf13/cast`, `yosida95/uritemplate/v3`, `golang.org/x/text`).
+- The adapter is ~700 lines, has framing / error / smoke tests, and covers a small, stable protocol surface (`initialize`, `initialized`, `tools/list`, `tools/call`, `ping`).
+- The documented non-goals — no agent runtime, no OCR/CV/DOM, no resources/prompts — are exactly the capabilities `mcp-go` bundles for free.
+
+Tradeoffs:
+
+- **Gains from adopting**: protocol version negotiation, multiple transports (stdio / SSE / Streamable HTTP + OAuth), community-verified boundary behavior, and removing ownership of ~700 lines of protocol glue.
+- **Costs of adopting**: ends the zero-dependency baseline, raises the Go toolchain floor to 1.25.5 (breaking downstream builds on older toolchains), and ships abstractions (resources/prompts/sampling/roots) the design explicitly rejects. The adapter's own contract — `sideEffectLevel` / `requiresConfirmation` annotations and structured `code` / `retryable` errors — is not part of the MCP spec, so it would have to be re-implemented on top of the SDK either way.
+- The one real interop gap (missing `ping` handling) is a small local fix and is now implemented, together with optional protocol version negotiation.
+
+Re-evaluation triggers (revisit only on product evidence, not documentation inference):
+
+1. A real client failing for lifecycle / `ping` / version reasons after this fix.
+2. A concrete remote-transport demand (SSE / Streamable HTTP / OAuth).
+3. A need for resources, prompts, `cancelled` or progress that the current server deliberately omits.
+4. MCP spec drift that actually breaks client handshakes.
 
 ## Compatibility Strategy
 

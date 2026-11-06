@@ -13,6 +13,15 @@ type ServerInfo struct {
 	Version string `json:"version"`
 }
 
+type InitializeParams struct {
+	// ProtocolVersion is the legacy single-version field in specs
+	// 2024-11-05 through 2025-06-18.
+	ProtocolVersion string `json:"protocolVersion,omitempty"`
+	// ProtocolVersions is the client-supported version list introduced in
+	// spec 2025-11-25.
+	ProtocolVersions []string `json:"protocolVersions,omitempty"`
+}
+
 type ToolListResult struct {
 	Tools []Tool `json:"tools"`
 }
