@@ -5,6 +5,7 @@ import (
 
 	"github.com/rpdg/winput/hid"
 	"github.com/rpdg/winput/keyboard"
+	"github.com/rpdg/winput/mouse"
 	"github.com/rpdg/winput/window"
 )
 
@@ -63,6 +64,12 @@ var (
 
 	// ErrInvalidMouseButton means the MouseButton value is not one of the exported identities.
 	ErrInvalidMouseButton = errors.New("invalid mouse button")
+
+	// ErrInvalidScrollDelta means a directed scroll delta does not fit in int16.
+	// Window.Scroll on BackendMessage returns this value, which aliases
+	// mouse.ErrInvalidScrollDelta. hid.ErrInvalidScrollDelta is a separate
+	// sentinel; hid does not import mouse.
+	ErrInvalidScrollDelta = mouse.ErrInvalidScrollDelta
 
 	// ErrInvalidScrollSteps means ScrollWheel steps are zero or outside [-273, 273].
 	ErrInvalidScrollSteps = errors.New("scroll steps must be non-zero and within [-273, 273]")

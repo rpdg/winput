@@ -468,13 +468,12 @@ func DoubleClick(x, y int32) error {
 	down := interception.MouseStroke{State: interception.MouseStateLeftDown}
 	up := interception.MouseStroke{State: interception.MouseStateLeftUp}
 
-	// helper：发送并短重试一次
+	// 单笔发送，失败后再试一次。两次都失败时留下第一次的错误。
 	sendOnce := func(st *interception.MouseStroke) error {
 		if err := interception.SendMouse(lCtx, lDev, st); err != nil {
-			// 短重试一次
 			time.Sleep(6 * time.Millisecond)
 			if err2 := interception.SendMouse(lCtx, lDev, st); err2 != nil {
-				return err2
+				return err
 			}
 		}
 		return nil
@@ -564,7 +563,9 @@ func MoveExact(targetX, targetY int32) error {
 	return nil
 }
 
-// Button sends one button state stroke without moving the cursor.
+// Button sends one button stroke without moving the cursor.
+// state is an Interception mouse state such as MouseStateLeftDown.
+// The value is not validated.
 func Button(state uint16) error {
 	lCtx, lDev, unlock, err := acquireMouse()
 	if err != nil {
@@ -618,10 +619,10 @@ func Scroll(delta int32) error {
 // Keyboard
 // -----------------------------------------------------------------------------
 
-// keyStroke decodes a Key into an Interception key stroke. The E0 flag is
-// applied to both down and up events.
-func keyStroke(scanCode uint16, up bool) (interception.KeyStroke, error) {
-	scan, extended, ok := keyboard.Key(scanCode).Decode()
+// keyStroke decodes a composite keyboard.Key into an Interception stroke.
+// The E0 flag is applied to both down and up events. See KeyDown.
+func keyStroke(key uint16, up bool) (interception.KeyStroke, error) {
+	scan, extended, ok := keyboard.Key(key).Decode()
 	if !ok {
 		return interception.KeyStroke{}, keyboard.ErrUnsupportedKey
 	}
@@ -638,9 +639,13 @@ func keyStroke(scanCode uint16, up bool) (interception.KeyStroke, error) {
 	}, nil
 }
 
-// KeyDown simulates a key down event for the specified scan code.
-func KeyDown(scanCode uint16) error {
-	s, err := keyStroke(scanCode, false)
+// KeyDown sends a key-down stroke for a keyboard.Key value.
+//
+// The argument is the composite encoding, not a raw scan code: the low 8
+// bits are the Set 1 scan code and the high byte is 0xE0 when the key is
+// extended. Passing 0x48 selects numpad 8; arrow up is 0xE048.
+func KeyDown(key uint16) error {
+	s, err := keyStroke(key, false)
 	if err != nil {
 		return err
 	}
@@ -657,9 +662,10 @@ func KeyDown(scanCode uint16) error {
 	return nil
 }
 
-// KeyUp simulates a key up event for the specified scan code.
-func KeyUp(scanCode uint16) error {
-	s, err := keyStroke(scanCode, true)
+// KeyUp sends a key-up stroke for a keyboard.Key value.
+// The argument uses the same composite encoding as KeyDown.
+func KeyUp(key uint16) error {
+	s, err := keyStroke(key, true)
 	if err != nil {
 		return err
 	}
@@ -676,13 +682,14 @@ func KeyUp(scanCode uint16) error {
 	return nil
 }
 
-// Press simulates a key press (down then up) for the specified scan code.
-func Press(scanCode uint16) error {
+// Press simulates a key press (down then up) for a keyboard.Key value.
+// The argument uses the same composite encoding as KeyDown.
+func Press(key uint16) error {
 	// KeyDown and KeyUp will acquire/release locks individually.
 	// This is safe.
-	if err := KeyDown(scanCode); err != nil {
+	if err := KeyDown(key); err != nil {
 		return err
 	}
 	humanSleep(40)
-	return KeyUp(scanCode)
+	return KeyUp(key)
 }

@@ -281,6 +281,9 @@ func TestBackendHID(t *testing.T) {
 		t.Skip("Skipping HID tests. Use -hid flag to enable (requires admin & driver).")
 	}
 
+	t.Cleanup(func() {
+		_ = winput.SetBackend(winput.BackendMessage)
+	})
 	winput.SetBackend(winput.BackendHID)
 	// Assuming dll is in path or current dir
 	winput.SetHIDLibraryPath("interception.dll")
@@ -329,6 +332,12 @@ func TestBackendHID(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestMultiMonitorSupport(t *testing.T) {
+	// §8.4 requires this movement check to stay on the message backend.
+	// The 2-pixel tolerance is not an HID arrival contract.
+	if err := winput.SetBackend(winput.BackendMessage); err != nil {
+		t.Fatalf("SetBackend(BackendMessage): %v", err)
+	}
+
 	if err := winput.EnablePerMonitorDPI(); err != nil {
 		t.Logf("Warning: Failed to enable Per-Monitor DPI: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/rpdg/winput/hid"
 	"github.com/rpdg/winput/keyboard"
+	"github.com/rpdg/winput/mouse"
 	"github.com/rpdg/winput/screen"
 )
 
@@ -83,6 +84,12 @@ func TestErrorAliases(t *testing.T) {
 	}
 	if ErrOutsideVirtualDesktop != hid.ErrOutsideVirtualDesktop {
 		t.Fatal("ErrOutsideVirtualDesktop is not the hid sentinel")
+	}
+	if ErrInvalidScrollDelta != mouse.ErrInvalidScrollDelta {
+		t.Fatal("ErrInvalidScrollDelta is not the mouse sentinel")
+	}
+	if ErrInvalidScrollDelta == hid.ErrInvalidScrollDelta {
+		t.Fatal("HID scroll sentinel collapsed into the mouse sentinel")
 	}
 }
 
@@ -209,15 +216,28 @@ func TestMouseButtonMapping(t *testing.T) {
 	if MouseLeft != 1 || MouseRight != 2 || MouseMiddle != 3 {
 		t.Fatalf("MouseButton identities = %d/%d/%d", MouseLeft, MouseRight, MouseMiddle)
 	}
-	if flags, ok := mouseEventButtonFlags(MouseLeft, true); !ok || flags != 0x0002 {
-		t.Fatalf("left down flags = %#x, %v; want 0x0002, true", flags, ok)
+	cases := []struct {
+		button  MouseButton
+		down    uintptr
+		up      uintptr
+		hidDown uint16
+		hidUp   uint16
+	}{
+		{MouseLeft, 0x0002, 0x0004, 0x001, 0x002},
+		{MouseRight, 0x0008, 0x0010, 0x004, 0x008},
+		{MouseMiddle, 0x0020, 0x0040, 0x010, 0x020},
 	}
-	if flags, ok := mouseEventButtonFlags(MouseLeft, false); !ok || flags != 0x0004 {
-		t.Fatalf("left up flags = %#x, %v; want 0x0004, true", flags, ok)
-	}
-	down, up, ok := hidButtonStates(MouseLeft)
-	if !ok || down != 0x001 || up != 0x002 {
-		t.Fatalf("left HID states = %#x/%#x, %v; want 0x001/0x002, true", down, up, ok)
+	for _, tc := range cases {
+		if flags, ok := mouseEventButtonFlags(tc.button, true); !ok || flags != tc.down {
+			t.Fatalf("%d down flags = %#x, %v; want %#x, true", tc.button, flags, ok, tc.down)
+		}
+		if flags, ok := mouseEventButtonFlags(tc.button, false); !ok || flags != tc.up {
+			t.Fatalf("%d up flags = %#x, %v; want %#x, true", tc.button, flags, ok, tc.up)
+		}
+		down, up, ok := hidButtonStates(tc.button)
+		if !ok || down != tc.hidDown || up != tc.hidUp {
+			t.Fatalf("%d HID states = %#x/%#x, %v; want %#x/%#x, true", tc.button, down, up, ok, tc.hidDown, tc.hidUp)
+		}
 	}
 	if _, _, ok := hidButtonStates(MouseButton(4)); ok {
 		t.Fatal("invalid button accepted")

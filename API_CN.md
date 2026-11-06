@@ -64,15 +64,27 @@
 ```go
 var (
     ErrWindowNotFound     = errors.New("window not found")     // 未找到窗口
-    ErrWindowGone         = errors.New("window is gone")       // 窗口句柄失效
+    ErrWindowGone         = errors.New("window is gone or invalid") // 窗口句柄失效
     ErrWindowNotVisible   = errors.New("window is not visible")// 窗口不可见或最小化
-    ErrUnsupportedKey     = errors.New("unsupported key")      // 不支持的按键
-    ErrBackendUnavailable = errors.New("backend unavailable")  // 后端不可用
-    ErrDriverNotInstalled = errors.New("driver not installed") // 驱动未安装 (仅 HID)
-    ErrDLLLoadFailed      = errors.New("dll load failed")      // DLL 加载失败 (仅 HID)
+    // 别名 keyboard.ErrUnsupportedKey，文本是 "unsupported key or character"，不是独立哨兵。
+    ErrUnsupportedKey     = keyboard.ErrUnsupportedKey
+    ErrBackendUnavailable = errors.New("input backend unavailable") // 后端不可用
+    ErrDriverNotInstalled = errors.New("interception driver not installed or accessible") // 驱动未安装 (仅 HID)
+    ErrDLLLoadFailed      = errors.New("failed to load interception library") // DLL 加载失败 (仅 HID)
     ErrPermissionDenied   = errors.New("permission denied")    // 权限不足
-    ErrPostMessageFailed  = errors.New("PostMessageW failed")  // PostMessageW 调用失败
-    ErrReadTextFailed     = errors.New("failed to read window text") // 读取文本失败
+    ErrPostMessageFailed  = window.ErrPostMessageFailed        // PostMessageW 调用失败
+    ErrReadTextFailed     = window.ErrReadTextFailed           // 读取文本失败
+    ErrMoveNotConverged   = hid.ErrMoveNotConverged            // HID 移动未收敛
+    ErrOutsideVirtualDesktop = hid.ErrOutsideVirtualDesktop    // 目标在虚拟桌面外
+    ErrSendInputFailed    = errors.New("SendInput inserted no events") // SendInput 一条都没写入
+    ErrSendInputPartial   = errors.New("SendInput partially inserted and was repaired") // 只写入按下，补抬起成功
+    ErrSendInputStuck     = errors.New("SendInput partially inserted and could not be repaired") // 只写入按下，补抬起失败
+    ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling") // HID 不能把滚轮定向到窗口
+    ErrInvalidMouseButton = errors.New("invalid mouse button") // 按钮身份非法
+    // 别名 mouse.ErrInvalidScrollDelta。消息路径的 Window.Scroll 返回它。hid.ErrInvalidScrollDelta 是另一个哨兵。
+    ErrInvalidScrollDelta = mouse.ErrInvalidScrollDelta        // 滚轮增量超出 int16
+    ErrInvalidScrollSteps = errors.New("scroll steps must be non-zero and within [-273, 273]") // ScrollWheel 步数非法
+    ErrInvalidPressDuration = errors.New("press duration must be at least 10ms") // PressFor 时长短于 10ms
 )
 ```
 
@@ -114,16 +126,24 @@ const (
 ```
 
 ### 按键常量 (Key Constants)
-常用键盘扫描码。
+
+`Key` 是复合值。低 8 位是 Set 1 扫描码，需要 E0 前缀的键把高字节设为 `0xE0`。不要把整个值当成扫描码：`0x48` 是小键盘 8（`KeyNumpad8`），方向键上是 `0xE048`（`KeyArrowUp`）。
 
 ```go
 const (
     KeyEsc, KeyEnter, KeySpace, KeyTab, KeyBkSp Key = ...
     KeyShift, KeyCtrl, KeyAlt, KeyCaps          Key = ...
+    KeyLeftCtrl                                 Key = 0x1D
+    KeyRightCtrl                                Key = 0xE01D
+    KeyLeftAlt                                  Key = 0x38
+    KeyRightAlt                                 Key = 0xE038
+    KeyNumpadDivide, KeyDivide                  Key = 0xE035 // KeyDivide 是 KeyNumpadDivide 的别名
+    KeyLWin                                     Key = 0xE05B
+    KeyRWin                                     Key = 0xE05C
     KeyF1 .. KeyF12                             Key = ...
     KeyA .. KeyZ                                Key = ...
     Key0 .. Key9                                Key = ...
-    KeyArrowUp, KeyArrowDown, KeyLeft, KeyRight Key = ...
+    KeyArrowUp, KeyArrowDown, KeyLeft, KeyRight Key = ... // 高字节为 0xE0
     KeyHome, KeyEnd, KeyPageUp, KeyPageDown     Key = ...
     KeyInsert, KeyDelete                        Key = ...
 )
@@ -209,7 +229,7 @@ MouseUp 在当前光标位置抬起指定按钮，不移动光标。非法按钮
 func ClickMouse() error
 ```
 
-ClickMouse 在当前光标位置执行左键单击，不移动光标。`BackendMessage` 下使用 `mouse_event`，该调用没有返回值，因此按钮事件的投递失败不可观测。
+ClickMouse 在当前光标位置执行左键单击，不移动光标。按钮标志与 `MouseDown` / `MouseUp` 共用同一映射。`BackendMessage` 下使用 `mouse_event`，该调用没有返回值，因此按钮事件的投递失败不可观测。`BackendHID` 下抬起失败会再试一次，两次都失败时保留第一次的错误。
 
 ### func MoveMouseBy
 
@@ -398,7 +418,7 @@ func (w *Window) Scroll(x, y int32, delta int32) error
 ```
 Scroll 在指定客户区坐标执行鼠标滚轮滚动。
 
-`BackendMessage` 会把 `WM_MOUSEWHEEL` 投递给目标窗口。`BackendHID` 返回 `ErrDirectedScrollUnsupported`，因为硬件滚轮事件无法定向到某个窗口；需要硬件级整格滚动时使用 `ScrollWheel`。
+`BackendMessage` 会把 `WM_MOUSEWHEEL` 投递给目标窗口。`delta == 0` 是空操作，其余增量必须落在 `int16` 内，否则返回 `ErrInvalidScrollDelta`（`mouse.ErrInvalidScrollDelta` 的别名）。`BackendHID` 不校验 `delta`，始终返回 `ErrDirectedScrollUnsupported`，因为硬件滚轮事件无法定向到某个窗口。需要硬件级整格滚动时使用 `ScrollWheel`。
 
 #### func (*Window) Text
 

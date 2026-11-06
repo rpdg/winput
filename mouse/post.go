@@ -68,18 +68,20 @@ func wheelDelta(delta int32) (int16, error) {
 }
 
 // buttonMessage is one message in a button sequence.
+// up marks a button-up step. Only those steps are retried.
 type buttonMessage struct {
 	msg    uint32
 	wparam uintptr
+	up     bool
 }
 
 // doubleClickSequence is the four-step window double-click sequence.
 func doubleClickSequence() [4]buttonMessage {
 	return [4]buttonMessage{
-		{WM_LBUTTONDOWN, MK_LBUTTON},
-		{WM_LBUTTONUP, 0},
-		{WM_LBUTTONDBLCLK, MK_LBUTTON},
-		{WM_LBUTTONUP, 0},
+		{WM_LBUTTONDOWN, MK_LBUTTON, false},
+		{WM_LBUTTONUP, 0, true},
+		{WM_LBUTTONDBLCLK, MK_LBUTTON, false},
+		{WM_LBUTTONUP, 0, true},
 	}
 }
 
@@ -131,13 +133,13 @@ func ClickMiddle(hwnd uintptr, x, y int32) error {
 // DoubleClick simulates a left mouse button double-click at the specified client coordinates.
 func DoubleClick(hwnd uintptr, x, y int32) error {
 	lparam := makeLParam(x, y)
-	for i, step := range doubleClickSequence() {
+	for _, step := range doubleClickSequence() {
 		err := post(hwnd, step.msg, step.wparam, lparam)
 		if err == nil {
 			continue
 		}
-		// Only the two button-up steps are retried, and only that step.
-		if i == 1 || i == 3 {
+		// Only a button-up step is retried, and only that step.
+		if step.up {
 			if err2 := post(hwnd, step.msg, step.wparam, lparam); err2 == nil {
 				continue
 			}

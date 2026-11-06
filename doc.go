@@ -60,10 +60,12 @@
 //		w.ClickRight(100, 100)  // Right click
 //		w.Scroll(100, 100, 120) // Vertical scroll (message backend only)
 //
-//		// Window.Scroll posts WM_MOUSEWHEEL to the target window. Under
-//		// BackendHID it returns ErrDirectedScrollUnsupported because a
-//		// hardware wheel event cannot be addressed to a specific window.
-//		// Use ScrollWheel for hardware-level whole-step scrolling.
+//		// Window.Scroll posts WM_MOUSEWHEEL to the target window. A zero
+//		// delta is a no-op, and any other delta must fit in int16. Under
+//		// BackendHID, delta is not validated and the call returns
+//		// ErrDirectedScrollUnsupported, because a hardware wheel event
+//		// cannot be addressed to a specific window. Use ScrollWheel for
+//		// hardware-level whole-step scrolling.
 //
 //		w.Type("Hello World!")  // Automatically handles Shift for 'H', 'W', and '!'
 //		w.Press(winput.KeyEnter)

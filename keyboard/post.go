@@ -35,10 +35,11 @@ var numpadVirtualKeys = map[uint8]uintptr{
 	0x53: 0x6E, // VK_DECIMAL
 }
 
-// MapScanCodeToVK converts a key to a virtual-key code using type 1
-// (MAPVK_VSC_TO_VK). It returns 0 when the key is invalid.
-func MapScanCodeToVK(sc Key) uintptr {
-	vk, _ := VirtualKey(sc)
+// MapScanCodeToVK converts a composite Key to a virtual-key code using
+// type 1 (MAPVK_VSC_TO_VK). The argument is not a raw scan code; see Key.
+// It returns 0 when the key is invalid.
+func MapScanCodeToVK(key Key) uintptr {
+	vk, _ := VirtualKey(key)
 	return vk
 }
 

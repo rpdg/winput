@@ -3,6 +3,9 @@ package mouse
 import "testing"
 
 func TestWheelDelta(t *testing.T) {
+	if WHEEL_DELTA != 120 {
+		t.Fatalf("WHEEL_DELTA = %d, want 120", WHEEL_DELTA)
+	}
 	for _, delta := range []int32{32880, -32880, 32768, -32769} {
 		if _, err := wheelDelta(delta); err == nil {
 			t.Errorf("wheelDelta(%d) accepted out-of-range delta", delta)
@@ -22,10 +25,10 @@ func TestWheelDelta(t *testing.T) {
 
 func TestDoubleClickSequence(t *testing.T) {
 	want := [4]buttonMessage{
-		{WM_LBUTTONDOWN, MK_LBUTTON},
-		{WM_LBUTTONUP, 0},
-		{WM_LBUTTONDBLCLK, MK_LBUTTON},
-		{WM_LBUTTONUP, 0},
+		{WM_LBUTTONDOWN, MK_LBUTTON, false},
+		{WM_LBUTTONUP, 0, true},
+		{WM_LBUTTONDBLCLK, MK_LBUTTON, false},
+		{WM_LBUTTONUP, 0, true},
 	}
 	got := doubleClickSequence()
 	if got != want {

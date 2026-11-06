@@ -69,8 +69,9 @@ var (
     // ErrWindowNotVisible implies the window is hidden or minimized.
     ErrWindowNotVisible = errors.New("window is not visible")
 
-    // ErrUnsupportedKey implies the character cannot be mapped to a key.
-    ErrUnsupportedKey = errors.New("unsupported key or character")
+    // ErrUnsupportedKey aliases keyboard.ErrUnsupportedKey.
+    // The text is "unsupported key or character". It is not a separate sentinel.
+    ErrUnsupportedKey = keyboard.ErrUnsupportedKey
 
     // ErrBackendUnavailable implies the selected backend (e.g. HID) failed to initialize.
     ErrBackendUnavailable = errors.New("input backend unavailable")
@@ -84,11 +85,46 @@ var (
     // ErrPermissionDenied implies the operation failed due to system privilege restrictions (e.g. UIPI).
     ErrPermissionDenied = errors.New("permission denied")
 
-    // ErrPostMessageFailed implies the PostMessageW call returned 0 (e.g., queue full or invalid handle).
-    ErrPostMessageFailed = errors.New("PostMessageW failed")
+    // ErrPostMessageFailed aliases window.ErrPostMessageFailed.
+    ErrPostMessageFailed = window.ErrPostMessageFailed
 
-    // ErrReadTextFailed implies reading text from the target window/control failed.
-    ErrReadTextFailed = errors.New("failed to read window text")
+    // ErrReadTextFailed aliases window.ErrReadTextFailed.
+    ErrReadTextFailed = window.ErrReadTextFailed
+
+    // ErrMoveNotConverged aliases hid.ErrMoveNotConverged.
+    ErrMoveNotConverged = hid.ErrMoveNotConverged
+
+    // ErrOutsideVirtualDesktop aliases hid.ErrOutsideVirtualDesktop.
+    ErrOutsideVirtualDesktop = hid.ErrOutsideVirtualDesktop
+
+    // ErrSendInputFailed means SendInput inserted zero events.
+    ErrSendInputFailed = errors.New("SendInput inserted no events")
+
+    // ErrSendInputPartial means SendInput inserted only the key-down event,
+    // and the compensating key-up was inserted successfully.
+    ErrSendInputPartial = errors.New("SendInput partially inserted and was repaired")
+
+    // ErrSendInputStuck means SendInput inserted only the key-down event,
+    // and the compensating key-up could not be inserted.
+    ErrSendInputStuck = errors.New("SendInput partially inserted and could not be repaired")
+
+    // ErrDirectedScrollUnsupported means the HID backend cannot direct a wheel
+    // event to a specific window.
+    ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling")
+
+    // ErrInvalidMouseButton means the MouseButton value is not one of the exported identities.
+    ErrInvalidMouseButton = errors.New("invalid mouse button")
+
+    // ErrInvalidScrollDelta aliases mouse.ErrInvalidScrollDelta
+    // ("scroll delta out of int16 range"). Window.Scroll on BackendMessage
+    // returns it. hid.ErrInvalidScrollDelta is a different sentinel.
+    ErrInvalidScrollDelta = mouse.ErrInvalidScrollDelta
+
+    // ErrInvalidScrollSteps means ScrollWheel steps are zero or outside [-273, 273].
+    ErrInvalidScrollSteps = errors.New("scroll steps must be non-zero and within [-273, 273]")
+
+    // ErrInvalidPressDuration means PressFor was given less than 10ms.
+    ErrInvalidPressDuration = errors.New("press duration must be at least 10ms")
 )
 ```
 
@@ -131,16 +167,24 @@ const (
 ```
 
 ### Key Constants
-Common keyboard scan codes.
+
+`Key` is a composite value. The low 8 bits are the Set 1 scan code. Keys that need the E0 prefix set the high byte to `0xE0`. Do not treat the whole value as a scan code: `0x48` is numpad 8 (`KeyNumpad8`), and arrow up is `0xE048` (`KeyArrowUp`).
 
 ```go
 const (
     KeyEsc, KeyEnter, KeySpace, KeyTab, KeyBkSp Key = ...
     KeyShift, KeyCtrl, KeyAlt, KeyCaps          Key = ...
+    KeyLeftCtrl                                 Key = 0x1D
+    KeyRightCtrl                                Key = 0xE01D
+    KeyLeftAlt                                  Key = 0x38
+    KeyRightAlt                                 Key = 0xE038
+    KeyNumpadDivide, KeyDivide                  Key = 0xE035 // KeyDivide aliases KeyNumpadDivide
+    KeyLWin                                     Key = 0xE05B
+    KeyRWin                                     Key = 0xE05C
     KeyF1 .. KeyF12                             Key = ...
     KeyA .. KeyZ                                Key = ...
     Key0 .. Key9                                Key = ...
-    KeyArrowUp, KeyArrowDown, KeyLeft, KeyRight Key = ...
+    KeyArrowUp, KeyArrowDown, KeyLeft, KeyRight Key = ... // high byte 0xE0
     KeyHome, KeyEnd, KeyPageUp, KeyPageDown     Key = ...
     KeyInsert, KeyDelete                        Key = ...
 )
@@ -226,7 +270,7 @@ MouseUp releases the specified button at the current cursor position without mov
 func ClickMouse() error
 ```
 
-ClickMouse performs a left click at the current cursor position without moving. Under `BackendMessage` it uses `mouse_event`, which has no return value, so button-event delivery failures are not observable.
+ClickMouse performs a left click at the current cursor position without moving. Button flags use the same mapping as `MouseDown` and `MouseUp`. Under `BackendMessage` it uses `mouse_event`, which has no return value, so button-event delivery failures are not observable. Under `BackendHID` a failed release is retried once, and both failures keep the first error.
 
 ### func MoveMouseBy
 
@@ -415,7 +459,7 @@ func (w *Window) Scroll(x, y int32, delta int32) error
 ```
 Scroll performs a vertical mouse wheel scroll at the specified client coordinates.
 
-Under `BackendMessage` it posts `WM_MOUSEWHEEL` to this window. Under `BackendHID` it returns `ErrDirectedScrollUnsupported` because a hardware wheel event cannot be addressed to a specific window; use `ScrollWheel` for hardware-level scrolling.
+Under `BackendMessage` it posts `WM_MOUSEWHEEL` to this window. `delta == 0` is a no-op. Any other delta must fit in `int16`, or the call returns `ErrInvalidScrollDelta` (an alias of `mouse.ErrInvalidScrollDelta`). Under `BackendHID`, `delta` is not validated and the method always returns `ErrDirectedScrollUnsupported`, because a hardware wheel event cannot be addressed to a specific window. Use `ScrollWheel` for hardware-level scrolling.
 
 #### func (*Window) Text
 

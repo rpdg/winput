@@ -494,9 +494,11 @@ func (w *Window) DoubleClick(x, y int32) error {
 // Scroll simulates a vertical mouse wheel scroll at the specified client coordinates.
 //
 // Under BackendMessage the WM_MOUSEWHEEL message is posted to this window.
-// Under BackendHID this method returns ErrDirectedScrollUnsupported because a
-// hardware wheel event cannot be addressed to a specific window; use
-// ScrollWheel for hardware-level scrolling.
+// delta == 0 is a no-op. Any other delta must fit in int16, or the call
+// returns ErrInvalidScrollDelta (the mouse sentinel). Under BackendHID,
+// delta is not validated and this method always returns
+// ErrDirectedScrollUnsupported: a hardware wheel event cannot be addressed
+// to a specific window. Use ScrollWheel for hardware-level scrolling.
 func (w *Window) Scroll(x, y int32, delta int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -558,9 +560,10 @@ func ClickMouseAt(x, y int32) error {
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	window.ProcMouseEvent.Call(0x0002, 0, 0, 0, 0)
-	window.ProcMouseEvent.Call(0x0004, 0, 0, 0, 0)
-	return nil
+	if err := mouseButtonImpl(BackendMessage, MouseLeft, true); err != nil {
+		return err
+	}
+	return mouseButtonImpl(BackendMessage, MouseLeft, false)
 }
 
 // DoubleClickMouseAt moves to the specified screen coordinates and performs a left double-click.
@@ -584,26 +587,23 @@ func DoubleClickMouseAt(x, y int32) error {
 		return fmt.Errorf("SetCursorPos failed")
 	}
 
-	// Double click = Down -> Up -> (delay) -> Down -> Up
-	// But standard mouse_event doesn't have DBLCLK. We just click twice fast.
-	const (
-		MOUSEEVENTF_LEFTDOWN = 0x0002
-		MOUSEEVENTF_LEFTUP   = 0x0004
-	)
-
-	// First Click
+	// Double click = Down -> Up -> (delay) -> Down -> Up.
+	// mouse_event has no DBLCLK flag, so this is two clicks.
 	time.Sleep(30 * time.Millisecond)
-	window.ProcMouseEvent.Call(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-	window.ProcMouseEvent.Call(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+	if err := mouseButtonImpl(BackendMessage, MouseLeft, true); err != nil {
+		return err
+	}
+	if err := mouseButtonImpl(BackendMessage, MouseLeft, false); err != nil {
+		return err
+	}
 
 	// Interval (short enough for OS to register as double click)
 	time.Sleep(50 * time.Millisecond)
 
-	// Second Click
-	window.ProcMouseEvent.Call(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-	window.ProcMouseEvent.Call(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-
-	return nil
+	if err := mouseButtonImpl(BackendMessage, MouseLeft, true); err != nil {
+		return err
+	}
+	return mouseButtonImpl(BackendMessage, MouseLeft, false)
 }
 
 // ClickRightMouseAt moves to the specified screen coordinates and performs a right click.
@@ -627,9 +627,10 @@ func ClickRightMouseAt(x, y int32) error {
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	window.ProcMouseEvent.Call(0x0008, 0, 0, 0, 0) // RIGHTDOWN
-	window.ProcMouseEvent.Call(0x0010, 0, 0, 0, 0) // RIGHTUP
-	return nil
+	if err := mouseButtonImpl(BackendMessage, MouseRight, true); err != nil {
+		return err
+	}
+	return mouseButtonImpl(BackendMessage, MouseRight, false)
 }
 
 // ClickMiddleMouseAt moves to the specified screen coordinates and performs a middle click.
@@ -653,9 +654,10 @@ func ClickMiddleMouseAt(x, y int32) error {
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	window.ProcMouseEvent.Call(0x0020, 0, 0, 0, 0) // MIDDLEDOWN
-	window.ProcMouseEvent.Call(0x0040, 0, 0, 0, 0) // MIDDLEUP
-	return nil
+	if err := mouseButtonImpl(BackendMessage, MouseMiddle, true); err != nil {
+		return err
+	}
+	return mouseButtonImpl(BackendMessage, MouseMiddle, false)
 }
 
 // -----------------------------------------------------------------------------
@@ -753,8 +755,11 @@ func MouseUp(button MouseButton) error {
 
 // ClickMouse performs a left click at the current cursor position without moving.
 //
+// Button flags come from the same mapping as MouseDown and MouseUp.
 // Under BackendMessage the click uses mouse_event, which has no return value;
 // delivery failures of the button events are therefore not observable.
+// Under BackendHID a failed release is retried once, and both failures keep
+// the first error.
 func ClickMouse() error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -762,22 +767,22 @@ func ClickMouse() error {
 		return err
 	}
 
-	if getBackend() == BackendHID {
-		if err := hid.Button(0x001); err != nil {
-			return err
-		}
-		time.Sleep(50 * time.Millisecond)
-		if err := hid.Button(0x002); err != nil {
-			if err2 := hid.Button(0x002); err2 != nil {
+	cb := getBackend()
+	if err := mouseButtonImpl(cb, MouseLeft, true); err != nil {
+		return err
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := mouseButtonImpl(cb, MouseLeft, false); err != nil {
+		// mouse_event cannot report failure. Only the HID release is
+		// retried, and both failures keep the first error.
+		if cb == BackendHID {
+			if err2 := mouseButtonImpl(cb, MouseLeft, false); err2 != nil {
 				return err
 			}
+			return nil
 		}
-		return nil
+		return err
 	}
-
-	window.ProcMouseEvent.Call(0x0002, 0, 0, 0, 0)
-	time.Sleep(50 * time.Millisecond)
-	window.ProcMouseEvent.Call(0x0004, 0, 0, 0, 0)
 	return nil
 }
 
@@ -860,10 +865,13 @@ func MoveMouseToExact(x, y int32) error {
 	return nil
 }
 
+// mouseEventWheel is MOUSEEVENTF_WHEEL.
+const mouseEventWheel = 0x0800
+
 // mouseEventWheelArgs returns the mouse_event arguments for one wheel
 // stroke. The signature is (dwFlags, dx, dy, dwData, dwExtraInfo).
 func mouseEventWheelArgs(delta int32) (flags, dx, dy, data, extra uintptr) {
-	return 0x0800, 0, 0, uintptr(uint32(delta)), 0
+	return mouseEventWheel, 0, 0, uintptr(uint32(delta)), 0
 }
 
 // ScrollWheel scrolls by whole wheel steps. Positive steps scroll forward.
@@ -878,7 +886,7 @@ func ScrollWheel(steps int) error {
 		return ErrInvalidScrollSteps
 	}
 
-	delta := int32(steps * 120)
+	delta := int32(steps * mouse.WHEEL_DELTA)
 	if getBackend() == BackendHID {
 		return hid.Scroll(delta)
 	}
