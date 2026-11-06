@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"runtime"
+	"sync"
 	"syscall"
 	"unsafe"
 )
@@ -23,16 +24,25 @@ var (
 	ErrSendFailed      = fmt.Errorf("interception_send failed")
 )
 
-// Default library name
-var libraryPath = "interception.dll"
+// Default library name. libraryMu guards libraryPath and the loaded module
+// handle so SetLibraryPath cannot race with Load or Unload.
+var (
+	libraryMu   sync.Mutex
+	libraryPath = "interception.dll"
+)
 
 // SetLibraryPath sets the path for LoadLibrary.
 func SetLibraryPath(path string) {
+	libraryMu.Lock()
 	libraryPath = path
+	libraryMu.Unlock()
 }
 
 // Load loads the interception.dll and resolves function addresses.
 func Load() error {
+	libraryMu.Lock()
+	defer libraryMu.Unlock()
+
 	if dllHandle != 0 {
 		return nil
 	}
@@ -61,6 +71,9 @@ func Load() error {
 
 // Unload frees the loaded DLL.
 func Unload() {
+	libraryMu.Lock()
+	defer libraryMu.Unlock()
+
 	if dllHandle != 0 {
 		syscall.FreeLibrary(dllHandle)
 		dllHandle = 0

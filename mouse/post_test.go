@@ -1,6 +1,9 @@
 package mouse
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestWheelDelta(t *testing.T) {
 	if WHEEL_DELTA != 120 {
@@ -20,6 +23,27 @@ func TestWheelDelta(t *testing.T) {
 		if int32(got) != delta {
 			t.Errorf("wheelDelta(%d) = %d", delta, got)
 		}
+	}
+}
+
+func TestMakeLParamRange(t *testing.T) {
+	if _, err := makeLParam(32768, 0); err == nil {
+		t.Fatal("makeLParam accepted x=32768")
+	}
+	if _, err := makeLParam(0, -32769); err == nil {
+		t.Fatal("makeLParam accepted y=-32769")
+	}
+	if _, err := makeLParam(-32769, 0); !errors.Is(err, ErrInvalidMouseCoordinate) {
+		t.Fatalf("makeLParam(x=-32769) = %v, want ErrInvalidMouseCoordinate", err)
+	}
+	got, err := makeLParam(32767, -32768)
+	if err != nil {
+		t.Fatalf("makeLParam(edge) = %v", err)
+	}
+	// Low word is 32767. High word is the two's-complement of -32768, which is 0x8000.
+	const want = uintptr(32767) | uintptr(0x8000)<<16
+	if got != want {
+		t.Fatalf("makeLParam(edge) = %#x, want %#x", got, want)
 	}
 }
 

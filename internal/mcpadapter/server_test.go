@@ -32,6 +32,14 @@ func TestReadRequestContentLength(t *testing.T) {
 	}
 }
 
+func TestReadRequestRejectsHugeContentLength(t *testing.T) {
+	raw := fmt.Sprintf("Content-Length: %d\r\n\r\n", maxRequestBytes+1)
+	_, err := readRequest(bufio.NewReader(strings.NewReader(raw)))
+	if err == nil {
+		t.Fatal("oversized Content-Length was accepted")
+	}
+}
+
 func TestMutatingToolsBlockedByDefault(t *testing.T) {
 	server := NewServer(Config{})
 
@@ -514,6 +522,7 @@ func TestMapLibraryErrorScrollMappings(t *testing.T) {
 	}{
 		{winput.ErrInvalidScrollSteps, "validation_error"},
 		{winput.ErrInvalidScrollDelta, "validation_error"},
+		{winput.ErrInvalidMouseCoordinate, "validation_error"},
 		{winput.ErrDirectedScrollUnsupported, "backend_unavailable"},
 		{winput.ErrWindowNotFound, "target_not_found"},
 	}

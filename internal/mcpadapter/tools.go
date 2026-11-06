@@ -128,7 +128,7 @@ func defaultCatalog() []Tool {
 				"Selector precedence: title > class > process_name > pid; extra non-empty selectors are ignored. " +
 				"For process_name or pid the hit is chosen from a candidate list via index (default 0) and count reports how many windows matched. " +
 				"PID candidates come from the current EnumWindows Z-order and may include hidden top-level windows; " +
-				"process_name resolves only the first same-named process (Toolhelp snapshot). " +
+				"process_name collects top-level windows from every process with that executable name, in Toolhelp snapshot order. " +
 				"The returned title, class and process_name fields echo the requested filters, not the window's own identity. " +
 				"To learn a window's actual identity, bind the returned target_id and call read_text.",
 			InputSchema: objectSchema(map[string]any{

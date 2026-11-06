@@ -460,7 +460,7 @@ FindByPID returns all top-level windows belonging to the specified Process ID.
 ```go
 func FindByProcessName(name string) ([]*Window, error)
 ```
-FindByProcessName returns all top-level windows belonging to the process with the given executable name.
+FindByProcessName returns every top-level window of every process whose executable name matches. A process with no top-level window is skipped. Snapshot order is preserved.
 
 #### func (*Window) FindChildByClass
 

@@ -56,13 +56,33 @@ func FindByPID(pid uint32) ([]*Window, error) {
 	return windows, nil
 }
 
-// FindByProcessName searches for all top-level windows belonging to a process with the given executable name.
+// FindByProcessName returns every top-level window belonging to any process
+// whose executable name matches. Several processes may share that name; a
+// process with no top-level window is skipped. Snapshot order is preserved.
 func FindByProcessName(name string) ([]*Window, error) {
-	pid, err := window.FindPIDByName(name)
+	pids, err := window.FindPIDsByName(name)
 	if err != nil {
 		return nil, err
 	}
-	return FindByPID(pid)
+	return windowsForPIDs(pids, FindByPID)
+}
+
+// windowsForPIDs collects lookup results for every PID. A PID that has no
+// windows does not fail the whole call. The result is ErrWindowNotFound only
+// when every PID contributes nothing.
+func windowsForPIDs(pids []uint32, lookup func(uint32) ([]*Window, error)) ([]*Window, error) {
+	var all []*Window
+	for _, pid := range pids {
+		wins, err := lookup(pid)
+		if err != nil || len(wins) == 0 {
+			continue
+		}
+		all = append(all, wins...)
+	}
+	if len(all) == 0 {
+		return nil, ErrWindowNotFound
+	}
+	return all, nil
 }
 
 // FindChildByClass searches for a child window with the specified class name.
@@ -218,7 +238,11 @@ func moveImpl(cb Backend, hwnd uintptr, x, y int32, isRelative bool) error {
 			if err != nil {
 				return err
 			}
-			return hid.Move(cx+x, cy+y)
+			tx, ty, ok := addCursorDelta(cx, cy, x, y)
+			if !ok {
+				return errRelativeMoveOverflow
+			}
+			return hid.Move(tx, ty)
 		} else {
 			sx, sy, err := window.ClientToScreen(hwnd, x, y)
 			if err != nil {
@@ -233,7 +257,10 @@ func moveImpl(cb Backend, hwnd uintptr, x, y int32, isRelative bool) error {
 		if err != nil {
 			return err
 		}
-		tx, ty := sx+x, sy+y
+		tx, ty, ok := addCursorDelta(sx, sy, x, y)
+		if !ok {
+			return errRelativeMoveOverflow
+		}
 		cx, cy, err := window.ScreenToClient(hwnd, tx, ty)
 		if err != nil {
 			return err
@@ -395,6 +422,8 @@ func (w *Window) Move(x, y int32) error {
 }
 
 // MoveRel simulates relative mouse movement from the current cursor position.
+// The cursor plus the delta must fit in int32. An overflowing sum returns an
+// error and does not move.
 func (w *Window) MoveRel(dx, dy int32) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
@@ -786,6 +815,10 @@ func ClickMouse() error {
 	return nil
 }
 
+// errRelativeMoveOverflow is returned when a cursor plus a delta does not fit
+// in int32. MoveMouseBy and Window.MoveRel share it.
+var errRelativeMoveOverflow = errors.New("relative move result exceeds int32")
+
 func addCursorDelta(cx, cy, dx, dy int32) (int32, int32, bool) {
 	nx := int64(cx) + int64(dx)
 	ny := int64(cy) + int64(dy)
@@ -817,7 +850,7 @@ func MoveMouseBy(dx, dy int32) error {
 	}
 	nx, ny, ok := addCursorDelta(cx, cy, dx, dy)
 	if !ok {
-		return fmt.Errorf("relative move result exceeds int32")
+		return errRelativeMoveOverflow
 	}
 	r, _, _ := window.ProcSetCursorPos.Call(uintptr(nx), uintptr(ny))
 	if r == 0 {

@@ -65,6 +65,10 @@ var (
 	// ErrInvalidMouseButton means the MouseButton value is not one of the exported identities.
 	ErrInvalidMouseButton = errors.New("invalid mouse button")
 
+	// ErrInvalidMouseCoordinate means a mouse message coordinate does not fit
+	// in the signed 16-bit halves of lParam. The message is not sent.
+	ErrInvalidMouseCoordinate = mouse.ErrInvalidMouseCoordinate
+
 	// ErrInvalidScrollDelta means a directed scroll delta does not fit in int16.
 	// Window.Scroll on BackendMessage returns this value, which aliases
 	// mouse.ErrInvalidScrollDelta. hid.ErrInvalidScrollDelta is a separate

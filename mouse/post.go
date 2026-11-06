@@ -31,6 +31,10 @@ const (
 
 var ErrInvalidScrollDelta = errors.New("scroll delta out of int16 range")
 
+// ErrInvalidMouseCoordinate means a client or screen coordinate does not fit
+// in the signed 16-bit halves of a mouse-message lParam.
+var ErrInvalidMouseCoordinate = errors.New("mouse coordinate out of int16 range")
+
 // Helper to check for errors and wrap errno
 func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
 	r, _, e := window.ProcPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
@@ -44,20 +48,13 @@ func post(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) error {
 }
 
 // makeLParam constructs the LPARAM for mouse messages.
-func makeLParam(x, y int32) uintptr {
-	lx := clipToInt16(x)
-	ly := clipToInt16(y)
-	return uintptr(uint16(lx)) | (uintptr(uint16(ly)) << 16)
-}
-
-func clipToInt16(v int32) int16 {
-	if v > 32767 {
-		return 32767
+// Coordinates that do not fit in int16 are rejected. They are not clipped:
+// a clipped message would land at the wrong point and still look successful.
+func makeLParam(x, y int32) (uintptr, error) {
+	if x > 32767 || x < -32768 || y > 32767 || y < -32768 {
+		return 0, ErrInvalidMouseCoordinate
 	}
-	if v < -32768 {
-		return -32768
-	}
-	return int16(v)
+	return uintptr(uint16(int16(x))) | (uintptr(uint16(int16(y))) << 16), nil
 }
 
 func wheelDelta(delta int32) (int16, error) {
@@ -97,12 +94,19 @@ func postButtonUp(hwnd uintptr, msg uint32, lparam uintptr) error {
 
 // Move simulates a mouse move event to the specified client coordinates using PostMessage.
 func Move(hwnd uintptr, x, y int32) error {
-	return post(hwnd, WM_MOUSEMOVE, 0, makeLParam(x, y))
+	lparam, err := makeLParam(x, y)
+	if err != nil {
+		return err
+	}
+	return post(hwnd, WM_MOUSEMOVE, 0, lparam)
 }
 
 // Click simulates a left mouse button click at the specified client coordinates.
 func Click(hwnd uintptr, x, y int32) error {
-	lparam := makeLParam(x, y)
+	lparam, err := makeLParam(x, y)
+	if err != nil {
+		return err
+	}
 	if err := post(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam); err != nil {
 		return err
 	}
@@ -112,7 +116,10 @@ func Click(hwnd uintptr, x, y int32) error {
 
 // ClickRight simulates a right mouse button click at the specified client coordinates.
 func ClickRight(hwnd uintptr, x, y int32) error {
-	lparam := makeLParam(x, y)
+	lparam, err := makeLParam(x, y)
+	if err != nil {
+		return err
+	}
 	if err := post(hwnd, WM_RBUTTONDOWN, MK_RBUTTON, lparam); err != nil {
 		return err
 	}
@@ -122,7 +129,10 @@ func ClickRight(hwnd uintptr, x, y int32) error {
 
 // ClickMiddle simulates a middle mouse button click at the specified client coordinates.
 func ClickMiddle(hwnd uintptr, x, y int32) error {
-	lparam := makeLParam(x, y)
+	lparam, err := makeLParam(x, y)
+	if err != nil {
+		return err
+	}
 	if err := post(hwnd, WM_MBUTTONDOWN, MK_MBUTTON, lparam); err != nil {
 		return err
 	}
@@ -132,7 +142,10 @@ func ClickMiddle(hwnd uintptr, x, y int32) error {
 
 // DoubleClick simulates a left mouse button double-click at the specified client coordinates.
 func DoubleClick(hwnd uintptr, x, y int32) error {
-	lparam := makeLParam(x, y)
+	lparam, err := makeLParam(x, y)
+	if err != nil {
+		return err
+	}
 	for _, step := range doubleClickSequence() {
 		err := post(hwnd, step.msg, step.wparam, lparam)
 		if err == nil {
@@ -167,7 +180,10 @@ func Scroll(hwnd uintptr, x, y int32, delta int32) error {
 
 	// High-order word is the signed delta.
 	wparam := uintptr(uint16(d)) << 16
-	lparam := makeLParam(sx, sy)
+	lparam, err := makeLParam(sx, sy)
+	if err != nil {
+		return err
+	}
 
 	return post(hwnd, WM_MOUSEWHEEL, wparam, lparam)
 }

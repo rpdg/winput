@@ -36,8 +36,22 @@ func sendMessageTimeout(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr
 	return result, nil
 }
 
+// windowTextChars converts a reported character count into a buffer length.
+// The allocation is the count plus one UTF-16 NUL, and it must stay within
+// maxClipboardBytes. A hostile or wrapped count is rejected before make.
+func windowTextChars(reported uintptr) (int, error) {
+	if reported >= maxClipboardBytes/2 {
+		return 0, fmt.Errorf("%w: text length exceeds limit", ErrReadTextFailed)
+	}
+	return int(reported), nil
+}
+
 func getWindowText(hwnd uintptr, length int) (string, error) {
-	buf := make([]uint16, length+1)
+	n, err := windowTextChars(uintptr(length))
+	if err != nil {
+		return "", err
+	}
+	buf := make([]uint16, n+1)
 	r, _, e := ProcGetWindowTextW.Call(
 		hwnd,
 		uintptr(unsafe.Pointer(&buf[0])),
@@ -60,7 +74,11 @@ func GetText(hwnd uintptr) (string, error) {
 
 	length, err := sendMessageTimeout(hwnd, WM_GETTEXTLENGTH, 0, 0, 200)
 	if err == nil {
-		buf := make([]uint16, int(length)+1)
+		n, nerr := windowTextChars(length)
+		if nerr != nil {
+			return "", nerr
+		}
+		buf := make([]uint16, n+1)
 		if _, err := sendMessageTimeout(
 			hwnd,
 			WM_GETTEXT,
@@ -78,6 +96,10 @@ func GetText(hwnd uintptr) (string, error) {
 			return "", fmt.Errorf("%w: %v", ErrReadTextFailed, errno)
 		}
 	}
+	chars, nerr := windowTextChars(n)
+	if nerr != nil {
+		return "", nerr
+	}
 
-	return getWindowText(hwnd, int(n))
+	return getWindowText(hwnd, chars)
 }

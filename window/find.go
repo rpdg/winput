@@ -7,16 +7,19 @@ import (
 	"unsafe"
 )
 
-func utf16Ptr(s string) *uint16 {
-	ptr, _ := syscall.UTF16PtrFromString(s)
-	return ptr
+func utf16Ptr(s string) (*uint16, error) {
+	return syscall.UTF16PtrFromString(s)
 }
 
 // FindByTitle searches for a top-level window matching the exact title.
 func FindByTitle(title string) (uintptr, error) {
+	titlePtr, err := utf16Ptr(title)
+	if err != nil {
+		return 0, fmt.Errorf("invalid window title: %w", err)
+	}
 	ret, _, _ := ProcFindWindowW.Call(
 		0,
-		uintptr(unsafe.Pointer(utf16Ptr(title))),
+		uintptr(unsafe.Pointer(titlePtr)),
 	)
 	if ret == 0 {
 		return 0, fmt.Errorf("window not found with title: %s", title)
@@ -26,8 +29,12 @@ func FindByTitle(title string) (uintptr, error) {
 
 // FindByClass searches for a top-level window matching the specified class name.
 func FindByClass(class string) (uintptr, error) {
+	classPtr, err := utf16Ptr(class)
+	if err != nil {
+		return 0, fmt.Errorf("invalid window class: %w", err)
+	}
 	ret, _, _ := ProcFindWindowW.Call(
-		uintptr(unsafe.Pointer(utf16Ptr(class))),
+		uintptr(unsafe.Pointer(classPtr)),
 		0,
 	)
 	if ret == 0 {
@@ -38,10 +45,14 @@ func FindByClass(class string) (uintptr, error) {
 
 // FindChildByClass searches for a child window with the specified class name.
 func FindChildByClass(parent uintptr, class string) (uintptr, error) {
+	classPtr, err := utf16Ptr(class)
+	if err != nil {
+		return 0, fmt.Errorf("invalid window class: %w", err)
+	}
 	ret, _, _ := ProcFindWindowExW.Call(
 		parent,
 		0,
-		uintptr(unsafe.Pointer(utf16Ptr(class))),
+		uintptr(unsafe.Pointer(classPtr)),
 		0,
 	)
 	if ret == 0 {
@@ -100,14 +111,38 @@ type PROCESSENTRY32 struct {
 	ExeFile         [260]uint16
 }
 
-// FindPIDByName searches for a process ID by its executable name (e.g., "notepad.exe").
-// The comparison is case-insensitive.
-func FindPIDByName(name string) (uint32, error) {
+// processEntry is one process in a toolhelp snapshot.
+type processEntry struct {
+	pid uint32
+	exe string
+}
+
+// matchingPIDs returns every PID whose executable matches name.
+// The comparison is case-insensitive. A name without ".exe" matches the
+// ".exe" form. Snapshot order is preserved.
+func matchingPIDs(entries []processEntry, name string) []uint32 {
+	target := strings.ToLower(name)
+	if !strings.HasSuffix(target, ".exe") {
+		target += ".exe"
+	}
+	var pids []uint32
+	for _, e := range entries {
+		if strings.EqualFold(e.exe, target) {
+			pids = append(pids, e.pid)
+		}
+	}
+	return pids
+}
+
+// FindPIDsByName returns every process ID with the given executable name
+// (for example "notepad.exe"), in toolhelp snapshot order. The comparison
+// is case-insensitive.
+func FindPIDsByName(name string) ([]uint32, error) {
 	const INVALID_HANDLE_VALUE = ^uintptr(0)
 
 	snap, _, err := ProcCreateToolhelp32Snapshot.Call(TH32CS_SNAPPROCESS, 0)
 	if snap == INVALID_HANDLE_VALUE {
-		return 0, fmt.Errorf("CreateToolhelp32Snapshot failed: %v", err)
+		return nil, fmt.Errorf("CreateToolhelp32Snapshot failed: %v", err)
 	}
 	defer ProcCloseHandle.Call(snap)
 
@@ -116,25 +151,36 @@ func FindPIDByName(name string) (uint32, error) {
 
 	r, _, err := ProcProcess32First.Call(snap, uintptr(unsafe.Pointer(&pe32)))
 	if r == 0 {
-		return 0, fmt.Errorf("Process32First failed: %v", err)
+		return nil, fmt.Errorf("Process32First failed: %v", err)
 	}
 
-	target := strings.ToLower(name)
-	if !strings.HasSuffix(target, ".exe") {
-		target += ".exe"
-	}
-
+	var entries []processEntry
 	for {
-		exeName := syscall.UTF16ToString(pe32.ExeFile[:])
-		if strings.EqualFold(exeName, target) {
-			return pe32.ProcessID, nil
-		}
-
+		entries = append(entries, processEntry{
+			pid: pe32.ProcessID,
+			exe: syscall.UTF16ToString(pe32.ExeFile[:]),
+		})
 		r, _, _ = ProcProcess32Next.Call(snap, uintptr(unsafe.Pointer(&pe32)))
 		if r == 0 {
 			break
 		}
 	}
 
-	return 0, fmt.Errorf("process not found: %s", name)
+	pids := matchingPIDs(entries, name)
+	if len(pids) == 0 {
+		return nil, fmt.Errorf("process not found: %s", name)
+	}
+	return pids, nil
+}
+
+// FindPIDByName searches for a process ID by its executable name (e.g., "notepad.exe").
+// The comparison is case-insensitive. When several processes share the name,
+// this returns the first one in toolhelp order. Use FindPIDsByName to collect
+// every match.
+func FindPIDByName(name string) (uint32, error) {
+	pids, err := FindPIDsByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return pids[0], nil
 }

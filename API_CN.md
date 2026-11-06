@@ -381,7 +381,7 @@ FindByPID 返回属于指定进程 ID 的所有顶级窗口。
 ```go
 func FindByProcessName(name string) ([]*Window, error)
 ```
-FindByProcessName 返回属于指定可执行文件名称的所有顶级窗口。
+FindByProcessName 返回每一个同名可执行文件进程的全部顶级窗口。没有顶级窗口的进程会被跳过。顺序与进程快照一致。
 
 #### func (*Window) FindChildByClass
 

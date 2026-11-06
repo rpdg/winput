@@ -32,10 +32,10 @@ type JSONRPCResponse struct {
 }
 
 type Server struct {
-	catalog         []Tool
-	registry        *Registry
-	allowMutations  bool
-	allowSensitive  bool
+	catalog        []Tool
+	registry       *Registry
+	allowMutations bool
+	allowSensitive bool
 }
 
 type Config struct {
@@ -605,7 +605,7 @@ func mapLibraryError(err error) error {
 		return &codedError{Code: "permission_denied", Message: "permission denied", Retryable: false, Cause: err}
 	case errors.Is(err, winput.ErrDriverNotInstalled), errors.Is(err, winput.ErrDLLLoadFailed), errors.Is(err, winput.ErrDirectedScrollUnsupported):
 		return &codedError{Code: "backend_unavailable", Message: "backend unavailable", Retryable: false, Cause: err}
-	case errors.Is(err, winput.ErrInvalidScrollSteps), errors.Is(err, winput.ErrInvalidScrollDelta):
+	case errors.Is(err, winput.ErrInvalidScrollSteps), errors.Is(err, winput.ErrInvalidScrollDelta), errors.Is(err, winput.ErrInvalidMouseCoordinate):
 		return &codedError{Code: "validation_error", Message: "tool call failed", Retryable: false, Cause: err}
 	default:
 		return &codedError{Code: "internal_error", Message: "tool call failed", Retryable: false, Cause: err}
@@ -635,6 +635,10 @@ func errorDetails(err error) string {
 	return err.Error()
 }
 
+// maxRequestBytes is the hard cap for one framed MCP message. The check
+// runs before the body is allocated.
+const maxRequestBytes = 16 << 20
+
 func readRequest(reader *bufio.Reader) (*JSONRPCRequest, error) {
 	firstLine, err := reader.ReadString('\n')
 	if err != nil {
@@ -655,7 +659,7 @@ func readRequest(reader *bufio.Reader) (*JSONRPCRequest, error) {
 		}
 		lengthHeader := headers.Get("Content-Length")
 		var length int
-		if _, err := fmt.Sscanf(lengthHeader, "%d", &length); err != nil || length <= 0 {
+		if _, err := fmt.Sscanf(lengthHeader, "%d", &length); err != nil || length <= 0 || length > maxRequestBytes {
 			return nil, fmt.Errorf("invalid Content-Length header")
 		}
 		payload = make([]byte, length)
@@ -836,9 +840,9 @@ var keyNames = map[string]winput.Key{
 	"0": winput.Key0, "1": winput.Key1, "2": winput.Key2,
 	"3": winput.Key3, "4": winput.Key4, "5": winput.Key5,
 	"6": winput.Key6, "7": winput.Key7, "8": winput.Key8,
-	"9": winput.Key9,
+	"9":   winput.Key9,
 	"ESC": winput.KeyEsc,
-	"F1": winput.KeyF1, "F2": winput.KeyF2, "F3": winput.KeyF3,
+	"F1":  winput.KeyF1, "F2": winput.KeyF2, "F3": winput.KeyF3,
 	"F4": winput.KeyF4, "F5": winput.KeyF5, "F6": winput.KeyF6,
 	"F7": winput.KeyF7, "F8": winput.KeyF8, "F9": winput.KeyF9,
 	"F10": winput.KeyF10, "F11": winput.KeyF11, "F12": winput.KeyF12,

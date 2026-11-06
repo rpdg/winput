@@ -95,6 +95,9 @@ func TestErrorAliases(t *testing.T) {
 	if ErrInvalidScrollDelta != mouse.ErrInvalidScrollDelta {
 		t.Fatal("ErrInvalidScrollDelta is not the mouse sentinel")
 	}
+	if ErrInvalidMouseCoordinate != mouse.ErrInvalidMouseCoordinate {
+		t.Fatal("ErrInvalidMouseCoordinate is not the mouse sentinel")
+	}
 	if ErrInvalidScrollDelta == hid.ErrInvalidScrollDelta {
 		t.Fatal("HID scroll sentinel collapsed into the mouse sentinel")
 	}
@@ -318,6 +321,42 @@ func TestScrollWheelValidation(t *testing.T) {
 		if err := ScrollWheel(steps); !errors.Is(err, ErrInvalidScrollSteps) {
 			t.Errorf("ScrollWheel(%d) = %v, want ErrInvalidScrollSteps", steps, err)
 		}
+	}
+}
+
+func TestFindByTitleRejectsEmbeddedNUL(t *testing.T) {
+	w, err := FindByTitle("a\x00b")
+	if w != nil || !errors.Is(err, ErrWindowNotFound) {
+		t.Fatalf("FindByTitle(NUL) = (%v, %v), want nil and ErrWindowNotFound", w, err)
+	}
+	w, err = FindByClass("\x00")
+	if w != nil || !errors.Is(err, ErrWindowNotFound) {
+		t.Fatalf("FindByClass(NUL) = (%v, %v), want nil and ErrWindowNotFound", w, err)
+	}
+}
+
+func TestWindowsForPIDsSkipsEmptyProcess(t *testing.T) {
+	keep := &Window{HWND: 7}
+	got, err := windowsForPIDs([]uint32{10, 20}, func(pid uint32) ([]*Window, error) {
+		if pid == 10 {
+			return nil, ErrWindowNotFound
+		}
+		if pid == 20 {
+			return []*Window{keep}, nil
+		}
+		return nil, ErrWindowNotFound
+	})
+	if err != nil {
+		t.Fatalf("windowsForPIDs: %v", err)
+	}
+	if len(got) != 1 || got[0] != keep {
+		t.Fatalf("windowsForPIDs = %v, want the second process window", got)
+	}
+
+	if _, err := windowsForPIDs([]uint32{10}, func(uint32) ([]*Window, error) {
+		return nil, ErrWindowNotFound
+	}); !errors.Is(err, ErrWindowNotFound) {
+		t.Fatalf("all-empty windowsForPIDs = %v, want ErrWindowNotFound", err)
 	}
 }
 
