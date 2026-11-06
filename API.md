@@ -40,6 +40,7 @@ Package `winput` provides a high-level interface for Windows background input au
     *   [func (*Window) ClickRight](#func-window-clickright)
     *   [func (*Window) ClientRect](#func-window-clientrect)
     *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
+    *   [func (*Window) ClientInfo](#func-window-clientinfo)
     *   [func (*Window) DPI](#func-window-dpi)
     *   [func (*Window) DoubleClick](#func-window-doubleclick)
     *   [func (*Window) KeyDown](#func-window-keydown)
@@ -485,9 +486,13 @@ KeyUp sends a key up event to the window.
 #### func (*Window) Press
 
 ```go
-func (w *Window) Press(key Key) error
+func (w *Window) Press(key Key, interval ...time.Duration) error
 ```
-Press simulates a full keystroke (KeyDown followed by KeyUp).
+Press simulates a full keystroke (KeyDown followed by KeyUp). The optional
+`interval` is the hold time (delay between a successful key-down and the
+release) on both backends; without it the hold is 30ms. `Press(key, 0)` does
+not sleep between down and up. A negative interval, or more than one interval,
+returns `ErrInvalidInterval` before any key is pressed.
 
 #### func (*Window) PressHotkey
 
@@ -503,9 +508,14 @@ through window messages alone.
 #### func (*Window) Type
 
 ```go
-func (w *Window) Type(text string) error
+func (w *Window) Type(text string, interval ...time.Duration) error
 ```
-Types a string, automatically handling Shift modifiers.
+Types a string, automatically handling Shift modifiers. The optional `interval`
+is the character gap: on the message backend it is slept between runes (30ms
+by default, via `keyboard.TypeWithInterval`) and not after the last rune; on
+HID the fixed per-character hold is unchanged and an explicit interval is
+slept between character releases. A negative interval, or more than one
+interval, returns `ErrInvalidInterval` before any character is sent.
 
 #### func (*Window) Value
 
@@ -541,3 +551,27 @@ ScreenToClient converts screen-relative coordinates to window-client-relative co
 func (w *Window) ClientToScreen(x, y int32) (sx, sy int32, err error)
 ```
 ClientToScreen converts window-client-relative coordinates to screen-relative coordinates.
+
+#### func (*Window) ClientInfo
+
+```go
+func (w *Window) ClientInfo() (x, y, width, height int32, err error)
+```
+ClientInfo returns the client-area rectangle as screen coordinates: the screen
+position of the client-origin (0, 0) plus the client width and height. It
+excludes the title bar and borders.
+
+The order is fixed: `ClientToScreen(0, 0)` first, then `ClientRect`. If either
+call fails, all four integers are zero and the error is returned; a failed
+first call does not reach the second one. A minimized window follows the
+existing `"window is minimized"` error.
+
+The coordinates use the DPI awareness the calling thread already has. To align
+`ClientInfo` with `screen.CaptureRegion`, the process must run with the same
+DPI awareness as the screenshot; `ClientInfo` does not call
+`EnablePerMonitorDPI`. The four values come from two independent Win32 calls
+and are not an atomic snapshot.
+
+Use `EnablePerMonitorDPI` only at process startup; DPI awareness cannot be
+changed reliably later.
+

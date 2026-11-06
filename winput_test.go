@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
@@ -87,6 +88,80 @@ func abs(x int32) int32 {
 // -----------------------------------------------------------------------------
 // 1. Window Discovery & State Tests
 // -----------------------------------------------------------------------------
+
+// TestClientInfo verifies Window.ClientInfo against the two existing
+// coordinate calls it composes. It skips (not fails) when no usable notepad
+// window exists; a skip does not prove the described behavior.
+func TestClientInfo(t *testing.T) {
+	cmd := exec.Command("notepad.exe")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("ClientInfo skipped: cannot start notepad: %v", err)
+	}
+	cleanup := cmd
+	defer func() {
+		if cleanup != nil && cleanup.Process != nil {
+			cleanup.Process.Kill()
+		}
+	}()
+	time.Sleep(1 * time.Second)
+
+	wins, err := winput.FindByProcessName("notepad.exe")
+	if err != nil || len(wins) == 0 {
+		t.Skipf("ClientInfo skipped: notepad window not found: %v", err)
+	}
+	w := wins[0]
+
+	x, y, width, height, err := w.ClientInfo()
+	if err != nil {
+		t.Fatalf("ClientInfo failed: %v", err)
+	}
+	cx, cy, err := w.ClientToScreen(0, 0)
+	if err != nil {
+		t.Fatalf("ClientToScreen failed: %v", err)
+	}
+	cw, ch, err := w.ClientRect()
+	if err != nil {
+		t.Fatalf("ClientRect failed: %v", err)
+	}
+	if x != cx || y != cy || width != cw || height != ch {
+		t.Fatalf("ClientInfo = (%d, %d, %d, %d), want (%d, %d, %d, %d)",
+			x, y, width, height, cx, cy, cw, ch)
+	}
+
+	t.Run("InvalidHandle", func(t *testing.T) {
+		invalid := &winput.Window{}
+		_, _, _, _, err := invalid.ClientInfo()
+		if err == nil {
+			t.Fatal("ClientInfo on a zero handle succeeded")
+		}
+		// window.ClientToScreen returns a plain fmt.Errorf; errors.Is cannot
+		// recognize it, so compare the produced text. A wrong implementation
+		// that called ClientRect first would return "GetClientRect failed".
+		if err.Error() != "ClientToScreen failed" {
+			t.Fatalf("zero-handle ClientInfo error = %q, want %q", err.Error(), "ClientToScreen failed")
+		}
+	})
+
+	t.Run("Minimized", func(t *testing.T) {
+		const swMinimize = 6 // SW_MINIMIZE
+		const swRestore = 9  // SW_RESTORE
+		user32 := syscall.NewLazyDLL("user32.dll")
+		procShowWindow := user32.NewProc("ShowWindow")
+		procShowWindow.Call(w.HWND, swMinimize)
+		time.Sleep(150 * time.Millisecond)
+		defer procShowWindow.Call(w.HWND, swRestore)
+
+		_, _, _, _, err := w.ClientInfo()
+		if err == nil {
+			// The environment refused to minimize the window; the
+			// minimized-path behavior is not proven here.
+			t.Skipf("window did not minimize in this environment; ClientInfo succeeded")
+		}
+		if err.Error() != "window is minimized" {
+			t.Fatalf("minimized ClientInfo error = %q, want %q", err.Error(), "window is minimized")
+		}
+	})
+}
 
 func TestWindowDiscovery(t *testing.T) {
 	w, cmd := setupTestApp(t)

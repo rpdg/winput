@@ -1456,6 +1456,34 @@ func (w *Window) ClientRect() (width, height int32, err error) {
 	return window.GetClientRect(w.HWND)
 }
 
+// ClientInfo returns the client-area rectangle as screen coordinates.
+// It returns the screen coordinate of the client-area origin (0, 0) plus the
+// client width and height. The rectangle excludes the title bar and borders.
+//
+// The order is fixed: first ClientToScreen(0, 0), then ClientRect. If either
+// call fails, all four integers are zero and the error is returned; a failed
+// first call does not reach the second one. A minimized window follows the
+// existing "window is minimized" error from window.ClientToScreen.
+//
+// DPI: the coordinates use the DPI awareness the calling thread already has.
+// Aligning ClientInfo with screen.CaptureRegion requires the process to have
+// the same awareness as the screenshot; this method does not call
+// EnablePerMonitorDPI and does not convert physical pixels.
+//
+// The four values are read by two independent Win32 calls and are not an
+// atomic snapshot: another process can move or resize the window between them.
+func (w *Window) ClientInfo() (x, y, width, height int32, err error) {
+	x, y, err = w.ClientToScreen(0, 0)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	width, height, err = w.ClientRect()
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return x, y, width, height, nil
+}
+
 // ScreenToClient converts screen coordinates to client coordinates.
 func (w *Window) ScreenToClient(x, y int32) (cx, cy int32, err error) {
 	return window.ScreenToClient(w.HWND, x, y)

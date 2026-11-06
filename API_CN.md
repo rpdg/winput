@@ -43,6 +43,7 @@
     *   [func (*Window) ClickRight](#func-window-clickright)
     *   [func (*Window) ClientRect](#func-window-clientrect)
     *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
+    *   [func (*Window) ClientInfo](#func-window-clientinfo)
     *   [func (*Window) DPI](#func-window-dpi)
     *   [func (*Window) DoubleClick](#func-window-doubleclick)
     *   [func (*Window) KeyDown](#func-window-keydown)
@@ -499,3 +500,17 @@ ScreenToClient 将屏幕相对坐标转换为窗口客户区相对坐标。
 func (w *Window) ClientToScreen(x, y int32) (sx, sy int32, err error)
 ```
 ClientToScreen 将窗口客户区相对坐标转换为屏幕相对坐标。
+
+#### func (*Window) ClientInfo
+
+```go
+func (w *Window) ClientInfo() (x, y, width, height int32, err error)
+```
+ClientInfo 以屏幕坐标返回客户区矩形：客户区原点 (0, 0) 的屏幕坐标，加上客户区的宽和高。不含标题栏和边框。
+
+调用顺序固定为：先 `ClientToScreen(0, 0)`，再 `ClientRect`。任一次调用失败时，四个整数均为 0 并返回该错误；第一次调用失败后不会到达第二次调用。最小化窗口沿用现有的 `"window is minimized"` 错误。
+
+坐标使用调用线程当前已有的 DPI 感知。要让 `ClientInfo` 与 `screen.CaptureRegion` 对齐，进程必须与截图使用同一种 DPI 感知；`ClientInfo` 自身不调用 `EnablePerMonitorDPI`。四个返回值来自两次独立的 Win32 调用，不是原子快照。
+
+`EnablePerMonitorDPI` 只应在进程启动早期调用。DPI 感知一旦设定便不能再可靠地改回。
+
