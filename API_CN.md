@@ -10,6 +10,9 @@
 *   [func GetCursorPos](#func-getcursorpos)
 *   [func SetBackend](#func-setbackend)
 *   [func SetHIDLibraryPath](#func-sethidlibrarypath)
+*   [func ProbeTarget](#func-probetarget)
+*   [func ProbeHID](#func-probehid)
+*   [func NewInput](#func-newinput)
 *   [func MoveMouseTo](#func-movemouseto)
 *   [func ClickMouseAt](#func-clickmouseat)
 *   [func MouseDown](#func-mousedown)
@@ -533,4 +536,12 @@ ClientInfo 以屏幕坐标返回客户区矩形：客户区原点 (0, 0) 的屏�
 坐标使用调用线程当前已有的 DPI 感知。要让 `ClientInfo` 与 `screen.CaptureRegion` 对齐，进程必须与截图使用同一种 DPI 感知；`ClientInfo` 自身不调用 `EnablePerMonitorDPI`。四个返回值来自两次独立的 Win32 调用，不是原子快照。
 
 `EnablePerMonitorDPI` 只应在进程启动早期调用。DPI 感知一旦设定便不能再可靠地改回。
+
+## 探针与任务级输入
+
+`ProbeTarget` 报告一个窗口的事实：进程文件名、该窗口自身的类名、从调用方看的完整性（`target_higher`、`equal`、`target_lower`、`unknown`），以及调用方 UIAccess（`enabled`、`disabled`、`unknown`）。警告只有 `uipi_likely_blocked`、`integrity_unknown`、`uiaccess_unknown`。它不推荐后端，不初始化 HID，也不修改 `SetBackend`。
+
+`ProbeHID` 返回 `initialized`、`dll_unavailable`、`driver_unavailable`、`devices_unavailable` 或 `unknown`。初始化失败仍然返回状态，且不修改全局后端。`SetBackend` 与 `NewInput(BackendHID)` 保持今天的公开错误。
+
+`NewInput` 只接受 `BackendMessage` 或 `BackendHID`。其它整型在初始化 HID 之前返回 `ErrInvalidBackend`。`ForWindow` 与 `Desktop` 把窗口操作和屏幕操作分开。执行器不读取全局后端。`PasteByClipboard`、光标查询、窗口查找、文本读取和 DPI 仍走原有函数。
 

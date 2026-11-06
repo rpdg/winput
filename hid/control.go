@@ -22,6 +22,15 @@ var (
 	ErrMoveNotConverged      = errors.New("HID move did not converge")
 	ErrOutsideVirtualDesktop = errors.New("target outside virtual desktop")
 	ErrInvalidScrollDelta    = errors.New("scroll delta out of int16 range")
+
+	// ErrLibraryNotFound is the load failure for a missing interception library.
+	// ErrSymbolsMissing is the load failure when the library is present but
+	// required exports are absent. ErrDevicesUnavailable is returned after a
+	// context was created and then destroyed because neither a mouse nor a
+	// keyboard device was found.
+	ErrLibraryNotFound    = interception.ErrLibraryNotFound
+	ErrSymbolsMissing     = interception.ErrSymbolsMissing
+	ErrDevicesUnavailable = errors.New("no interception devices found")
 )
 
 // SetLibraryPath sets the custom path for the interception.dll library.
@@ -79,7 +88,7 @@ func Init() error {
 		interception.DestroyContext(ctx)
 		interception.Unload()
 		ctx = 0
-		return fmt.Errorf("no interception devices found")
+		return ErrDevicesUnavailable
 	}
 
 	initialized = true

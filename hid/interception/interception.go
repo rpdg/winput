@@ -2,6 +2,7 @@ package interception
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -21,6 +22,7 @@ var (
 
 var (
 	ErrLibraryNotFound = fmt.Errorf("interception library not found")
+	ErrSymbolsMissing  = errors.New("interception library symbols missing")
 	ErrSendFailed      = fmt.Errorf("interception_send failed")
 )
 
@@ -63,7 +65,7 @@ func Load() error {
 	if procCreateContext == 0 || procSend == 0 {
 		syscall.FreeLibrary(h)
 		dllHandle = 0
-		return fmt.Errorf("library loaded but symbols missing")
+		return ErrSymbolsMissing
 	}
 
 	return nil

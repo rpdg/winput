@@ -8,6 +8,32 @@ import (
 	"github.com/rpdg/winput/screen"
 )
 
+func TestInitFailureIsNotCached(t *testing.T) {
+	initMutex.Lock()
+	already := initialized
+	initMutex.Unlock()
+	if already {
+		if err := Init(); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	interception.SetLibraryPath("winput-missing-interception.dll")
+	defer interception.SetLibraryPath("interception.dll")
+	if err := Init(); err == nil {
+		t.Fatal("missing library initialized")
+	}
+	initMutex.Lock()
+	stuck := initialized
+	initMutex.Unlock()
+	if stuck {
+		t.Fatal("failed init was cached as initialized")
+	}
+	if err := Init(); err == nil {
+		t.Fatal("retry of the missing library initialized")
+	}
+}
+
 func TestKeyStroke(t *testing.T) {
 	cases := []struct {
 		name     string

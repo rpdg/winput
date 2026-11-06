@@ -20,6 +20,19 @@ var (
 	// ErrWindowGone implies the window handle is no longer valid.
 	ErrWindowGone = errors.New("window is gone or invalid")
 
+	// ErrTargetChanged means the window handle was still valid, but its
+	// process, thread, or a class name already read at the start did not match
+	// at the end of a probe.
+	ErrTargetChanged = errors.New("target window changed during probe")
+
+	// ErrInputInvalid means an executor or facade was not produced by a
+	// successful NewInput, ForWindow, or Desktop call.
+	ErrInputInvalid = errors.New("input executor is invalid")
+
+	// ErrInvalidBackend means NewInput was given a value other than
+	// BackendMessage or BackendHID. BackendMessage itself is legal.
+	ErrInvalidBackend = errors.New("invalid input backend")
+
 	// ErrWindowNotVisible implies the window is hidden or minimized.
 	ErrWindowNotVisible = errors.New("window is not visible")
 

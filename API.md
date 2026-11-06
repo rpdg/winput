@@ -10,6 +10,9 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [func GetCursorPos](#func-getcursorpos)
 *   [func SetBackend](#func-setbackend)
 *   [func SetHIDLibraryPath](#func-sethidlibrarypath)
+*   [func ProbeTarget](#func-probetarget)
+*   [func ProbeHID](#func-probehid)
+*   [func NewInput](#func-newinput)
 *   [func MoveMouseTo](#func-movemouseto)
 *   [func ClickMouseAt](#func-clickmouseat)
 *   [func MouseDown](#func-mousedown)
@@ -632,4 +635,12 @@ and are not an atomic snapshot.
 
 Use `EnablePerMonitorDPI` only at process startup; DPI awareness cannot be
 changed reliably later.
+
+## Probes and task-level input
+
+`ProbeTarget` reports facts about one window: process file name, that window's own class, the caller's view of integrity (`target_higher`, `equal`, `target_lower`, `unknown`), and caller UIAccess (`enabled`, `disabled`, `unknown`). Warnings are only `uipi_likely_blocked`, `integrity_unknown`, and `uiaccess_unknown`. It does not recommend a backend, initialize HID, or change `SetBackend`.
+
+`ProbeHID` returns `initialized`, `dll_unavailable`, `driver_unavailable`, `devices_unavailable`, or `unknown`. A failed initialization still returns a status. It does not change the global backend. `SetBackend`, `checkBackend`, and `NewInput(BackendHID)` keep today's public errors.
+
+`NewInput` binds `BackendMessage` or `BackendHID`. Any other integer returns `ErrInvalidBackend` before HID initialization. `ForWindow` and `Desktop` split window operations from screen operations. The executor does not read the global backend. `PasteByClipboard`, cursor queries, window search, text reads, and DPI stay on the existing functions.
 
