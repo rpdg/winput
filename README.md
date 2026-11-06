@@ -31,9 +31,12 @@ If you want to expose `winput` directly to AI agents, use the MCP adapter instea
 *   **Background Input**: 
     *   **Message Backend**: Sends inputs directly to window message queues. Works without window focus or mouse cursor movement.
     *   **HID Backend**: Uses the [Interception](https://github.com/oblitum/Interception) driver to simulate hardware input at the kernel level.
+    *   **Typing Intervals**: `Press` takes an optional hold time and `Type` an optional per-character gap; `Type(text, 0)` removes the sleep and the last character is not followed by a trailing sleep.
+*   **Clipboard Paste**: `PasteByClipboard(text)` sends Ctrl+V to the current foreground window and restores the previous Unicode clipboard text afterwards. A nil return does not mean the foreground accepted the text.
 *   **Coordinate Management**:
     *   Unified **Client Coordinate** system for all APIs.
     *   Built-in `ScreenToClient` / `ClientToScreen` conversion.
+    *   `Window.ClientInfo` returns the client-area rectangle in screen coordinates, aligned with `screen.CaptureRegion` when the process DPI awareness matches.
     *   **DPI Awareness**: Helpers for Per-Monitor DPI scaling.
 *   **Safety & Reliability**:
     *   **Thread-Safe**: Global input serialization ensures atomic operations (`inputMutex`).

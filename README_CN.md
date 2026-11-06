@@ -25,9 +25,12 @@
 *   **后台输入 (Background Input)**:
     *   **消息后端 (Message Backend)**: 直接向窗口消息队列发送事件。无需窗口焦点，也不移动物理鼠标。
     *   **HID 后端 (HID Backend)**: 使用 [Interception](https://github.com/oblitum/Interception) 驱动模拟底层硬件输入。
+    *   **键入间隔 (Typing Intervals)**: `Press` 接受可选的按住时间，`Type` 接受可选的字符间隙；`Type(text, 0)` 去掉睡眠，最后一个字符之后不再多睡。
+*   **剪贴板粘贴 (Clipboard Paste)**: `PasteByClipboard(text)` 向当前前台窗口发送 Ctrl+V，结束后恢复先前的 Unicode 剪贴板文本。返回 nil 不表示前台已经粘上新文本。
 *   **坐标管理**:
     *   统一使用 **客户端坐标 (Client Coordinate)** 系统。
     *   内置 `ScreenToClient` / `ClientToScreen` 转换。
+    *   `Window.ClientInfo` 以屏幕坐标返回客户区矩形；当进程 DPI 感知一致时，可与 `screen.CaptureRegion` 对齐。
     *   **DPI 感知**: 支持 Per-Monitor DPI 缩放处理。
 *   **安全可靠**:
     *   **并发安全 (Thread-Safe)**: 全局输入序列化 (`inputMutex`) 确保操作原子性。
