@@ -13,6 +13,10 @@ var (
 	// ErrWindowNotFound implies the target window could not be located by Title, Class, or PID.
 	ErrWindowNotFound = errors.New("window not found")
 
+	// ErrInvalidLookupString means a title or class contains an embedded NUL.
+	// It is also wrapped with ErrWindowNotFound. errors.Is matches both.
+	ErrInvalidLookupString = window.ErrInvalidLookupString
+
 	// ErrWindowGone implies the window handle is no longer valid.
 	ErrWindowGone = errors.New("window is gone or invalid")
 

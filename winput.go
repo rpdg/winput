@@ -29,7 +29,7 @@ type Window struct {
 func FindByTitle(title string) (*Window, error) {
 	hwnd, err := window.FindByTitle(title)
 	if err != nil {
-		return nil, ErrWindowNotFound
+		return nil, lookupError(err)
 	}
 	return &Window{HWND: hwnd}, nil
 }
@@ -38,7 +38,7 @@ func FindByTitle(title string) (*Window, error) {
 func FindByClass(class string) (*Window, error) {
 	hwnd, err := window.FindByClass(class)
 	if err != nil {
-		return nil, ErrWindowNotFound
+		return nil, lookupError(err)
 	}
 	return &Window{HWND: hwnd}, nil
 }
@@ -65,6 +65,16 @@ func FindByProcessName(name string) ([]*Window, error) {
 		return nil, err
 	}
 	return windowsForPIDs(pids, FindByPID)
+}
+
+// lookupError keeps ErrWindowNotFound for an ordinary miss. An embedded NUL
+// is also that sentinel, and it keeps ErrInvalidLookupString so callers can
+// tell a refused string from a window that is not there.
+func lookupError(err error) error {
+	if errors.Is(err, window.ErrInvalidLookupString) {
+		return fmt.Errorf("%w: %w", ErrWindowNotFound, err)
+	}
+	return ErrWindowNotFound
 }
 
 // windowsForPIDs collects lookup results for every PID. A PID that has no

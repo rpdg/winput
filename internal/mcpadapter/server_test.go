@@ -32,6 +32,17 @@ func TestReadRequestContentLength(t *testing.T) {
 	}
 }
 
+func TestReadBoundedLineRejectsOverlongLine(t *testing.T) {
+	_, err := readBoundedLine(bufio.NewReader(strings.NewReader(strings.Repeat("A", 9))), 8)
+	if err == nil {
+		t.Fatal("overlong line accepted")
+	}
+	got, err := readBoundedLine(bufio.NewReader(strings.NewReader("abc\n")), 8)
+	if err != nil || got != "abc\n" {
+		t.Fatalf("readBoundedLine = %q, %v", got, err)
+	}
+}
+
 func TestReadRequestRejectsHugeContentLength(t *testing.T) {
 	raw := fmt.Sprintf("Content-Length: %d\r\n\r\n", maxRequestBytes+1)
 	_, err := readRequest(bufio.NewReader(strings.NewReader(raw)))

@@ -98,6 +98,9 @@ func TestErrorAliases(t *testing.T) {
 	if ErrInvalidMouseCoordinate != mouse.ErrInvalidMouseCoordinate {
 		t.Fatal("ErrInvalidMouseCoordinate is not the mouse sentinel")
 	}
+	if ErrInvalidLookupString != window.ErrInvalidLookupString {
+		t.Fatal("ErrInvalidLookupString is not the window sentinel")
+	}
 	if ErrInvalidScrollDelta == hid.ErrInvalidScrollDelta {
 		t.Fatal("HID scroll sentinel collapsed into the mouse sentinel")
 	}
@@ -326,12 +329,12 @@ func TestScrollWheelValidation(t *testing.T) {
 
 func TestFindByTitleRejectsEmbeddedNUL(t *testing.T) {
 	w, err := FindByTitle("a\x00b")
-	if w != nil || !errors.Is(err, ErrWindowNotFound) {
-		t.Fatalf("FindByTitle(NUL) = (%v, %v), want nil and ErrWindowNotFound", w, err)
+	if w != nil || !errors.Is(err, ErrWindowNotFound) || !errors.Is(err, ErrInvalidLookupString) {
+		t.Fatalf("FindByTitle(NUL) = (%v, %v), want both sentinels", w, err)
 	}
 	w, err = FindByClass("\x00")
-	if w != nil || !errors.Is(err, ErrWindowNotFound) {
-		t.Fatalf("FindByClass(NUL) = (%v, %v), want nil and ErrWindowNotFound", w, err)
+	if w != nil || !errors.Is(err, ErrWindowNotFound) || !errors.Is(err, ErrInvalidLookupString) {
+		t.Fatalf("FindByClass(NUL) = (%v, %v), want both sentinels", w, err)
 	}
 }
 

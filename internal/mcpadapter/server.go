@@ -2,6 +2,7 @@ package mcpadapter
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -209,7 +210,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, erro
 		}
 		child, err := parent.FindChildByClass(args.Class)
 		if err != nil {
-			return nil, targetNotFound(err)
+			return nil, findErr(err)
 		}
 		target := s.registry.AddWindow(child, args.Class)
 		result := describeWindowTarget(target, child)
@@ -597,6 +598,15 @@ func targetNotFound(err error) error {
 	return &codedError{Code: "target_not_found", Message: "target not found", Retryable: false, Cause: err}
 }
 
+// findErr reports an embedded NUL as a validation error. Any other lookup
+// failure stays target_not_found.
+func findErr(err error) error {
+	if errors.Is(err, winput.ErrInvalidLookupString) {
+		return invalidRequestError("validation_error", err)
+	}
+	return targetNotFound(err)
+}
+
 func mapLibraryError(err error) error {
 	switch {
 	case errors.Is(err, winput.ErrWindowNotFound), errors.Is(err, winput.ErrWindowGone):
@@ -639,8 +649,26 @@ func errorDetails(err error) string {
 // runs before the body is allocated.
 const maxRequestBytes = 16 << 20
 
+func readBoundedLine(reader *bufio.Reader, max int) (string, error) {
+	var buf bytes.Buffer
+	for buf.Len() <= max {
+		b, err := reader.ReadByte()
+		if err != nil {
+			if err == io.EOF && buf.Len() > 0 {
+				return buf.String(), nil
+			}
+			return "", err
+		}
+		buf.WriteByte(b)
+		if b == '\n' {
+			return buf.String(), nil
+		}
+	}
+	return "", fmt.Errorf("request exceeds %d bytes", max)
+}
+
 func readRequest(reader *bufio.Reader) (*JSONRPCRequest, error) {
-	firstLine, err := reader.ReadString('\n')
+	firstLine, err := readBoundedLine(reader, maxRequestBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -687,7 +715,7 @@ func parseHeaders(reader *bufio.Reader, headers textproto.MIMEHeader, firstLine 
 		}
 		headers.Add(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 
-		next, err := reader.ReadString('\n')
+		next, err := readBoundedLine(reader, maxRequestBytes)
 		if err != nil {
 			return err
 		}
@@ -726,7 +754,7 @@ func findWindow(args FindWindowArgs) (*winput.Window, int, error) {
 	case args.Title != "":
 		win, err := findTitle(args.Title)
 		if err != nil {
-			return nil, 0, targetNotFound(err)
+			return nil, 0, findErr(err)
 		}
 		if args.Index != 0 {
 			return nil, 0, invalidRequestError("validation_error", fmt.Errorf("index %d not allowed for title search; only 0 is valid", args.Index))
@@ -735,7 +763,7 @@ func findWindow(args FindWindowArgs) (*winput.Window, int, error) {
 	case args.Class != "":
 		win, err := findClass(args.Class)
 		if err != nil {
-			return nil, 0, targetNotFound(err)
+			return nil, 0, findErr(err)
 		}
 		if args.Index != 0 {
 			return nil, 0, invalidRequestError("validation_error", fmt.Errorf("index %d not allowed for class search; only 0 is valid", args.Index))

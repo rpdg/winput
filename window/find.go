@@ -8,7 +8,11 @@ import (
 )
 
 func utf16Ptr(s string) (*uint16, error) {
-	return syscall.UTF16PtrFromString(s)
+	ptr, err := syscall.UTF16PtrFromString(s)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidLookupString, err)
+	}
+	return ptr, nil
 }
 
 // FindByTitle searches for a top-level window matching the exact title.
@@ -136,7 +140,8 @@ func matchingPIDs(entries []processEntry, name string) []uint32 {
 
 // FindPIDsByName returns every process ID with the given executable name
 // (for example "notepad.exe"), in toolhelp snapshot order. The comparison
-// is case-insensitive.
+// is case-insensitive. winput.FindByProcessName uses this so a name shared
+// by several processes is not reduced to the first snapshot entry.
 func FindPIDsByName(name string) ([]uint32, error) {
 	const INVALID_HANDLE_VALUE = ^uintptr(0)
 
