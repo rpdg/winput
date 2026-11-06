@@ -57,12 +57,15 @@ type WindowTargetResult struct {
 	Class          string `json:"class,omitempty"`
 	ProcessName    string `json:"process_name,omitempty"`
 	ParentTargetID string `json:"parent_target_id,omitempty"`
-	IsValid        bool   `json:"is_valid"`
-	IsVisible      bool   `json:"is_visible"`
-	ClientWidth    int32  `json:"client_width,omitempty"`
-	ClientHeight   int32  `json:"client_height,omitempty"`
-	DPIX           uint32 `json:"dpi_x,omitempty"`
-	DPIY           uint32 `json:"dpi_y,omitempty"`
+	// Count is only set for list-based (pid/process_name) finds; it is
+	// omitted (0) for title/class single finds.
+	Count        int32  `json:"count,omitempty"`
+	IsValid      bool   `json:"is_valid"`
+	IsVisible    bool   `json:"is_visible"`
+	ClientWidth  int32  `json:"client_width,omitempty"`
+	ClientHeight int32  `json:"client_height,omitempty"`
+	DPIX         uint32 `json:"dpi_x,omitempty"`
+	DPIY         uint32 `json:"dpi_y,omitempty"`
 }
 
 type OKResult struct {

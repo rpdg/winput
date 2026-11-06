@@ -115,15 +115,25 @@ go run ./cmd/mcp-server -allow-mutations -allow-sensitive
 - `switch_backend`
 - `get_cursor_pos`
 - `get_virtual_bounds`
+- `move_mouse_to`
+- `click_at`
+- `double_click_at`
+- `scroll_wheel`
+- `scroll`
 
 补充说明：
 - discovery 类 tool 返回的是不透明 `target_id`，不会直接暴露 HWND
 - `find_window` 和 `find_child` 会尽量返回稳定的运行时元数据，例如可见性、client 尺寸、DPI
+- `find_window` 接受 `pid`；按进程名或 PID 查找时用 `index` 选择候选并回传 `count`
+- 屏幕坐标类 tool（`move_mouse_to`、`click_at`、`double_click_at`、`scroll_wheel`）使用虚拟桌面绝对坐标；`scroll` 是绑定窗口的定向滚轮
+- server 启动时会开启每显示器 DPI 感知，默认进程下 `capture_screen` 可用
 - tool 元数据里包含 `inputSchema`、`outputSchema`、`errorSchema`
 - 默认会拦截修改类和敏感类 tool
+- 支持 `ping` 与协议版本协商
 
 相关文档：
 - adapter 设计：[docs/mcp-tools.md](docs/mcp-tools.md)
+- 缺口补齐设计：[docs/mcp-tools-gaps.md](docs/mcp-tools-gaps.md)
 - 协议会话示例：[docs/mcp-example-session.md](docs/mcp-example-session.md)
 - server 入口说明：[cmd/mcp-server/README.md](cmd/mcp-server/README.md)
 

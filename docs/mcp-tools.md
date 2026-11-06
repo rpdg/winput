@@ -151,8 +151,12 @@ The repository now includes:
 - framed `Content-Length` request and response transport
 - fixed typed response envelopes for initialization, tool listing, tool results, and structured error data
 - JSON-RPC `ping` handling and protocol version negotiation in `initialize`
+- screen-coordinate input tools (`move_mouse_to`, `click_at`, `double_click_at`, `scroll_wheel`) with virtual-desktop bounds pre-check, and the window-directed wheel tool `scroll`
+- `find_window` enhancement: `pid` selector, `index` candidate selection, and `count` reporting for list-based searches (see `docs/mcp-tools-gaps.md` §4.7)
+- expanded key short-name contract for `press_key` / `press_hotkey`, a `maxItems: 8` cap on `press_hotkey`, and call-time presence validation for the new tools
+- per-monitor DPI awareness enabled at the entrypoint so `capture_screen` works in the default process
 
-Example protocol usage is documented in `docs/mcp-example-session.md`.
+Example protocol usage is documented in `docs/mcp-example-session.md`. Gap-fill design and decisions live in `docs/mcp-tools-gaps.md`.
 
 ## Decision Record — Third-Party MCP SDK (2026-11-06)
 

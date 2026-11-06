@@ -19,6 +19,11 @@ type FindWindowArgs struct {
 	Title       string `json:"title,omitempty"`
 	Class       string `json:"class,omitempty"`
 	ProcessName string `json:"process_name,omitempty"`
+	// PID 0 means "not provided" (Q12); legal values are 1..math.MaxUint32.
+	PID uint32 `json:"pid,omitempty"`
+	// Index selects a window from the pid/process_name candidate list
+	// (default 0). For title/class searches only 0 is valid (Q11).
+	Index int32 `json:"index,omitempty"`
 }
 
 func (a FindWindowArgs) alias() string {
@@ -35,6 +40,33 @@ func (a FindWindowArgs) alias() string {
 type FindChildArgs struct {
 	ParentTargetID string `json:"parent_target_id"`
 	Class          string `json:"class"`
+}
+
+// ScreenPointArgs carries absolute virtual-desktop coordinates for the
+// screen-coordinate input tools. Coordinates are validated for presence
+// (Q13) because (0,0) is itself a legal point.
+type ScreenPointArgs struct {
+	X int32 `json:"x"`
+	Y int32 `json:"y"`
+}
+
+type ClickAtArgs struct {
+	X      int32  `json:"x"`
+	Y      int32  `json:"y"`
+	Button string `json:"button,omitempty"`
+}
+
+// ScrollArgs is the window-directed wheel tool. delta uses Win32 wheel
+// increments (120 per notch); an explicit 0 is a successful no-op (Q8/Q13).
+type ScrollArgs struct {
+	TargetID string `json:"target_id"`
+	X        int32  `json:"x"`
+	Y        int32  `json:"y"`
+	Delta    int32  `json:"delta"`
+}
+
+type ScrollWheelArgs struct {
+	Steps int `json:"steps"`
 }
 
 type ClickArgs struct {
@@ -78,13 +110,20 @@ func defaultCatalog() []Tool {
 
 	return []Tool{
 		{
-			Name:        "find_window",
-			Title:       "Find Window",
-			Description: "Find a top-level window by title, class, or process name and return an opaque target_id.",
+			Name:  "find_window",
+			Title: "Find Window",
+			Description: "Find a top-level window by title, class, process name, or PID and return an opaque target_id. " +
+				"Selector precedence: title > class > process_name > pid; extra non-empty selectors are ignored. " +
+				"For process_name or pid the hit is chosen from a candidate list via index (default 0) and count reports how many windows matched. " +
+				"PID candidates come from the current EnumWindows Z-order and may include hidden top-level windows; " +
+				"process_name resolves only the first same-named process (Toolhelp snapshot). " +
+				"The returned title, class and process_name fields echo the requested filters, not the window's own identity.",
 			InputSchema: objectSchema(map[string]any{
 				"title":        stringSchema("Exact window title."),
 				"class":        stringSchema("Window class name."),
 				"process_name": stringSchema("Process executable name, for example notepad.exe."),
+				"pid":          intSchema("Process ID. 0 or omitted means unused; candidates are enumerated in the current Z-order."),
+				"index":        intSchema("Index into the candidate list for process_name/pid searches, default 0; for title/class only 0 is valid."),
 			}),
 			OutputSchema: objectSchema(map[string]any{
 				"target_id":     requiredStringSchema("Opaque target identifier for later tool calls."),
@@ -93,6 +132,7 @@ func defaultCatalog() []Tool {
 				"title":         stringSchema("Requested title filter when provided."),
 				"class":         stringSchema("Requested class filter when provided."),
 				"process_name":  stringSchema("Requested process name filter when provided."),
+				"count":         intSchema("Number of matching candidates for process_name/pid searches; omitted otherwise."),
 				"is_valid":      boolSchema("Whether the target handle is currently valid."),
 				"is_visible":    boolSchema("Whether the target window is visible and not minimized."),
 				"client_width":  intSchema("Client area width when available."),
@@ -195,10 +235,10 @@ func defaultCatalog() []Tool {
 		{
 			Name:        "press_key",
 			Title:       "Press Key",
-			Description: "Press a single key on a target window.",
+			Description: "Press a single key on a target window. Key is a short name such as ENTER, TAB, A, CTRL, F5, PAGEUP, NUMPAD0, or a single character that needs no shift such as , or .",
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
-				"key":       requiredStringSchema("Key name such as ENTER, TAB, A, CTRL."),
+				"key":       requiredStringSchema("Key short name such as ENTER, TAB, A, CTRL, F5, PAGEUP, NUMPAD0, or a single non-shift character such as , or ."),
 			}, "target_id", "key"),
 			OutputSchema: okSchema(),
 			ErrorSchema: commonErrorSchema,
@@ -217,6 +257,7 @@ func defaultCatalog() []Tool {
 						"type": "string",
 					},
 					"minItems": 1,
+					"maxItems": 8,
 				},
 			}, "target_id", "keys"),
 			OutputSchema: okSchema(),
@@ -288,6 +329,68 @@ func defaultCatalog() []Tool {
 			}, "left", "top", "right", "bottom"),
 			ErrorSchema: commonErrorSchema,
 			Annotations: annotations("read_only", false),
+		},
+		{
+			Name:        "move_mouse_to",
+			Title:       "Move Mouse To",
+			Description: "Move the mouse cursor to absolute virtual-desktop coordinates.",
+			InputSchema: objectSchema(map[string]any{
+				"x": intSchema("Virtual desktop X coordinate."),
+				"y": intSchema("Virtual desktop Y coordinate."),
+			}, "x", "y"),
+			OutputSchema: okSchema(),
+			ErrorSchema: commonErrorSchema,
+			Annotations: annotations("state_change", true),
+		},
+		{
+			Name:        "click_at",
+			Title:       "Click At",
+			Description: "Move the mouse to absolute virtual-desktop coordinates and click.",
+			InputSchema: objectSchema(map[string]any{
+				"x":      intSchema("Virtual desktop X coordinate."),
+				"y":      intSchema("Virtual desktop Y coordinate."),
+				"button": stringEnumSchema("Mouse button.", "left", "right", "middle"),
+			}, "x", "y"),
+			OutputSchema: okSchema(),
+			ErrorSchema: commonErrorSchema,
+			Annotations: annotations("state_change", true),
+		},
+		{
+			Name:        "double_click_at",
+			Title:       "Double Click At",
+			Description: "Move the mouse to absolute virtual-desktop coordinates and double-click.",
+			InputSchema: objectSchema(map[string]any{
+				"x": intSchema("Virtual desktop X coordinate."),
+				"y": intSchema("Virtual desktop Y coordinate."),
+			}, "x", "y"),
+			OutputSchema: okSchema(),
+			ErrorSchema: commonErrorSchema,
+			Annotations: annotations("state_change", true),
+		},
+		{
+			Name:        "scroll_wheel",
+			Title:       "Scroll Wheel",
+			Description: "Scroll by whole wheel steps. Applies to whatever window is under the current cursor; position the cursor first with move_mouse_to.",
+			InputSchema: objectSchema(map[string]any{
+				"steps": intSchema("Whole wheel steps; positive scrolls forward."),
+			}, "steps"),
+			OutputSchema: okSchema(),
+			ErrorSchema: commonErrorSchema,
+			Annotations: annotations("state_change", true),
+		},
+		{
+			Name:        "scroll",
+			Title:       "Scroll",
+			Description: "Send a wheel event at client coordinates inside a target window. delta uses Win32 wheel increments (120 per notch) with the same direction as scroll_wheel steps; an explicit 0 is a successful no-op. Works on the message backend; the HID backend returns backend_unavailable because hardware wheel events cannot be directed to a window.",
+			InputSchema: objectSchema(map[string]any{
+				"target_id": requiredStringSchema("Opaque target_id."),
+				"x":         intSchema("Client X coordinate."),
+				"y":         intSchema("Client Y coordinate."),
+				"delta":     intSchema("Wheel delta in Win32 increments (120 per notch); explicit 0 is a no-op."),
+			}, "target_id", "x", "y", "delta"),
+			OutputSchema: okSchema(),
+			ErrorSchema: commonErrorSchema,
+			Annotations: annotations("state_change", true),
 		},
 	}
 }

@@ -116,15 +116,25 @@ Current MCP tool catalog:
 - `switch_backend`
 - `get_cursor_pos`
 - `get_virtual_bounds`
+- `move_mouse_to`
+- `click_at`
+- `double_click_at`
+- `scroll_wheel`
+- `scroll`
 
 Notes:
 - discovery tools return an opaque `target_id` instead of raw HWND values
 - `find_window` and `find_child` also return stable runtime metadata such as visibility, client size, and DPI when available
+- `find_window` accepts `pid` and, for process-name or PID searches, selects a candidate with `index` and reports `count`
+- the screen-coordinate tools (`move_mouse_to`, `click_at`, `double_click_at`, `scroll_wheel`) use absolute virtual-desktop coordinates; `scroll` is the window-directed wheel tool
+- the server enables per-monitor DPI awareness at startup so `capture_screen` works in the default process
 - tool metadata includes `inputSchema`, `outputSchema`, and `errorSchema`
 - mutating and sensitive tools are blocked by default
+- `ping` and protocol version negotiation are supported
 
 Further MCP details:
 - adapter design: [docs/mcp-tools.md](docs/mcp-tools.md)
+- gap-fill design: [docs/mcp-tools-gaps.md](docs/mcp-tools-gaps.md)
 - example framed session: [docs/mcp-example-session.md](docs/mcp-example-session.md)
 - server entrypoint notes: [cmd/mcp-server/README.md](cmd/mcp-server/README.md)
 

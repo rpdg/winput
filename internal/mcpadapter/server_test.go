@@ -14,6 +14,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rpdg/winput"
+	"github.com/rpdg/winput/screen"
 )
 
 func TestReadRequestContentLength(t *testing.T) {
@@ -322,6 +325,269 @@ func TestMCPServerSmoke(t *testing.T) {
 	}
 	if blockedResp.Error.Data == nil || blockedResp.Error.Data.Code != "unsafe_operation" {
 		t.Fatalf("unexpected blocked error: %#v", blockedResp.Error)
+	}
+}
+
+func TestPickCandidate(t *testing.T) {
+	wins := []*winput.Window{{HWND: 100}, {HWND: 200}}
+	if got, err := pickCandidate(wins, 0); err != nil || got.HWND != 100 {
+		t.Fatalf("pickCandidate(wins, 0) = %#v, %v", got, err)
+	}
+	if got, err := pickCandidate(wins, 1); err != nil || got.HWND != 200 {
+		t.Fatalf("pickCandidate(wins, 1) = %#v, %v", got, err)
+	}
+	for _, idx := range []int32{-1, 2} {
+		if _, err := pickCandidate(wins, idx); err == nil {
+			t.Fatalf("expected error for index %d", idx)
+		}
+	}
+}
+
+func TestInsideVirtualBoundsRule(t *testing.T) {
+	rect := screen.Rect{Left: -1920, Top: 0, Right: 0, Bottom: 1080}
+	inside := [][2]int32{{-1920, 0}, {-1, 1079}, {-1920, 1079}}
+	for _, p := range inside {
+		if !insideVirtualBoundsRule(p[0], p[1], rect) {
+			t.Fatalf("%v should be inside", p)
+		}
+	}
+	outside := [][2]int32{{-1921, 0}, {-1920, -1}, {0, 1080}, {-1, 1080}}
+	for _, p := range outside {
+		if insideVirtualBoundsRule(p[0], p[1], rect) {
+			t.Fatalf("%v should be outside", p)
+		}
+	}
+}
+
+func TestResolveClickAt(t *testing.T) {
+	for _, button := range []string{"", "left", "right", "middle"} {
+		if _, err := resolveClickAt(button); err != nil {
+			t.Fatalf("resolveClickAt(%q) error: %v", button, err)
+		}
+	}
+	if _, err := resolveClickAt("bogus"); err == nil {
+		t.Fatal("expected error for unsupported button")
+	}
+}
+
+func TestNewScreenToolsRequireCoordinates(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	for _, name := range []string{"move_mouse_to", "click_at", "double_click_at"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := server.callTool(context.Background(), ToolCallParams{
+				Name:      name,
+				Arguments: map[string]any{"x": 100}, // y missing
+			})
+			assertValidationError(t, err, "missing required argument: y")
+		})
+	}
+}
+
+func TestScrollRequiresDelta(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	_, err := server.callTool(context.Background(), ToolCallParams{
+		Name:      "scroll",
+		Arguments: map[string]any{"target_id": "window-1", "x": 1, "y": 1},
+	})
+	assertValidationError(t, err, "missing required argument: delta")
+}
+
+func TestScrollWheelMissingStepsRejectedByLibrary(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	_, err := server.callTool(context.Background(), ToolCallParams{
+		Name:      "scroll_wheel",
+		Arguments: map[string]any{},
+	})
+	// Missing steps decodes to 0; the library rejects 0 itself (Q13).
+	assertValidationError(t, err, "")
+}
+
+func TestPressHotkeyMaxKeys(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	nine := make([]string, 9)
+	for i := range nine {
+		nine[i] = "A"
+	}
+	_, err := server.callTool(context.Background(), ToolCallParams{
+		Name:      "press_hotkey",
+		Arguments: map[string]any{"target_id": "window-1", "keys": nine},
+	})
+	assertValidationError(t, err, "too many keys")
+
+	eight := make([]string, 8)
+	for i := range eight {
+		eight[i] = "A"
+	}
+	_, err = server.callTool(context.Background(), ToolCallParams{
+		Name:      "press_hotkey",
+		Arguments: map[string]any{"target_id": "window-1", "keys": eight},
+	})
+	// Cap passes; the next step is the registry lookup -> target_not_found.
+	var coded *codedError
+	if !errors.As(err, &coded) || coded.Code != "target_not_found" {
+		t.Fatalf("expected target_not_found after cap passes, got %#v", err)
+	}
+}
+
+func TestPidRejectsOutOfRange(t *testing.T) {
+	server := NewServer(Config{})
+	for _, args := range []map[string]any{
+		{"pid": -1},
+		{"pid": 1.5},
+		{"pid": 5000000000.0}, // exceeds uint32
+		{"title": "X", "pid": -1},
+	} {
+		t.Run(fmt.Sprintf("%v", args), func(t *testing.T) {
+			_, err := server.callTool(context.Background(), ToolCallParams{
+				Name:      "find_window",
+				Arguments: args,
+			})
+			assertValidationError(t, err, "")
+		})
+	}
+}
+
+func TestKeyFromNameShortNames(t *testing.T) {
+	table := []struct {
+		name string
+		want winput.Key
+	}{
+		{"ENTER", winput.KeyEnter}, {"enter", winput.KeyEnter}, {" Enter ", winput.KeyEnter},
+		{"ESC", winput.KeyEsc}, {"TAB", winput.KeyTab}, {"SPACE", winput.KeySpace}, {"BKSP", winput.KeyBkSp},
+		{"CAPS", winput.KeyCaps}, {"NUMLOCK", winput.KeyNumLock}, {"SCROLLLOCK", winput.KeyScroll},
+		{"CTRL", winput.KeyCtrl}, {"SHIFT", winput.KeyShift}, {"ALT", winput.KeyAlt},
+		{"RIGHTCTRL", winput.KeyRightCtrl}, {"RIGHTSHIFT", winput.KeyRightShift}, {"RIGHTALT", winput.KeyRightAlt},
+		{"LWIN", winput.KeyLWin}, {"RWIN", winput.KeyRWin},
+		{"UP", winput.KeyArrowUp}, {"DOWN", winput.KeyArrowDown}, {"LEFT", winput.KeyLeft}, {"RIGHT", winput.KeyRight},
+		{"HOME", winput.KeyHome}, {"END", winput.KeyEnd}, {"INSERT", winput.KeyInsert}, {"DELETE", winput.KeyDelete},
+		{"PAGEUP", winput.KeyPageUp}, {"PAGEDOWN", winput.KeyPageDown},
+		{"F1", winput.KeyF1}, {"F12", winput.KeyF12},
+		{"MINUS", winput.KeyMinus}, {"EQUAL", winput.KeyEqual}, {"COMMA", winput.KeyComma}, {"DOT", winput.KeyDot},
+		{"SLASH", winput.KeySlash}, {"SEMI", winput.KeySemi}, {"QUOT", winput.KeyQuot}, {"TICK", winput.KeyTick},
+		{"LBR", winput.KeyLBr}, {"RBR", winput.KeyRBr}, {"BACKSLASH", winput.KeyBackslash},
+		{"NUMPAD0", winput.KeyNumpad0}, {"NUMPAD9", winput.KeyNumpad9}, {"NUMPADDECIMAL", winput.KeyNumpadDecimal},
+		{"NUMPADMULTIPLY", winput.KeyNumpadMultiply}, {"NUMPADADD", winput.KeyNumpadAdd},
+		{"NUMPADSUBTRACT", winput.KeyNumpadSubtract}, {"NUMPADDIVIDE", winput.KeyNumpadDivide},
+		{"NUMPADENTER", winput.KeyNumpadEnter},
+		{"A", winput.KeyA}, {"Z", winput.KeyZ}, {"0", winput.Key0}, {"9", winput.Key9},
+	}
+	for _, tt := range table {
+		got, err := keyFromName(tt.name)
+		if err != nil {
+			t.Fatalf("keyFromName(%q): %v", tt.name, err)
+		}
+		if got != tt.want {
+			t.Fatalf("keyFromName(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestKeyFromNameSingleNonShiftChars(t *testing.T) {
+	chars := map[rune]winput.Key{
+		',': winput.KeyComma, '.': winput.KeyDot, '-': winput.KeyMinus, ';': winput.KeySemi,
+		'[': winput.KeyLBr, ']': winput.KeyRBr, '\\': winput.KeyBackslash,
+		'\'': winput.KeyQuot, '`': winput.KeyTick, '=': winput.KeyEqual, '/': winput.KeySlash,
+	}
+	for r, want := range chars {
+		got, err := keyFromName(string(r))
+		if err != nil {
+			t.Fatalf("keyFromName(%q): %v", string(r), err)
+		}
+		if got != want {
+			t.Fatalf("keyFromName(%q) = %v, want %v", string(r), got, want)
+		}
+	}
+}
+
+func TestKeyFromNameRejectsShiftCharsAndUnknown(t *testing.T) {
+	for _, name := range []string{"!", "?", "<", ":", "\"", "FRED", "", "  ", "CTRLSOMETHING"} {
+		if _, err := keyFromName(name); err == nil {
+			t.Fatalf("expected error for %q", name)
+		}
+	}
+}
+
+func TestMapLibraryErrorScrollMappings(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{winput.ErrInvalidScrollSteps, "validation_error"},
+		{winput.ErrInvalidScrollDelta, "validation_error"},
+		{winput.ErrDirectedScrollUnsupported, "backend_unavailable"},
+		{winput.ErrWindowNotFound, "target_not_found"},
+	}
+	for _, c := range cases {
+		var coded *codedError
+		if !errors.As(mapLibraryError(c.err), &coded) || coded.Code != c.want {
+			t.Fatalf("mapLibraryError(%v) = code, want %s", c.err, c.want)
+		}
+	}
+}
+
+func TestFindWindowSchemaIncludesNewFields(t *testing.T) {
+	catalog := defaultCatalog()
+	var fw Tool
+	for _, tool := range catalog {
+		if tool.Name == "find_window" {
+			fw = tool
+			break
+		}
+	}
+	if fw.Name == "" {
+		t.Fatal("find_window missing from catalog")
+	}
+	iprops := fw.InputSchema["properties"].(map[string]any)
+	for _, k := range []string{"pid", "index"} {
+		if _, ok := iprops[k]; !ok {
+			t.Fatalf("find_window input missing %q", k)
+		}
+	}
+	oprops := fw.OutputSchema["properties"].(map[string]any)
+	if _, ok := oprops["count"]; !ok {
+		t.Fatal("find_window output missing count")
+	}
+}
+
+func TestNewToolsInCatalog(t *testing.T) {
+	catalog := defaultCatalog()
+	names := map[string]bool{}
+	for _, tool := range catalog {
+		names[tool.Name] = true
+	}
+	for _, name := range []string{"move_mouse_to", "click_at", "double_click_at", "scroll_wheel", "scroll"} {
+		if !names[name] {
+			t.Fatalf("tool %q missing from catalog", name)
+		}
+	}
+}
+
+func TestPressHotkeySchemaMaxItems(t *testing.T) {
+	catalog := defaultCatalog()
+	var ph Tool
+	for _, tool := range catalog {
+		if tool.Name == "press_hotkey" {
+			ph = tool
+			break
+		}
+	}
+	keys := ph.InputSchema["properties"].(map[string]any)["keys"].(map[string]any)
+	if got := keys["maxItems"]; got != 8 {
+		t.Fatalf("maxItems = %#v, want 8", got)
+	}
+}
+
+func assertValidationError(t *testing.T, err error, wantContains string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected validation_error")
+	}
+	var coded *codedError
+	if !errors.As(err, &coded) || coded.Code != "validation_error" {
+		t.Fatalf("expected validation_error, got %#v", err)
+	}
+	if wantContains != "" && !strings.Contains(err.Error(), wantContains) {
+		t.Fatalf("error %q is missing %q", err.Error(), wantContains)
 	}
 }
 

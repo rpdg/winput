@@ -51,6 +51,26 @@ Response shape:
 }
 ```
 
+## Ping
+
+Request:
+
+```text
+Content-Length: 40
+
+{"jsonrpc":"2.0","id":2,"method":"ping","params":{}}
+```
+
+Response shape (empty result):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {}
+}
+```
+
 ## List Tools
 
 Request:
@@ -167,3 +187,12 @@ A successful `find_window` call now returns more than just the opaque identifier
 ```
 
 These fields are intended to help external agents reason about target quality and layout without exposing raw Win32 handles.
+
+## Candidate Finds and Screen-Coordinate Tools
+
+Beyond single `title`/`class` finds, `find_window` accepts `pid` (0 or omitted means unused) and, for process-name or PID searches, selects a candidate with `index` (default 0) and reports `count`. Only `index` 0 is valid for `title`/`class` searches.
+
+The gap-fill catalog also adds screen-coordinate tools that operate without a window target:
+- `move_mouse_to` / `click_at` / `double_click_at` — absolute virtual-desktop coordinates (negative origins are legal; points outside the virtual desktop return `validation_error`)
+- `scroll_wheel` — whole steps under the current cursor; position the cursor with `move_mouse_to` first
+- `scroll` — window-directed wheel at client coordinates (120 per notch; explicit 0 is a no-op). On the HID backend it returns `backend_unavailable`.

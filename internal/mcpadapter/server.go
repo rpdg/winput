@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/rpdg/winput"
+	"github.com/rpdg/winput/keyboard"
 	"github.com/rpdg/winput/screen"
 )
 
@@ -184,7 +185,7 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, erro
 		if err := decodeArgs(params.Arguments, &args); err != nil {
 			return nil, invalidRequestError("validation_error", err)
 		}
-		win, err := findWindow(args)
+		win, count, err := findWindow(args)
 		if err != nil {
 			return nil, err
 		}
@@ -193,6 +194,9 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, erro
 		result.Title = args.Title
 		result.Class = args.Class
 		result.ProcessName = args.ProcessName
+		if count > 0 {
+			result.Count = int32(count)
+		}
 		return toolResult(result), nil
 	case "find_child":
 		var args FindChildArgs
@@ -309,6 +313,9 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, erro
 		if err := decodeArgs(params.Arguments, &args); err != nil {
 			return nil, invalidRequestError("validation_error", err)
 		}
+		if len(args.Keys) > maxPressHotkeyKeys {
+			return nil, invalidRequestError("validation_error", fmt.Errorf("too many keys: %d (max %d)", len(args.Keys), maxPressHotkeyKeys))
+		}
 		target, err := s.registry.Window(args.TargetID)
 		if err != nil {
 			return nil, err
@@ -378,6 +385,82 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, erro
 	case "get_virtual_bounds":
 		rect := screen.VirtualBounds()
 		return toolResult(VirtualBoundsResult{Left: rect.Left, Top: rect.Top, Right: rect.Right, Bottom: rect.Bottom}), nil
+	case "move_mouse_to":
+		var args ScreenPointArgs
+		if err := decodeArgs(params.Arguments, &args); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := requireArgs(params.Arguments, "x", "y"); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := checkVirtualPoint(args.X, args.Y); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := winput.MoveMouseTo(args.X, args.Y); err != nil {
+			return nil, mapLibraryError(err)
+		}
+		return toolResult(OKResult{OK: true}), nil
+	case "click_at":
+		var args ClickAtArgs
+		if err := decodeArgs(params.Arguments, &args); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := requireArgs(params.Arguments, "x", "y"); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := checkVirtualPoint(args.X, args.Y); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		click, err := resolveClickAt(args.Button)
+		if err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := click(args.X, args.Y); err != nil {
+			return nil, mapLibraryError(err)
+		}
+		return toolResult(OKResult{OK: true}), nil
+	case "double_click_at":
+		var args ScreenPointArgs
+		if err := decodeArgs(params.Arguments, &args); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := requireArgs(params.Arguments, "x", "y"); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := checkVirtualPoint(args.X, args.Y); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := winput.DoubleClickMouseAt(args.X, args.Y); err != nil {
+			return nil, mapLibraryError(err)
+		}
+		return toolResult(OKResult{OK: true}), nil
+	case "scroll_wheel":
+		var args ScrollWheelArgs
+		if err := decodeArgs(params.Arguments, &args); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		// Missing steps decodes to 0 and the library rejects 0 itself
+		// (Q13); no explicit presence check needed.
+		if err := winput.ScrollWheel(args.Steps); err != nil {
+			return nil, mapLibraryError(err)
+		}
+		return toolResult(OKResult{OK: true}), nil
+	case "scroll":
+		var args ScrollArgs
+		if err := decodeArgs(params.Arguments, &args); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if err := requireArgs(params.Arguments, "x", "y", "delta"); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		target, err := s.registry.Window(args.TargetID)
+		if err != nil {
+			return nil, err
+		}
+		if err := target.Scroll(args.X, args.Y, args.Delta); err != nil {
+			return nil, mapLibraryError(err)
+		}
+		return toolResult(OKResult{OK: true}), nil
 	default:
 		return nil, invalidRequestError("validation_error", fmt.Errorf("unknown tool: %s", params.Name))
 	}
@@ -520,8 +603,10 @@ func mapLibraryError(err error) error {
 		return &codedError{Code: "target_not_found", Message: "target not found", Retryable: false, Cause: err}
 	case errors.Is(err, winput.ErrPermissionDenied):
 		return &codedError{Code: "permission_denied", Message: "permission denied", Retryable: false, Cause: err}
-	case errors.Is(err, winput.ErrDriverNotInstalled), errors.Is(err, winput.ErrDLLLoadFailed):
+	case errors.Is(err, winput.ErrDriverNotInstalled), errors.Is(err, winput.ErrDLLLoadFailed), errors.Is(err, winput.ErrDirectedScrollUnsupported):
 		return &codedError{Code: "backend_unavailable", Message: "backend unavailable", Retryable: false, Cause: err}
+	case errors.Is(err, winput.ErrInvalidScrollSteps), errors.Is(err, winput.ErrInvalidScrollDelta):
+		return &codedError{Code: "validation_error", Message: "tool call failed", Retryable: false, Cause: err}
 	default:
 		return &codedError{Code: "internal_error", Message: "tool call failed", Retryable: false, Cause: err}
 	}
@@ -618,113 +703,179 @@ func writeResponse(out io.Writer, resp JSONRPCResponse) error {
 	return err
 }
 
-func findWindow(args FindWindowArgs) (*winput.Window, error) {
+// findWindow resolves the winning selector (title > class > process_name >
+// pid) to a single window. It returns the selected window and, for
+// list-based searches (pid/process_name), the candidate count (count is 0
+// for title/class single finds, which only accept index 0).
+func findWindow(args FindWindowArgs) (*winput.Window, int, error) {
 	switch {
 	case args.Title != "":
 		win, err := winput.FindByTitle(args.Title)
 		if err != nil {
-			return nil, targetNotFound(err)
+			return nil, 0, targetNotFound(err)
 		}
-		return win, nil
+		if args.Index != 0 {
+			return nil, 0, invalidRequestError("validation_error", fmt.Errorf("index %d not allowed for title search; only 0 is valid", args.Index))
+		}
+		return win, 0, nil
 	case args.Class != "":
 		win, err := winput.FindByClass(args.Class)
 		if err != nil {
-			return nil, targetNotFound(err)
+			return nil, 0, targetNotFound(err)
 		}
-		return win, nil
+		if args.Index != 0 {
+			return nil, 0, invalidRequestError("validation_error", fmt.Errorf("index %d not allowed for class search; only 0 is valid", args.Index))
+		}
+		return win, 0, nil
 	case args.ProcessName != "":
 		wins, err := winput.FindByProcessName(args.ProcessName)
 		if err != nil || len(wins) == 0 {
 			if err == nil {
 				err = winput.ErrWindowNotFound
 			}
-			return nil, targetNotFound(err)
+			return nil, 0, targetNotFound(err)
 		}
-		return wins[0], nil
+		win, err := pickCandidate(wins, args.Index)
+		if err != nil {
+			return nil, 0, invalidRequestError("validation_error", err)
+		}
+		return win, len(wins), nil
+	case args.PID > 0:
+		wins, err := winput.FindByPID(args.PID)
+		if err != nil || len(wins) == 0 {
+			if err == nil {
+				err = winput.ErrWindowNotFound
+			}
+			return nil, 0, targetNotFound(err)
+		}
+		win, err := pickCandidate(wins, args.Index)
+		if err != nil {
+			return nil, 0, invalidRequestError("validation_error", err)
+		}
+		return win, len(wins), nil
 	default:
-		return nil, invalidRequestError("validation_error", fmt.Errorf("one of title, class, or process_name is required"))
+		return nil, 0, invalidRequestError("validation_error", fmt.Errorf("one of title, class, process_name, or pid is required"))
 	}
 }
 
-func keyFromName(name string) (winput.Key, error) {
-	switch strings.ToUpper(strings.TrimSpace(name)) {
-	case "ENTER":
-		return winput.KeyEnter, nil
-	case "TAB":
-		return winput.KeyTab, nil
-	case "ESC":
-		return winput.KeyEsc, nil
-	case "SPACE":
-		return winput.KeySpace, nil
-	case "CTRL":
-		return winput.KeyCtrl, nil
-	case "SHIFT":
-		return winput.KeyShift, nil
-	case "ALT":
-		return winput.KeyAlt, nil
-	case "A":
-		return winput.KeyA, nil
-	case "B":
-		return winput.KeyB, nil
-	case "C":
-		return winput.KeyC, nil
-	case "D":
-		return winput.KeyD, nil
-	case "E":
-		return winput.KeyE, nil
-	case "F":
-		return winput.KeyF, nil
-	case "G":
-		return winput.KeyG, nil
-	case "H":
-		return winput.KeyH, nil
-	case "I":
-		return winput.KeyI, nil
-	case "J":
-		return winput.KeyJ, nil
-	case "K":
-		return winput.KeyK, nil
-	case "L":
-		return winput.KeyL, nil
-	case "M":
-		return winput.KeyM, nil
-	case "N":
-		return winput.KeyN, nil
-	case "O":
-		return winput.KeyO, nil
-	case "P":
-		return winput.KeyP, nil
-	case "Q":
-		return winput.KeyQ, nil
-	case "R":
-		return winput.KeyR, nil
-	case "S":
-		return winput.KeyS, nil
-	case "T":
-		return winput.KeyT, nil
-	case "U":
-		return winput.KeyU, nil
-	case "V":
-		return winput.KeyV, nil
-	case "W":
-		return winput.KeyW, nil
-	case "X":
-		return winput.KeyX, nil
-	case "Y":
-		return winput.KeyY, nil
-	case "Z":
-		return winput.KeyZ, nil
-	case "UP":
-		return winput.KeyArrowUp, nil
-	case "DOWN":
-		return winput.KeyArrowDown, nil
-	case "LEFT":
-		return winput.KeyLeft, nil
-	case "RIGHT":
-		return winput.KeyRight, nil
-	default:
-		return 0, fmt.Errorf("unsupported key name: %s", name)
+// pickCandidate selects list[index]; negative or out-of-range indexes are
+// rejected (Q4/Q11).
+func pickCandidate(list []*winput.Window, index int32) (*winput.Window, error) {
+	if index < 0 || int(index) >= len(list) {
+		return nil, fmt.Errorf("index %d out of range (candidate count %d)", index, len(list))
 	}
+	return list[index], nil
+}
+
+// requireArgs enforces presence of required arguments at call time (Q13).
+// Zero values such as (0, 0) or delta 0 are legal; only an absent key is
+// rejected.
+func requireArgs(args map[string]any, keys ...string) error {
+	for _, k := range keys {
+		if _, ok := args[k]; !ok {
+			return fmt.Errorf("missing required argument: %s", k)
+		}
+	}
+	return nil
+}
+
+// insideVirtualBoundsRule reports whether (x, y) lies inside the half-open
+// virtual desktop rectangle [Left, Right) x [Top, Bottom), matching the
+// library's hid.insideVirtualBounds rule (Q9).
+func insideVirtualBoundsRule(x, y int32, b screen.Rect) bool {
+	return x >= b.Left && x < b.Right && y >= b.Top && y < b.Bottom
+}
+
+func checkVirtualPoint(x, y int32) error {
+	if !insideVirtualBoundsRule(x, y, screen.VirtualBounds()) {
+		return fmt.Errorf("point (%d, %d) outside virtual desktop", x, y)
+	}
+	return nil
+}
+
+type clickAtFn func(x, y int32) error
+
+var clickAtFuncs = map[string]clickAtFn{
+	"":       winput.ClickMouseAt,
+	"left":   winput.ClickMouseAt,
+	"right":  winput.ClickRightMouseAt,
+	"middle": winput.ClickMiddleMouseAt,
+}
+
+func resolveClickAt(button string) (clickAtFn, error) {
+	fn, ok := clickAtFuncs[button]
+	if !ok {
+		return nil, fmt.Errorf("unsupported button: %s", button)
+	}
+	return fn, nil
+}
+
+// keyNames maps the single canonical short name (Q10) for every exported
+// Key constant. Published names (ENTER, TAB, ESC, SPACE, CTRL, SHIFT, ALT,
+// A-Z, UP, DOWN, LEFT, RIGHT) are unchanged and no second alias set exists.
+var keyNames = map[string]winput.Key{
+	"A": winput.KeyA, "B": winput.KeyB, "C": winput.KeyC,
+	"D": winput.KeyD, "E": winput.KeyE, "F": winput.KeyF,
+	"G": winput.KeyG, "H": winput.KeyH, "I": winput.KeyI,
+	"J": winput.KeyJ, "K": winput.KeyK, "L": winput.KeyL,
+	"M": winput.KeyM, "N": winput.KeyN, "O": winput.KeyO,
+	"P": winput.KeyP, "Q": winput.KeyQ, "R": winput.KeyR,
+	"S": winput.KeyS, "T": winput.KeyT, "U": winput.KeyU,
+	"V": winput.KeyV, "W": winput.KeyW, "X": winput.KeyX,
+	"Y": winput.KeyY, "Z": winput.KeyZ,
+	"0": winput.Key0, "1": winput.Key1, "2": winput.Key2,
+	"3": winput.Key3, "4": winput.Key4, "5": winput.Key5,
+	"6": winput.Key6, "7": winput.Key7, "8": winput.Key8,
+	"9": winput.Key9,
+	"ESC": winput.KeyEsc,
+	"F1": winput.KeyF1, "F2": winput.KeyF2, "F3": winput.KeyF3,
+	"F4": winput.KeyF4, "F5": winput.KeyF5, "F6": winput.KeyF6,
+	"F7": winput.KeyF7, "F8": winput.KeyF8, "F9": winput.KeyF9,
+	"F10": winput.KeyF10, "F11": winput.KeyF11, "F12": winput.KeyF12,
+	"ENTER": winput.KeyEnter, "TAB": winput.KeyTab, "SPACE": winput.KeySpace,
+	"BKSP": winput.KeyBkSp,
+	"CAPS": winput.KeyCaps, "NUMLOCK": winput.KeyNumLock, "SCROLLLOCK": winput.KeyScroll,
+	"CTRL": winput.KeyCtrl, "SHIFT": winput.KeyShift, "ALT": winput.KeyAlt,
+	"RIGHTCTRL": winput.KeyRightCtrl, "RIGHTSHIFT": winput.KeyRightShift, "RIGHTALT": winput.KeyRightAlt,
+	"LWIN": winput.KeyLWin, "RWIN": winput.KeyRWin,
+	"UP": winput.KeyArrowUp, "DOWN": winput.KeyArrowDown, "LEFT": winput.KeyLeft, "RIGHT": winput.KeyRight,
+	"HOME": winput.KeyHome, "END": winput.KeyEnd, "INSERT": winput.KeyInsert, "DELETE": winput.KeyDelete,
+	"PAGEUP": winput.KeyPageUp, "PAGEDOWN": winput.KeyPageDown,
+	"MINUS": winput.KeyMinus, "EQUAL": winput.KeyEqual, "COMMA": winput.KeyComma, "DOT": winput.KeyDot,
+	"SLASH": winput.KeySlash, "SEMI": winput.KeySemi, "QUOT": winput.KeyQuot, "TICK": winput.KeyTick,
+	"LBR": winput.KeyLBr, "RBR": winput.KeyRBr, "BACKSLASH": winput.KeyBackslash,
+	"NUMPAD0": winput.KeyNumpad0, "NUMPAD1": winput.KeyNumpad1, "NUMPAD2": winput.KeyNumpad2,
+	"NUMPAD3": winput.KeyNumpad3, "NUMPAD4": winput.KeyNumpad4, "NUMPAD5": winput.KeyNumpad5,
+	"NUMPAD6": winput.KeyNumpad6, "NUMPAD7": winput.KeyNumpad7, "NUMPAD8": winput.KeyNumpad8,
+	"NUMPAD9": winput.KeyNumpad9, "NUMPADDECIMAL": winput.KeyNumpadDecimal,
+	"NUMPADMULTIPLY": winput.KeyNumpadMultiply, "NUMPADADD": winput.KeyNumpadAdd,
+	"NUMPADSUBTRACT": winput.KeyNumpadSubtract, "NUMPADDIVIDE": winput.KeyNumpadDivide,
+	"NUMPADENTER": winput.KeyNumpadEnter,
+}
+
+// maxPressHotkeyKeys caps the keys array on press_hotkey (ENGINEERING §7;
+// enforced at call time per Q13).
+const maxPressHotkeyKeys = 8
+
+// keyFromName resolves a key short name or a single non-shift character
+// (Q6/Q10): trim whitespace, match a case-insensitive short name, then fall
+// back to keyboard.LookupKey for a single character that needs no shift.
+// Shift-requiring characters are rejected with a hint to use press_hotkey.
+func keyFromName(name string) (winput.Key, error) {
+	trimmed := strings.TrimSpace(name)
+	if k, ok := keyNames[strings.ToUpper(trimmed)]; ok {
+		return k, nil
+	}
+	runes := []rune(trimmed)
+	if len(runes) == 1 {
+		if k, shifted, ok := keyboard.LookupKey(runes[0]); ok {
+			if shifted {
+				return 0, fmt.Errorf("character %q requires shift; use a hotkey such as [\"SHIFT\",\"1\"]", runes[0])
+			}
+			return k, nil
+		}
+	}
+	return 0, fmt.Errorf("unsupported key name: %s", name)
 }
 
 func describeWindowTarget(target *WindowTarget, win *winput.Window) WindowTargetResult {
