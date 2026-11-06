@@ -133,6 +133,19 @@ func globalUnlock(hmem uintptr, where string) (stillLocked bool, err error) {
 	return false, nil
 }
 
+// unlockWriteError builds the write-path GlobalUnlock error. stillLocked
+// reports that this unlock succeeded but another owner keeps the block above
+// zero locks; the write must fail with ErrClipboardFailed before EmptyClipboard
+// runs, and the block must not be freed (bug BUG-001: a nil error here would be
+// treated by SwapUnicodeText as a completed write). closeErr, when present, is
+// joined in without changing the sentinel.
+func unlockWriteError(stillLocked bool, err, closeErr error) error {
+	if stillLocked {
+		return errors.Join(fmt.Errorf("%w: GlobalUnlock: memory still locked", ErrClipboardFailed), closeErr)
+	}
+	return errors.Join(err, closeErr)
+}
+
 func globalSize(hmem uintptr) (uintptr, error) {
 	if err := findClipboardProc("GlobalSize", ProcGlobalSize); err != nil {
 		return 0, err
@@ -309,7 +322,8 @@ func writeUnicodeText(text string, normalize bool) (mutated bool, err error) {
 	// an error: it would mean someone else also holds it. Do not free memory
 	// that may still be locked.
 	if stillLocked, err := globalUnlock(hmem, "write"); err != nil || stillLocked {
-		return false, errors.Join(err, closeClipboard())
+		closeErr := closeClipboard()
+		return false, unlockWriteError(stillLocked, err, closeErr)
 	}
 	if err := emptyClipboard(); err != nil {
 		return false, errors.Join(err, globalFree(hmem), closeClipboard())

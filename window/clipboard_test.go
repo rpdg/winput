@@ -2,7 +2,9 @@ package window
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+	"syscall"
 	"testing"
 	"unicode/utf16"
 )
@@ -64,6 +66,36 @@ func TestEncodeUnicodeText(t *testing.T) {
 				t.Fatalf("last unit = %#x, want terminating NUL", got[len(got)-1])
 			}
 		})
+	}
+}
+
+// TestUnlockWriteError pins BUG-001: a write-path unlock that reports
+// "still locked" must fail with ErrClipboardFailed even when the subsequent
+// CloseClipboard succeeded. A nil error here would make SwapUnicodeText treat
+// the (never-committed) write as complete and press Ctrl+V over unchanged
+// clipboard contents. The test touches no real clipboard.
+func TestUnlockWriteError(t *testing.T) {
+	// still-locked with a successful close must still be a failure.
+	got := unlockWriteError(true, nil, nil)
+	if got == nil {
+		t.Fatal("still-locked unlock without error produced nil")
+	}
+	if !errors.Is(got, ErrClipboardFailed) {
+		t.Fatalf("still-locked error = %v, want ErrClipboardFailed", got)
+	}
+
+	// A failed close is joined in without dropping the sentinel.
+	closeErr := errors.New("close failed")
+	got = unlockWriteError(true, nil, closeErr)
+	if !errors.Is(got, ErrClipboardFailed) || !errors.Is(got, closeErr) {
+		t.Fatalf("still-locked error = %v, want both ErrClipboardFailed and the close error", got)
+	}
+
+	// The non-still-locked path (0 + non-NO_ERROR) keeps its wrapped inner error.
+	inner := fmt.Errorf("%w: GlobalUnlock[write]: %v", ErrClipboardFailed, syscall.Errno(158))
+	got = unlockWriteError(false, inner, nil)
+	if !errors.Is(got, inner) || !errors.Is(got, ErrClipboardFailed) {
+		t.Fatalf("unlock failure error = %v, want wrapped inner %v", got, inner)
 	}
 }
 
