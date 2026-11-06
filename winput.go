@@ -860,6 +860,12 @@ func MoveMouseToExact(x, y int32) error {
 	return nil
 }
 
+// mouseEventWheelArgs returns the mouse_event arguments for one wheel
+// stroke. The signature is (dwFlags, dx, dy, dwData, dwExtraInfo).
+func mouseEventWheelArgs(delta int32) (flags, dx, dy, data, extra uintptr) {
+	return 0x0800, 0, 0, uintptr(uint32(delta)), 0
+}
+
 // ScrollWheel scrolls by whole wheel steps. Positive steps scroll forward.
 // Zero and values outside [-273, 273] are rejected before multiplication.
 func ScrollWheel(steps int) error {
@@ -878,7 +884,8 @@ func ScrollWheel(steps int) error {
 	}
 
 	// mouse_event(MOUSEEVENTF_WHEEL, 0, 0, delta, 0)
-	window.ProcMouseEvent.Call(0x0800, 0, uintptr(uint32(delta)), 0, 0)
+	flags, dx, dy, data, extra := mouseEventWheelArgs(delta)
+	window.ProcMouseEvent.Call(flags, dx, dy, data, extra)
 	return nil
 }
 

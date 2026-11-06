@@ -227,6 +227,20 @@ func TestMouseButtonMapping(t *testing.T) {
 	}
 }
 
+func TestMouseEventWheelArgs(t *testing.T) {
+	for _, delta := range []int32{-120, 120, 32760} {
+		flags, dx, dy, data, extra := mouseEventWheelArgs(delta)
+		if flags != 0x0800 || dx != 0 || dy != 0 || extra != 0 {
+			t.Fatalf("mouseEventWheelArgs(%d) constant args = %#x/%d/%d/%d, want 0x0800/0/0/0",
+				delta, flags, dx, dy, extra)
+		}
+		want := uintptr(uint32(delta))
+		if data != want {
+			t.Fatalf("mouseEventWheelArgs(%d) dwData = %#x, want %#x", delta, data, want)
+		}
+	}
+}
+
 func TestScrollWheelValidation(t *testing.T) {
 	for _, steps := range []int{0, 274, -274, 536870913} {
 		if err := ScrollWheel(steps); !errors.Is(err, ErrInvalidScrollSteps) {
