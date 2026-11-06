@@ -32,7 +32,9 @@ If you want to expose `winput` directly to AI agents, use the MCP adapter instea
     *   **Message Backend**: Sends inputs directly to window message queues. Works without window focus or mouse cursor movement.
     *   **HID Backend**: Uses the [Interception](https://github.com/oblitum/Interception) driver to simulate hardware input at the kernel level.
     *   **Typing Intervals**: `Press` takes an optional hold time and `Type` an optional per-character gap; `Type(text, 0)` removes the sleep and the last character is not followed by a trailing sleep.
-*   **Clipboard Paste**: `PasteByClipboard(text)` sends Ctrl+V to the current foreground window and restores the previous Unicode clipboard text afterwards. A nil return does not mean the foreground accepted the text.
+*   **Clipboard Paste**: `PasteByClipboard(text)` sends Ctrl+V to the current foreground window and restores the previous Unicode clipboard text afterwards. A nil return does not mean the foreground accepted the text. It follows the global backend from `SetBackend`, not a task-level `Input`.
+*   **Environment facts**: `ProbeTarget` reports one window's executable file name, that window's own class name, the integrity relation, and caller UIAccess, plus up to three warnings. It does not choose a backend or initialize HID. `ProbeHID` reports whether this process can initialize HID and does not change the global backend. `initialized` does not mean a window will accept the input.
+*   **Task-level input**: `NewInput` binds `BackendMessage` or `BackendHID`. Window calls use `WindowInput`; screen and windowless calls use `DesktopInput`. A later `SetBackend` does not change that executor. Window search, text reads, cursor position, and DPI stay on the existing functions.
 *   **Coordinate Management**:
     *   Unified **Client Coordinate** system for all APIs.
     *   Built-in `ScreenToClient` / `ClientToScreen` conversion.
@@ -176,6 +178,8 @@ To use the HID backend:
 1.  Install the **Interception driver**.
 2.  Place `interception.dll` in your app directory, or specify its path:
     ```go
+    // Call this before the first successful ProbeHID, NewInput(BackendHID), or SetBackend(BackendHID).
+    // That success freezes the DLL path for the rest of the process.
     winput.SetHIDLibraryPath("libs/interception.dll")
     if err := winput.SetBackend(winput.BackendHID); err != nil {
         // Handle error (e.g. fallback to Message backend)
@@ -261,8 +265,11 @@ winput avoids silent failures. Common errors you should handle:
 | Error Variable | Description | Handling |
 | :--- | :--- | :--- |
 | `ErrWindowNotFound` | Window not found by Title/Class/PID. | Check if the app is running or use `FindByClass` as fallback. |
-| `ErrDriverNotInstalled` | Interception driver missing (HID mode only). | Prompt user to install the driver or fallback to Message backend. |
-| `ErrDLLLoadFailed` | `interception.dll` not found or invalid. | Check DLL path (`SetHIDLibraryPath`) or installation. |
+| `ErrDriverNotInstalled` | The Interception driver context could not be opened (HID only). | Prompt the user to install the driver, or keep the Message backend. |
+| `ErrDLLLoadFailed` | The interception library is missing, its symbols are missing, or no mouse and no keyboard device was found. | Check `SetHIDLibraryPath`, the DLL, and the driver devices. This is not `ErrDriverNotInstalled`. |
+| `ErrTargetChanged` | During `ProbeTarget`, the window still existed, but its process, thread, or a class name already read at the start changed. | Probe again. No partial report is returned. |
+| `ErrInvalidBackend` | `NewInput` received a value other than `BackendMessage` or `BackendHID`. | Pass one of those two. `BackendMessage` is `0` and is legal. |
+| `ErrInputInvalid` | The executor or facade did not come from `NewInput`, `ForWindow`, or `Desktop`. | Use the returned value. `ForWindow(nil)` fails later with `ErrWindowGone`. |
 | `ErrUnsupportedKey` | Character cannot be mapped to a key. | Check input string encoding or use raw `KeyDown` for special keys. |
 | `ErrPermissionDenied` | Operation blocked (e.g., UIPI). | Run your application as Administrator. |
 
@@ -311,7 +318,36 @@ if err := winput.SetBackend(winput.BackendHID); err != nil {
 w.Type("password") // Works with whatever backend is active
 ```
 
-### 3. Key Mapping Details
+### 3. Probes and a task-level executor
+`ProbeTarget` and `ProbeHID` only report facts. They do not select a backend. `ProbeHID` can load the driver; a failure is still a status, and the global backend stays as it was.
+
+```go
+report, err := winput.ProbeTarget(w)
+if err != nil {
+    log.Fatal(err)
+}
+status := winput.ProbeHID()
+log.Printf("class=%s hid=%s", report.Features.TargetClass, status)
+
+input, err := winput.NewInput(winput.BackendMessage)
+if err != nil {
+    log.Fatal(err)
+}
+win, err := input.ForWindow(w)
+if err != nil {
+    log.Fatal(err)
+}
+if err := win.Type("123456"); err != nil {
+    log.Fatal(err)
+}
+if _, err := input.Desktop(); err != nil {
+    log.Fatal(err)
+}
+```
+
+`status` is one of `initialized`, `dll_unavailable`, `driver_unavailable`, `devices_unavailable`, or `unknown`. `PasteByClipboard` still uses `SetBackend`.
+
+### 4. Key Mapping Details
 `winput` maps runes to Scan Codes (Set 1).
 - **Supported**: A-Z, 0-9, Common Symbols (`!`, `@`, `#`...), Space, Enter, Tab.
 - **Auto-Shift**: `Type("A")` automatically sends `Shift Down` -> `a Down` -> `a Up` -> `Shift Up`.

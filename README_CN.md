@@ -26,7 +26,9 @@
     *   **消息后端 (Message Backend)**: 直接向窗口消息队列发送事件。无需窗口焦点，也不移动物理鼠标。
     *   **HID 后端 (HID Backend)**: 使用 [Interception](https://github.com/oblitum/Interception) 驱动模拟底层硬件输入。
     *   **键入间隔 (Typing Intervals)**: `Press` 接受可选的按住时间，`Type` 接受可选的字符间隙；`Type(text, 0)` 去掉睡眠，最后一个字符之后不再多睡。
-*   **剪贴板粘贴 (Clipboard Paste)**: `PasteByClipboard(text)` 向当前前台窗口发送 Ctrl+V，结束后恢复先前的 Unicode 剪贴板文本。返回 nil 不表示前台已经粘上新文本。
+*   **剪贴板粘贴 (Clipboard Paste)**: `PasteByClipboard(text)` 向当前前台窗口发送 Ctrl+V，结束后恢复先前的 Unicode 剪贴板文本。返回 nil 不表示前台已经粘上新文本。它跟随 `SetBackend` 的全局后端，不跟随任务级 `Input`。
+*   **环境事实**: `ProbeTarget` 报告一个窗口的可执行文件名、该窗口自身的类名、完整性关系和调用方 UIAccess，以及至多三条警告。它不选择后端，也不初始化 HID。`ProbeHID` 报告本进程能否初始化 HID，且不修改全局后端。`initialized` 不表示某个窗口会收下输入。
+*   **任务级输入**: `NewInput` 绑定 `BackendMessage` 或 `BackendHID`。窗口操作用 `WindowInput`，屏幕和无窗口操作用 `DesktopInput`。之后的 `SetBackend` 不会改变这个执行器。窗口查找、文本读取、光标位置和 DPI 仍走原有函数。
 *   **坐标管理**:
     *   统一使用 **客户端坐标 (Client Coordinate)** 系统。
     *   内置 `ScreenToClient` / `ClientToScreen` 转换。
@@ -179,6 +181,8 @@ go get github.com/rpdg/winput
 1.  安装 **Interception 驱动**。
 2.  确保 `interception.dll` 存在。默认在当前目录或 PATH 中查找，也可以指定路径：
     ```go
+    // 必须在第一次成功的 ProbeHID、NewInput(BackendHID) 或 SetBackend(BackendHID) 之前调用。
+    // 那一次成功会把 DLL 路径冻结到进程结束。
     winput.SetHIDLibraryPath("libs/interception.dll")
     if err := winput.SetBackend(winput.BackendHID); err != nil {
         // 处理错误（例如回退到消息后端）
@@ -270,8 +274,11 @@ func main() {
 | 错误变量 | 描述 | 处理建议 |
 | :--- | :--- | :--- |
 | `ErrWindowNotFound` | 无法通过 Title/Class/PID 找到窗口。 | 检查应用是否运行，或尝试改用 `FindByClass`。 |
-| `ErrDriverNotInstalled` | Interception 驱动丢失（仅 HID 模式）。 | 提示用户安装驱动，或自动降级到 Message 后端。 |
-| `ErrDLLLoadFailed` | `interception.dll` 加载失败。 | 检查 DLL 路径 (`SetHIDLibraryPath`) 或安装。 |
+| `ErrDriverNotInstalled` | Interception 驱动上下文打不开（仅 HID）。 | 提示用户安装驱动，或继续使用 Message 后端。 |
+| `ErrDLLLoadFailed` | 库找不到、库里缺少符号，或鼠标和键盘设备都没有。 | 检查 `SetHIDLibraryPath`、DLL 和驱动设备。这不是 `ErrDriverNotInstalled`。 |
+| `ErrTargetChanged` | `ProbeTarget` 期间窗口还在，但进程、线程，或开始时已经读到的类名变了。 | 重新探针。不会返回半份结果。 |
+| `ErrInvalidBackend` | `NewInput` 收到了 `BackendMessage` 和 `BackendHID` 以外的值。 | 只传这两个值。`BackendMessage` 是 `0`，它是合法的。 |
+| `ErrInputInvalid` | 执行器或操作面不是 `NewInput`、`ForWindow` 或 `Desktop` 得到的。 | 使用它们的返回值。`ForWindow(nil)` 要到调用时才返回 `ErrWindowGone`。 |
 | `ErrUnsupportedKey` | 字符无法映射到按键。 | 检查输入字符串，特殊按键请使用 `KeyDown`。 |
 | `ErrPermissionDenied` | 操作被系统阻止 (如 UIPI)。 | 尝试以管理员身份运行程序。 |
 
@@ -321,7 +328,36 @@ if err := winput.SetBackend(winput.BackendHID); err != nil {
 w.Type("password") // 使用当前激活的后端工作
 ```
 
-### 3. 按键映射细节
+### 3. 探针和任务级执行器
+`ProbeTarget` 和 `ProbeHID` 只报告事实，不选择后端。`ProbeHID` 可以加载驱动；失败仍然是一个状态，全局后端保持原样。
+
+```go
+report, err := winput.ProbeTarget(w)
+if err != nil {
+    log.Fatal(err)
+}
+status := winput.ProbeHID()
+log.Printf("class=%s hid=%s", report.Features.TargetClass, status)
+
+input, err := winput.NewInput(winput.BackendMessage)
+if err != nil {
+    log.Fatal(err)
+}
+win, err := input.ForWindow(w)
+if err != nil {
+    log.Fatal(err)
+}
+if err := win.Type("123456"); err != nil {
+    log.Fatal(err)
+}
+if _, err := input.Desktop(); err != nil {
+    log.Fatal(err)
+}
+```
+
+`status` 是 `initialized`、`dll_unavailable`、`driver_unavailable`、`devices_unavailable` 或 `unknown` 之一。`PasteByClipboard` 仍使用 `SetBackend`。
+
+### 4. 按键映射细节
 `winput` 将 rune 映射为扫描码 (Scan Code Set 1)。
 - **支持范围**: A-Z, 0-9, 常用符号 (`!`, `@`, `#`...), 空格, 回车, Tab。
 - **自动 Shift**: `Type("A")` 会自动发送 `Shift 按下` -> `a 按下` -> `a 抬起` -> `Shift 抬起`。
