@@ -577,18 +577,115 @@ func TestPressHotkeySchemaMaxItems(t *testing.T) {
 	}
 }
 
-func assertValidationError(t *testing.T, err error, wantContains string) {
+func TestFindWindowTitleIndexRejected(t *testing.T) {
+	prev := findTitle
+	findTitle = func(string) (*winput.Window, error) { return &winput.Window{HWND: 42}, nil }
+	defer func() { findTitle = prev }()
+
+	win, count, err := findWindow(FindWindowArgs{Title: "X", Index: 0})
+	if err != nil || win == nil || win.HWND != 42 || count != 0 {
+		t.Fatalf("title index 0: win=%#v count=%d err=%v", win, count, err)
+	}
+	for _, idx := range []int32{2, -1} {
+		_, _, err = findWindow(FindWindowArgs{Title: "X", Index: idx})
+		assertCodedError(t, err, "validation_error", "not allowed for title search")
+	}
+}
+
+func TestFindWindowLookupRunsBeforeIndexCheck(t *testing.T) {
+	prev := findTitle
+	findTitle = func(string) (*winput.Window, error) { return nil, winput.ErrWindowNotFound }
+	defer func() { findTitle = prev }()
+
+	_, _, err := findWindow(FindWindowArgs{Title: "X", Index: 2})
+	// The lookup runs first: a missing window is target_not_found before
+	// the index rule is consulted.
+	assertCodedError(t, err, "target_not_found", "")
+}
+
+func TestFindWindowProcessNameIndexAndCount(t *testing.T) {
+	prev := findByName
+	defer func() { findByName = prev }()
+	findByName = func(string) ([]*winput.Window, error) {
+		return []*winput.Window{{HWND: 10}, {HWND: 20}}, nil
+	}
+
+	win, count, err := findWindow(FindWindowArgs{ProcessName: "app.exe", Index: 1})
+	if err != nil || win == nil || win.HWND != 20 || count != 2 {
+		t.Fatalf("got win=%#v count=%d err=%v", win, count, err)
+	}
+	_, _, err = findWindow(FindWindowArgs{ProcessName: "app.exe", Index: 2})
+	assertCodedError(t, err, "validation_error", "out of range")
+
+	findByName = func(string) ([]*winput.Window, error) { return nil, nil }
+	_, _, err = findWindow(FindWindowArgs{ProcessName: "gone.exe"})
+	assertCodedError(t, err, "target_not_found", "")
+}
+
+func TestFindWindowPIDIndexAndCount(t *testing.T) {
+	prev := findByPID
+	findByPID = func(uint32) ([]*winput.Window, error) {
+		return []*winput.Window{{HWND: 1}, {HWND: 2}}, nil
+	}
+	defer func() { findByPID = prev }()
+
+	win, count, err := findWindow(FindWindowArgs{PID: 1234, Index: 1})
+	if err != nil || win == nil || win.HWND != 2 || count != 2 {
+		t.Fatalf("got win=%#v count=%d err=%v", win, count, err)
+	}
+}
+
+func TestKeyDescriptionsExposeFullTable(t *testing.T) {
+	catalog := defaultCatalog()
+	var pressKey, pressHotkey string
+	for _, tool := range catalog {
+		switch tool.Name {
+		case "press_key":
+			pressKey = tool.Description
+		case "press_hotkey":
+			pressHotkey = tool.Description
+		}
+	}
+	if pressKey == "" || pressHotkey == "" {
+		t.Fatal("press_key/press_hotkey missing descriptions")
+	}
+	for name, desc := range map[string]string{"press_key": pressKey, "press_hotkey": pressHotkey} {
+		for _, s := range []string{"BKSP", "RIGHTCTRL", "SCROLLLOCK", "NUMPADDIVIDE", "NUMPADENTER", "LWIN", "F12", "PAGEUP"} {
+			if !strings.Contains(desc, s) {
+				t.Fatalf("%s description missing %q", name, s)
+			}
+		}
+		// Rejected aliases must not appear as standalone tokens
+		// (NUMPADDIVIDE legitimately contains "DIVIDE" as a substring).
+		for _, alias := range []string{"BACKSPACE", "ESCAPE", "ARROWUP", "LEFTCTRL", "DIVIDE"} {
+			for _, tok := range strings.FieldsFunc(desc, func(r rune) bool {
+				return !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+			}) {
+				if strings.EqualFold(tok, alias) {
+					t.Fatalf("%s description must not contain alias %q", name, alias)
+				}
+			}
+		}
+	}
+}
+
+func assertCodedError(t *testing.T, err error, wantCode, wantContains string) {
 	t.Helper()
 	if err == nil {
-		t.Fatal("expected validation_error")
+		t.Fatalf("expected error with code %s", wantCode)
 	}
 	var coded *codedError
-	if !errors.As(err, &coded) || coded.Code != "validation_error" {
-		t.Fatalf("expected validation_error, got %#v", err)
+	if !errors.As(err, &coded) || coded.Code != wantCode {
+		t.Fatalf("expected code %s, got %#v", wantCode, err)
 	}
 	if wantContains != "" && !strings.Contains(err.Error(), wantContains) {
 		t.Fatalf("error %q is missing %q", err.Error(), wantContains)
 	}
+}
+
+func assertValidationError(t *testing.T, err error, wantContains string) {
+	t.Helper()
+	assertCodedError(t, err, "validation_error", wantContains)
 }
 
 func readFramedResponse(reader *bufio.Reader) (*JSONRPCResponse, error) {

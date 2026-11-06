@@ -100,6 +100,18 @@ type SwitchBackendArgs struct {
 	Backend string `json:"backend"`
 }
 
+// keyNamesDescription is the discovery surface for the key short-name
+// contract (Q10): it must enumerate the full canonical table and never
+// advertise rejected aliases (BACKSPACE, ESCAPE, LEFTCTRL, ARROWUP,
+// DIVIDE).
+const keyNamesDescription = "Key names: A-Z, 0-9; ESC, F1-F12, ENTER, TAB, SPACE, BKSP; " +
+	"CAPS, NUMLOCK, SCROLLLOCK; CTRL, SHIFT, ALT (left), RIGHTCTRL, RIGHTSHIFT, RIGHTALT; " +
+	"LWIN, RWIN; UP, DOWN, LEFT, RIGHT; HOME, END, INSERT, DELETE, PAGEUP, PAGEDOWN; " +
+	"MINUS, EQUAL, COMMA, DOT, SLASH, SEMI, QUOT, TICK, LBR, RBR, BACKSLASH; " +
+	"NUMPAD0-NUMPAD9, NUMPADDECIMAL, NUMPADMULTIPLY, NUMPADADD, NUMPADSUBTRACT, NUMPADDIVIDE, NUMPADENTER. " +
+	"A single character that needs no shift (such as , . - ; [ ] \\ ' ` = /) is also accepted; " +
+	"a character that needs shift must use a hotkey, for example [\"SHIFT\",\"1\"]."
+
 func defaultCatalog() []Tool {
 	commonErrorSchema := objectSchema(map[string]any{
 		"code":      requiredStringSchema("Stable machine-readable error code."),
@@ -117,7 +129,8 @@ func defaultCatalog() []Tool {
 				"For process_name or pid the hit is chosen from a candidate list via index (default 0) and count reports how many windows matched. " +
 				"PID candidates come from the current EnumWindows Z-order and may include hidden top-level windows; " +
 				"process_name resolves only the first same-named process (Toolhelp snapshot). " +
-				"The returned title, class and process_name fields echo the requested filters, not the window's own identity.",
+				"The returned title, class and process_name fields echo the requested filters, not the window's own identity. " +
+				"To learn a window's actual identity, bind the returned target_id and call read_text.",
 			InputSchema: objectSchema(map[string]any{
 				"title":        stringSchema("Exact window title."),
 				"class":        stringSchema("Window class name."),
@@ -235,10 +248,10 @@ func defaultCatalog() []Tool {
 		{
 			Name:        "press_key",
 			Title:       "Press Key",
-			Description: "Press a single key on a target window. Key is a short name such as ENTER, TAB, A, CTRL, F5, PAGEUP, NUMPAD0, or a single character that needs no shift such as , or .",
+			Description: "Press a single key on a target window. " + keyNamesDescription,
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
-				"key":       requiredStringSchema("Key short name such as ENTER, TAB, A, CTRL, F5, PAGEUP, NUMPAD0, or a single non-shift character such as , or ."),
+				"key":       requiredStringSchema(keyNamesDescription),
 			}, "target_id", "key"),
 			OutputSchema: okSchema(),
 			ErrorSchema: commonErrorSchema,
@@ -247,12 +260,12 @@ func defaultCatalog() []Tool {
 		{
 			Name:        "press_hotkey",
 			Title:       "Press Hotkey",
-			Description: "Press a key combination on a target window.",
+			Description: "Press a key combination on a target window (max 8 keys). " + keyNamesDescription,
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
 				"keys": map[string]any{
 					"type":        "array",
-					"description": "Ordered key names such as CTRL and A.",
+					"description": "Ordered key names; see the key-name list in the description above. Max 8.",
 					"items": map[string]any{
 						"type": "string",
 					},

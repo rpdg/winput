@@ -22,11 +22,16 @@ func main() {
 	// criterion is the awareness check, not the nil return of
 	// EnablePerMonitorDPI: the library falls back to system-aware
 	// (SetProcessDPIAware) on old paths and returns nil while
-	// IsPerMonitorDPIAware is still false (Q7). Whatever the outcome,
-	// the server keeps running and capture_screen fails with the library
-	// error when awareness is missing.
-	if err := winput.EnablePerMonitorDPI(); err != nil || !window.IsPerMonitorDPIAware() {
-		log.Printf("warning: per-monitor DPI awareness unavailable (err=%v); capture_screen may fail with a DPI error", err)
+	// IsPerMonitorDPIAware is still false. An already-aware process (for
+	// example via an application manifest) makes the second
+	// SetProcessDpiAwarenessContext call fail, so the warning must follow
+	// the awareness check, never the error alone. Whatever the outcome, the
+	// server keeps running and capture_screen fails with the library error
+	// when awareness is missing (Q7).
+	if !window.IsPerMonitorDPIAware() {
+		if err := winput.EnablePerMonitorDPI(); err != nil || !window.IsPerMonitorDPIAware() {
+			log.Printf("warning: per-monitor DPI awareness unavailable (err=%v); capture_screen may fail with a DPI error", err)
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

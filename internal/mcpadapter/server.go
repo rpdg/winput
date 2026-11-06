@@ -703,6 +703,16 @@ func writeResponse(out io.Writer, resp JSONRPCResponse) error {
 	return err
 }
 
+// Finder seams keep findWindow's Win32 branches unit-testable without a live
+// desktop. They default to the public winput functions; tests swap them out
+// and restore via defer.
+var (
+	findTitle  = winput.FindByTitle
+	findClass  = winput.FindByClass
+	findByName = winput.FindByProcessName
+	findByPID  = winput.FindByPID
+)
+
 // findWindow resolves the winning selector (title > class > process_name >
 // pid) to a single window. It returns the selected window and, for
 // list-based searches (pid/process_name), the candidate count (count is 0
@@ -710,7 +720,7 @@ func writeResponse(out io.Writer, resp JSONRPCResponse) error {
 func findWindow(args FindWindowArgs) (*winput.Window, int, error) {
 	switch {
 	case args.Title != "":
-		win, err := winput.FindByTitle(args.Title)
+		win, err := findTitle(args.Title)
 		if err != nil {
 			return nil, 0, targetNotFound(err)
 		}
@@ -719,7 +729,7 @@ func findWindow(args FindWindowArgs) (*winput.Window, int, error) {
 		}
 		return win, 0, nil
 	case args.Class != "":
-		win, err := winput.FindByClass(args.Class)
+		win, err := findClass(args.Class)
 		if err != nil {
 			return nil, 0, targetNotFound(err)
 		}
@@ -728,7 +738,7 @@ func findWindow(args FindWindowArgs) (*winput.Window, int, error) {
 		}
 		return win, 0, nil
 	case args.ProcessName != "":
-		wins, err := winput.FindByProcessName(args.ProcessName)
+		wins, err := findByName(args.ProcessName)
 		if err != nil || len(wins) == 0 {
 			if err == nil {
 				err = winput.ErrWindowNotFound
@@ -741,7 +751,7 @@ func findWindow(args FindWindowArgs) (*winput.Window, int, error) {
 		}
 		return win, len(wins), nil
 	case args.PID > 0:
-		wins, err := winput.FindByPID(args.PID)
+		wins, err := findByPID(args.PID)
 		if err != nil || len(wins) == 0 {
 			if err == nil {
 				err = winput.ErrWindowNotFound
