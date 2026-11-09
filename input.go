@@ -342,10 +342,10 @@ func (d *DesktopInput) Type(text string, interval ...time.Duration) error {
 
 // PasteByClipboard pastes text into the current foreground window with
 // Ctrl+V, using this executor's fixed backend. It does not read the global
-// backend. The clipboard is still process-wide, the target is whatever window
-// is foreground when the call runs, and no HWND is accepted. See the package
-// PasteByClipboard for the clipboard format, restore, and consumption limits;
-// this method has the same limits.
+// backend. The clipboard is shared with other processes in the current window
+// station; the target is whatever window is foreground when the call runs, and
+// no HWND is accepted. See the package PasteByClipboard for the clipboard
+// format, restore, and consumption limits; this method has the same limits.
 //
 // A nil or zero receiver returns ErrInputInvalid before text validation, backend
 // resolution, or the clipboard is touched. Empty text on a valid receiver

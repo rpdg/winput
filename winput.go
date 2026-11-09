@@ -313,6 +313,14 @@ func moveImpl(cb Backend, hwnd uintptr, x, y int32, isRelative bool) error {
 	return mouse.Move(hwnd, x, y)
 }
 
+// keyDown and keyUp are test seams for the backend-dependent key dispatch.
+// Production uses keyDownImpl and keyUpImpl; tests replace them to verify which
+// backend reaches the send and release stages.
+var (
+	keyDown = keyDownImpl
+	keyUp   = keyUpImpl
+)
+
 func keyDownImpl(cb Backend, hwnd uintptr, k Key) error {
 	if cb == BackendHID {
 		return hid.KeyDown(uint16(k))
@@ -1072,8 +1080,8 @@ func pressFor(key Key, duration time.Duration, fixed *Backend) (err error) {
 		err = errors.Join(err, scope.Release())
 	}()
 	if err := scope.Press(
-		func() error { return keyDownImpl(cb, 0, key) },
-		func() error { return keyUpImpl(cb, 0, key) },
+		func() error { return keyDown(cb, 0, key) },
+		func() error { return keyUp(cb, 0, key) },
 	); err != nil {
 		return err
 	}
@@ -1246,7 +1254,7 @@ func keyDownWindow(w *Window, key Key, fixed *Backend) error {
 	if err != nil {
 		return err
 	}
-	return keyDownImpl(cb, w.HWND, key)
+	return keyDown(cb, w.HWND, key)
 }
 
 // KeyUp sends a key up event to the window.
@@ -1264,7 +1272,7 @@ func keyUpWindow(w *Window, key Key, fixed *Backend) error {
 	if err != nil {
 		return err
 	}
-	return keyUpImpl(cb, w.HWND, key)
+	return keyUp(cb, w.HWND, key)
 }
 
 // Press simulates a key press (down then up).
@@ -1304,8 +1312,8 @@ func pressWindow(w *Window, key Key, hold time.Duration, fixed *Backend) (err er
 		err = errors.Join(err, scope.Release())
 	}()
 	if err := scope.Press(
-		func() error { return keyDownImpl(cb, w.HWND, key) },
-		func() error { return keyUpImpl(cb, w.HWND, key) },
+		func() error { return keyDown(cb, w.HWND, key) },
+		func() error { return keyUp(cb, w.HWND, key) },
 	); err != nil {
 		return err
 	}
@@ -1347,8 +1355,8 @@ func pressHotkeyWindow(w *Window, fixed *Backend, keys ...Key) (err error) {
 	for _, k := range keys {
 		key := k
 		if err := scope.Press(
-			func() error { return keyDownImpl(cb, w.HWND, key) },
-			func() error { return keyUpImpl(cb, w.HWND, key) },
+			func() error { return keyDown(cb, w.HWND, key) },
+			func() error { return keyUp(cb, w.HWND, key) },
 		); err != nil {
 			return err
 		}
@@ -1464,7 +1472,7 @@ func keyDownGlobal(k Key, fixed *Backend) error {
 	if err != nil {
 		return err
 	}
-	return keyDownImpl(cb, 0, k)
+	return keyDown(cb, 0, k)
 }
 
 // KeyUp simulates a global key up event.
@@ -1479,7 +1487,7 @@ func keyUpGlobal(k Key, fixed *Backend) error {
 	if err != nil {
 		return err
 	}
-	return keyUpImpl(cb, 0, k)
+	return keyUp(cb, 0, k)
 }
 
 // Press simulates a global key press (down then up).
@@ -1514,8 +1522,8 @@ func pressGlobal(k Key, hold time.Duration, fixed *Backend) (err error) {
 		err = errors.Join(err, scope.Release())
 	}()
 	if err := scope.Press(
-		func() error { return keyDownImpl(cb, 0, k) },
-		func() error { return keyUpImpl(cb, 0, k) },
+		func() error { return keyDown(cb, 0, k) },
+		func() error { return keyUp(cb, 0, k) },
 	); err != nil {
 		return err
 	}
@@ -1557,8 +1565,8 @@ func pressHotkeyWith(cb Backend, keys ...Key) (err error) {
 	for _, k := range keys {
 		key := k
 		if err := scope.Press(
-			func() error { return keyDownImpl(cb, 0, key) },
-			func() error { return keyUpImpl(cb, 0, key) },
+			func() error { return keyDown(cb, 0, key) },
+			func() error { return keyUp(cb, 0, key) },
 		); err != nil {
 			return err
 		}

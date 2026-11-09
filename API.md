@@ -393,15 +393,18 @@ clipboard text was restored without error. `SendInput` returns once the events
 are queued and does not wait for the foreground to process the paste, so there
 is no synchronization point proving the foreground read the clipboard before
 it was restored. A non-nil return does not prove the keys were not inserted
-either: the key can have succeeded while the restore failed, in which case
-`errors.Is` can recognize both `ErrClipboardFailed` and `ErrSendInputFailed`
-on the same error. To know whether a control accepted the text, observe that
-control separately.
+either: the key can have succeeded while the restore failed. In that case
+`errors.Is` matches `ErrClipboardFailed` but not `ErrSendInputFailed`; the same
+error matches both only when the key and the restore both failed. To know
+whether a control accepted the text, observe that control separately.
 
 The clipboard is temporarily replaced and only `CF_UNICODETEXT` is put back.
-If the system had no Unicode format (including a clipboard that only held an
-image, or a `CF_TEXT` the system could convert), a bare empty Unicode buffer is
-restored and the original non-text formats do not return. New text has a lone
+The system can expose `CF_TEXT` as `CF_UNICODETEXT`; when it does, the
+synthesized Unicode text is read and restored as `CF_UNICODETEXT`. If no
+readable Unicode text is available (for example, a clipboard that only held an
+image, or only a format the system could not convert to `CF_UNICODETEXT`), a
+bare empty Unicode buffer is restored. In either case the original `CF_TEXT`
+and other non-text formats do not return. New text has a lone
 `\n` normalized to `\r\n` before it is written; restored text is written
 byte-for-byte as it was read. Empty text fails with `ErrEmptyPasteText` before
 the clipboard is opened and before any key is sent. PasteByClipboard is not a
@@ -417,8 +420,8 @@ PasteByClipboard pastes text into the current foreground window with Ctrl+V,
 using the executor's fixed backend. The backend is chosen at `NewInput`, not at
 paste time; a later `SetBackend` does not change it. The target is still
 whatever window is foreground when the call runs, and no HWND is accepted. The
-clipboard is process-wide and shared with other programs and with the
-package-level function.
+clipboard is shared with other processes in the current window station; the
+package-level function uses the same clipboard.
 
 A nil or zero `DesktopInput` returns `ErrInputInvalid` before text validation,
 backend resolution, or any clipboard access. Empty text on a valid facade

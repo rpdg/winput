@@ -664,6 +664,35 @@ func TestReadProcessFactsDegradesIndependently(t *testing.T) {
 	})
 }
 
+// TestReadProcessFactsUsesSameProcessHandle verifies the lower half of the
+// handle chain; TestProbeTargetHoldsOneProcessHandle verifies the probe passes
+// its opened handle into collectFacts.
+func TestReadProcessFactsUsesSameProcessHandle(t *testing.T) {
+	const proc = syscall.Handle(0x1234)
+	var nameHandle, tokenHandle syscall.Handle
+	restoreName := swapTargetName(func(got syscall.Handle) string {
+		nameHandle = got
+		return "notepad.exe"
+	})
+	defer restoreName()
+	restoreToken := swapTargetToken(func(got uintptr) (syscall.Handle, bool) {
+		tokenHandle = syscall.Handle(got)
+		return 0, false
+	})
+	defer restoreToken()
+
+	name, rid, ok := readProcessFacts(proc, true)
+	if name != "notepad.exe" || rid != 0 || ok {
+		t.Fatalf("facts = %q/%d/%v", name, rid, ok)
+	}
+	if nameHandle != proc {
+		t.Fatalf("name read used handle %v, want %v", nameHandle, proc)
+	}
+	if tokenHandle != proc {
+		t.Fatalf("token read used handle %v, want %v", tokenHandle, proc)
+	}
+}
+
 func TestNewInputAndTaskFacade(t *testing.T) {
 	prev := getBackend()
 	defer func() { _ = SetBackend(prev) }()

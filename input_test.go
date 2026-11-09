@@ -143,6 +143,10 @@ func TestAcquireBackendFixedSkipsGlobal(t *testing.T) {
 	}
 }
 
+// TestInputFacadesUseFixedBackend checks that every facade method passes its
+// fixed backend into acquisition. TestInputFacadeKeyMethodsUseFixedBackend
+// covers the later send and release stages; PasteByClipboard has its own
+// lower-level test in paste_test.go.
 func TestInputFacadesUseFixedBackend(t *testing.T) {
 	hwnd := createStaticWindow(true)
 	if hwnd == 0 {
@@ -244,6 +248,97 @@ func TestInputFacadesUseFixedBackend(t *testing.T) {
 	}
 }
 
+func TestInputFacadeKeyMethodsUseFixedBackend(t *testing.T) {
+	hwnd := createStaticWindow(true)
+	if hwnd == 0 {
+		t.Fatal("CreateWindowEx failed")
+	}
+	defer destroyWindow(hwnd)
+	w := &Window{HWND: hwnd}
+
+	prev := getBackend()
+	defer setGlobalBackend(prev)
+
+	for _, fixed := range []Backend{BackendMessage, BackendHID} {
+		t.Run(backendName(fixed), func(t *testing.T) {
+			global := BackendMessage
+			if fixed == BackendMessage {
+				global = BackendHID
+			}
+			setGlobalBackend(global)
+
+			in := &Input{backend: fixed, valid: true}
+			win, err := in.ForWindow(w)
+			if err != nil {
+				t.Fatal(err)
+			}
+			desk, err := in.Desktop()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			restoreBackend := swapAcquireBackend(func(got *Backend) (Backend, error) {
+				if got == nil || *got != fixed {
+					t.Errorf("acquireBackend got %v, want %v", got, fixed)
+					return 0, errStopBeforeInput
+				}
+				return fixed, nil
+			})
+			defer restoreBackend()
+
+			type keyCall struct {
+				backend Backend
+				hwnd    uintptr
+			}
+			var calls []keyCall
+			record := func(cb Backend, hwnd uintptr, _ Key) error {
+				calls = append(calls, keyCall{backend: cb, hwnd: hwnd})
+				return nil
+			}
+			restoreDown := swapKeyDown(record)
+			defer restoreDown()
+			restoreUp := swapKeyUp(record)
+			defer restoreUp()
+
+			checks := []struct {
+				name      string
+				call      func() error
+				wantHWND  uintptr
+				wantCalls int
+			}{
+				{"Window.KeyDown", func() error { return win.KeyDown(KeyA) }, hwnd, 1},
+				{"Window.KeyUp", func() error { return win.KeyUp(KeyA) }, hwnd, 1},
+				{"Window.Press", func() error { return win.Press(KeyA, 0) }, hwnd, 2},
+				{"Window.PressHotkey", func() error { return win.PressHotkey(KeyA) }, hwnd, 2},
+				{"Desktop.KeyDown", func() error { return desk.KeyDown(KeyA) }, 0, 1},
+				{"Desktop.KeyUp", func() error { return desk.KeyUp(KeyA) }, 0, 1},
+				{"Desktop.Press", func() error { return desk.Press(KeyA, 0) }, 0, 2},
+				{"Desktop.PressFor", func() error { return desk.PressFor(KeyA, 10*time.Millisecond) }, 0, 2},
+				{"Desktop.PressHotkey", func() error { return desk.PressHotkey(KeyA) }, 0, 2},
+			}
+			for _, check := range checks {
+				calls = nil
+				if err := check.call(); err != nil {
+					t.Errorf("%s error = %v", check.name, err)
+					continue
+				}
+				if len(calls) != check.wantCalls {
+					t.Errorf("%s key calls = %d, want %d", check.name, len(calls), check.wantCalls)
+					continue
+				}
+				for i, call := range calls {
+					if call.backend != fixed {
+						t.Errorf("%s call %d backend = %v, want %v", check.name, i, call.backend, fixed)
+					}
+					if call.hwnd != check.wantHWND {
+						t.Errorf("%s call %d hwnd = %d, want %d", check.name, i, call.hwnd, check.wantHWND)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestInputFacadeMethodSet(t *testing.T) {
 	windowMethods := methodNames(reflect.TypeOf(&WindowInput{}))
 	desktopMethods := methodNames(reflect.TypeOf(&DesktopInput{}))
@@ -306,4 +401,16 @@ func swapAcquireBackend(fn func(*Backend) (Backend, error)) func() {
 	prev := acquireBackend
 	acquireBackend = fn
 	return func() { acquireBackend = prev }
+}
+
+func swapKeyDown(fn func(Backend, uintptr, Key) error) func() {
+	prev := keyDown
+	keyDown = fn
+	return func() { keyDown = prev }
+}
+
+func swapKeyUp(fn func(Backend, uintptr, Key) error) func() {
+	prev := keyUp
+	keyUp = fn
+	return func() { keyUp = prev }
 }

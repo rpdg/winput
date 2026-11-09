@@ -325,16 +325,16 @@ func PasteByClipboard(text string) error
 ```
 PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口。它不接收 `HWND`：按键进入调用发生时已经是前台的窗口。
 
-返回 nil **并不表示**前台程序已经收到新文本。nil 只表示 Ctrl+V 事件已经入队，并且先前剪贴板上的 Unicode 文本已经恢复且没有错误。`SendInput` 在事件入队时返回，并不等待前台处理粘贴，因此在恢复之前不存在「前台已经读完剪贴板」的同步点。返回非 nil 也不表示按键没有插入：按键可能已经成功而恢复失败，此时 `errors.Is` 能在同一个错误上同时认出 `ErrClipboardFailed` 与 `ErrSendInputFailed`。要确认控件是否收下文字，必须另行观察那个控件。
+返回 nil **并不表示**前台程序已经收到新文本。nil 只表示 Ctrl+V 事件已经入队，并且先前剪贴板上的 Unicode 文本已经恢复且没有错误。`SendInput` 在事件入队时返回，并不等待前台处理粘贴，因此在恢复之前不存在「前台已经读完剪贴板」的同步点。返回非 nil 也不表示按键没有插入：按键可能已经成功而恢复失败，此时 `errors.Is` 只能认出 `ErrClipboardFailed`，不会匹配 `ErrSendInputFailed`；只有按键与恢复均失败时，同一个错误才会同时匹配两个哨兵。要确认控件是否收下文字，必须另行观察那个控件。
 
-剪贴板会被临时替换，结束后只放回 `CF_UNICODETEXT`。若系统当时没有 Unicode 格式（包括剪贴板上只有图片，或只有可被系统转换的 `CF_TEXT`），恢复的是空 Unicode 缓冲，原有的非文本格式不会回来。新文本中单独的 `\n` 会先被规范成 `\r\n` 再写入；恢复的文本按读到的内容原样写回。空文本在打开剪贴板、发送任何按键之前以 `ErrEmptyPasteText` 失败。PasteByClipboard 不是 `Type` 的替代品；拒绝粘贴的控件（例如密码框）不会因此成功。
+剪贴板会被临时替换，结束后只放回 `CF_UNICODETEXT`。系统可以把 `CF_TEXT` 作为 `CF_UNICODETEXT` 提供；此时读到的合成 Unicode 文本会以 `CF_UNICODETEXT` 恢复。若没有可读的 Unicode 文本（例如剪贴板上只有图片，或只有系统无法转换成 `CF_UNICODETEXT` 的格式），恢复的是空 Unicode 缓冲。两种情况下，原有的 `CF_TEXT` 及其它非文本格式都不会回来。新文本中单独的 `\n` 会先被规范成 `\r\n` 再写入；恢复的文本按读到的内容原样写回。空文本在打开剪贴板、发送任何按键之前以 `ErrEmptyPasteText` 失败。PasteByClipboard 不是 `Type` 的替代品；拒绝粘贴的控件（例如密码框）不会因此成功。
 
 ### func (*DesktopInput) PasteByClipboard
 
 ```go
 func (d *DesktopInput) PasteByClipboard(text string) error
 ```
-PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口，并使用该执行器在 `NewInput` 时固定的后端；调用时不会重新选择后端，之后调用 `SetBackend` 也不影响它。目标窗口仍是调用发生时处于前台的窗口，不接收 `HWND`。剪贴板是进程级共享资源，其它程序以及包级函数都会看到同一份内容。
+PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口，并使用该执行器在 `NewInput` 时固定的后端；调用时不会重新选择后端，之后调用 `SetBackend` 也不影响它。目标窗口仍是调用发生时处于前台的窗口，不接收 `HWND`。剪贴板属于当前窗口站，同一窗口站内的其它进程共享同一份内容；包级函数也使用这份剪贴板。
 
 nil 或零值 `DesktopInput` 会在文本校验、后端解析和任何剪贴板访问之前返回 `ErrInputInvalid`。合法门面上的空串返回 `ErrEmptyPasteText`，不获取输入锁、不打开剪贴板；纯空白文本合法。
 

@@ -82,19 +82,23 @@ func pasteByClipboard(text string, fixed *Backend) error {
 // the restore runs right after the combination key; there is no
 // synchronization point that proves the foreground read the clipboard before
 // it was restored. A non-nil return does not prove the keys were not inserted
-// either: the key can have succeeded while the restore failed, in which case
-// errors.Is can recognize both ErrClipboardFailed and ErrSendInputFailed on
-// the same error. When the swap provides a restore function, restore is
-// attempted once even if the swap or Ctrl+V failed; the returned error joins
-// the swap, key, and restore errors. To know whether a control accepted the
-// text, the caller must observe that control separately.
+// either: the key can have succeeded while the restore failed. In that case
+// errors.Is matches ErrClipboardFailed but not ErrSendInputFailed; the same
+// error matches both only when the key and the restore both failed. When the
+// swap provides a restore function, restore is attempted once even if the swap
+// or Ctrl+V failed; the returned error joins the swap, key, and restore errors.
+// To know whether a control accepted the text, the caller must observe that
+// control separately.
 //
 // The clipboard is temporarily replaced and only CF_UNICODETEXT is put back.
-// This is not a full clipboard backup and restore. If the system had no Unicode
-// format (including when the clipboard only held an image, or a CF_TEXT that
-// the system could convert), a bare empty Unicode buffer is restored and the
-// original non-text formats (images, HTML, file lists, custom formats) do not
-// return. Even when Unicode text was present, other formats are not restored.
+// This is not a full clipboard backup and restore. The system can expose
+// CF_TEXT as CF_UNICODETEXT; when it does, the synthesized Unicode text is read
+// and restored as CF_UNICODETEXT. If no readable Unicode text is available
+// (for example, the clipboard only held an image, or only a format the system
+// could not convert to CF_UNICODETEXT), a bare empty Unicode buffer is
+// restored. In either case the original CF_TEXT and other non-text formats
+// (images, HTML, file lists, custom formats) do not return. Even when Unicode
+// text was present, other formats are not restored.
 // New text has a lone "\n" normalized to "\r\n" before it is written; restored
 // text is written byte-for-byte as it was read. Empty text fails with
 // ErrEmptyPasteText before the clipboard is opened and before any key is sent;
