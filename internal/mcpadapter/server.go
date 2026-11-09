@@ -314,6 +314,12 @@ func (s *Server) callTool(ctx context.Context, params ToolCallParams) (any, erro
 		if err := decodeArgs(params.Arguments, &args); err != nil {
 			return nil, invalidRequestError("validation_error", err)
 		}
+		if err := requireArgs(params.Arguments, "keys"); err != nil {
+			return nil, invalidRequestError("validation_error", err)
+		}
+		if len(args.Keys) == 0 {
+			return nil, invalidRequestError("validation_error", fmt.Errorf("keys must contain at least one key"))
+		}
 		if len(args.Keys) > maxPressHotkeyKeys {
 			return nil, invalidRequestError("validation_error", fmt.Errorf("too many keys: %d (max %d)", len(args.Keys), maxPressHotkeyKeys))
 		}
@@ -611,11 +617,17 @@ func mapLibraryError(err error) error {
 	switch {
 	case errors.Is(err, winput.ErrWindowNotFound), errors.Is(err, winput.ErrWindowGone):
 		return &codedError{Code: "target_not_found", Message: "target not found", Retryable: false, Cause: err}
+	case errors.Is(err, winput.ErrWindowNotVisible):
+		return &codedError{Code: "target_not_visible", Message: "target not visible", Retryable: false, Cause: err}
 	case errors.Is(err, winput.ErrPermissionDenied):
 		return &codedError{Code: "permission_denied", Message: "permission denied", Retryable: false, Cause: err}
 	case errors.Is(err, winput.ErrDriverNotInstalled), errors.Is(err, winput.ErrDLLLoadFailed), errors.Is(err, winput.ErrDirectedScrollUnsupported):
 		return &codedError{Code: "backend_unavailable", Message: "backend unavailable", Retryable: false, Cause: err}
-	case errors.Is(err, winput.ErrInvalidScrollSteps), errors.Is(err, winput.ErrInvalidScrollDelta), errors.Is(err, winput.ErrInvalidMouseCoordinate):
+	case errors.Is(err, winput.ErrInvalidScrollSteps),
+		errors.Is(err, winput.ErrInvalidScrollDelta),
+		errors.Is(err, winput.ErrInvalidMouseCoordinate),
+		errors.Is(err, winput.ErrUnsupportedKey),
+		errors.Is(err, winput.ErrOutsideVirtualDesktop):
 		return &codedError{Code: "validation_error", Message: "tool call failed", Retryable: false, Cause: err}
 	default:
 		return &codedError{Code: "internal_error", Message: "tool call failed", Retryable: false, Cause: err}
@@ -649,9 +661,17 @@ func errorDetails(err error) string {
 // runs before the body is allocated.
 const maxRequestBytes = 16 << 20
 
+// Header lines are protocol metadata, not payload, so they get a much
+// smaller cap and a bounded count. Without these limits a client could make
+// the server retain an unbounded number of header lines.
+const (
+	maxHeaderLines = 64
+	maxHeaderBytes = 8 << 10
+)
+
 func readBoundedLine(reader *bufio.Reader, max int) (string, error) {
 	var buf bytes.Buffer
-	for buf.Len() <= max {
+	for buf.Len() < max {
 		b, err := reader.ReadByte()
 		if err != nil {
 			if err == io.EOF && buf.Len() > 0 {
@@ -668,13 +688,13 @@ func readBoundedLine(reader *bufio.Reader, max int) (string, error) {
 }
 
 func readRequest(reader *bufio.Reader) (*JSONRPCRequest, error) {
-	firstLine, err := readBoundedLine(reader, maxRequestBytes)
-	if err != nil {
-		return nil, err
-	}
-	firstLine = strings.TrimSpace(firstLine)
-	if firstLine == "" {
-		return readRequest(reader)
+	var firstLine string
+	for firstLine == "" {
+		line, err := readBoundedLine(reader, maxRequestBytes)
+		if err != nil {
+			return nil, err
+		}
+		firstLine = strings.TrimSpace(line)
 	}
 
 	var payload []byte
@@ -705,9 +725,12 @@ func readRequest(reader *bufio.Reader) (*JSONRPCRequest, error) {
 
 func parseHeaders(reader *bufio.Reader, headers textproto.MIMEHeader, firstLine string) error {
 	line := firstLine
-	for {
+	for count := 0; ; count++ {
 		if line == "" {
 			return nil
+		}
+		if count >= maxHeaderLines {
+			return fmt.Errorf("too many header lines (max %d)", maxHeaderLines)
 		}
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) != 2 {
@@ -715,7 +738,7 @@ func parseHeaders(reader *bufio.Reader, headers textproto.MIMEHeader, firstLine 
 		}
 		headers.Add(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 
-		next, err := readBoundedLine(reader, maxRequestBytes)
+		next, err := readBoundedLine(reader, maxHeaderBytes)
 		if err != nil {
 			return err
 		}
@@ -810,11 +833,14 @@ func pickCandidate(list []*winput.Window, index int32) (*winput.Window, error) {
 }
 
 // requireArgs enforces presence of required arguments at call time (Q13).
-// Zero values such as (0, 0) or delta 0 are legal; only an absent key is
-// rejected.
+// Zero values such as (0, 0) or delta 0 are legal; an absent key and an
+// explicit JSON null are both rejected. decodeArgs turns null into a zero
+// value before this check runs, so checking the raw arguments is the only
+// way to tell "0" from "null".
 func requireArgs(args map[string]any, keys ...string) error {
 	for _, k := range keys {
-		if _, ok := args[k]; !ok {
+		v, ok := args[k]
+		if !ok || v == nil {
 			return fmt.Errorf("missing required argument: %s", k)
 		}
 	}

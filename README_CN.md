@@ -137,8 +137,7 @@ go run ./cmd/mcp-server -allow-mutations -allow-sensitive
 - 支持 `ping` 与协议版本协商
 
 相关文档：
-- adapter 设计：[docs/mcp-tools.md](docs/mcp-tools.md)
-- 缺口补齐设计：[docs/mcp-tools-gaps.md](docs/mcp-tools-gaps.md)
+- adapter 设计与决策：[docs/mcp-tools.md](docs/mcp-tools.md)
 - 协议会话示例：[docs/mcp-example-session.md](docs/mcp-example-session.md)
 - server 入口说明：[cmd/mcp-server/README.md](cmd/mcp-server/README.md)
 

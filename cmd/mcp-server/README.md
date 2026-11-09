@@ -32,7 +32,7 @@ The catalog currently exposes 19 stable low-level tools:
 - `move_mouse`
 - `type_text`
 - `press_key`
-- `press_hotkey` (keys capped at 8)
+- `press_hotkey` (1-8 keys)
 - `read_text`
 - `capture_screen`
 - `switch_backend`
@@ -44,7 +44,7 @@ The catalog currently exposes 19 stable low-level tools:
 - `scroll_wheel`
 - `scroll`
 
-See [docs/mcp-tools-gaps.md](../../docs/mcp-tools-gaps.md) for the gap-fill design and decisions, and [docs/mcp-tools.md](../../docs/mcp-tools.md) for the adapter design and boundary rules.
+See [docs/mcp-tools.md](../../docs/mcp-tools.md) for the adapter design, gap-fill decisions, and boundary rules.
 
 ## Current Status
 
@@ -76,7 +76,7 @@ Transport:
 - text `content`
 - stable structured error data on failure
 
-Call-time validation: new tools require their coordinate/delta arguments (an absent argument is a validation error even though the zero value is itself legal); `press_hotkey` rejects more than 8 keys.
+Call-time validation: new tools require their coordinate/delta arguments (an absent or null argument is a validation error even though the zero value is itself legal); `press_hotkey` rejects an empty array and more than 8 keys.
 
 ## Capture Screen DPI
 

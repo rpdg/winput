@@ -1,13 +1,13 @@
 package mcpadapter
 
 type Tool struct {
-	Name        string         `json:"name"`
-	Title       string         `json:"title,omitempty"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"inputSchema"`
+	Name         string         `json:"name"`
+	Title        string         `json:"title,omitempty"`
+	Description  string         `json:"description"`
+	InputSchema  map[string]any `json:"inputSchema"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
-	ErrorSchema map[string]any `json:"errorSchema,omitempty"`
-	Annotations map[string]any `json:"annotations,omitempty"`
+	ErrorSchema  map[string]any `json:"errorSchema,omitempty"`
+	Annotations  map[string]any `json:"annotations,omitempty"`
 }
 
 type ToolCallParams struct {
@@ -191,8 +191,8 @@ func defaultCatalog() []Tool {
 				"button":    stringEnumSchema("Mouse button.", "left", "right", "middle"),
 			}, "target_id", "x", "y"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "double_click",
@@ -204,8 +204,8 @@ func defaultCatalog() []Tool {
 				"y":         intSchema("Client Y coordinate."),
 			}, "target_id", "x", "y"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "right_click",
@@ -217,8 +217,8 @@ func defaultCatalog() []Tool {
 				"y":         intSchema("Client Y coordinate."),
 			}, "target_id", "x", "y"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "move_mouse",
@@ -230,8 +230,8 @@ func defaultCatalog() []Tool {
 				"y":         intSchema("Client Y coordinate."),
 			}, "target_id", "x", "y"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "type_text",
@@ -242,8 +242,8 @@ func defaultCatalog() []Tool {
 				"text":      requiredStringSchema("Text to type."),
 			}, "target_id", "text"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "press_key",
@@ -254,18 +254,18 @@ func defaultCatalog() []Tool {
 				"key":       requiredStringSchema(keyNamesDescription),
 			}, "target_id", "key"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "press_hotkey",
 			Title:       "Press Hotkey",
-			Description: "Press a key combination on a target window (max 8 keys). " + keyNamesDescription,
+			Description: "Press a key combination on a target window (1-8 keys). " + keyNamesDescription,
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
 				"keys": map[string]any{
 					"type":        "array",
-					"description": "Ordered key names; see the key-name list in the description above. Max 8.",
+					"description": "Ordered key names; see the key-name list in the description above. 1-8 items.",
 					"items": map[string]any{
 						"type": "string",
 					},
@@ -274,8 +274,8 @@ func defaultCatalog() []Tool {
 				},
 			}, "target_id", "keys"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "read_text",
@@ -352,8 +352,8 @@ func defaultCatalog() []Tool {
 				"y": intSchema("Virtual desktop Y coordinate."),
 			}, "x", "y"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "click_at",
@@ -365,8 +365,8 @@ func defaultCatalog() []Tool {
 				"button": stringEnumSchema("Mouse button.", "left", "right", "middle"),
 			}, "x", "y"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "double_click_at",
@@ -377,8 +377,8 @@ func defaultCatalog() []Tool {
 				"y": intSchema("Virtual desktop Y coordinate."),
 			}, "x", "y"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "scroll_wheel",
@@ -388,22 +388,22 @@ func defaultCatalog() []Tool {
 				"steps": intSchema("Whole wheel steps; positive scrolls forward."),
 			}, "steps"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 		{
 			Name:        "scroll",
 			Title:       "Scroll",
-			Description: "Send a wheel event at client coordinates inside a target window. delta uses Win32 wheel increments (120 per notch) with the same direction as scroll_wheel steps; an explicit 0 is a successful no-op. Works on the message backend; the HID backend returns backend_unavailable because hardware wheel events cannot be directed to a window.",
+			Description: "Send a wheel event at client coordinates inside a target window. delta uses Win32 wheel increments (120 per notch) with the same direction as scroll_wheel steps. On the message backend an explicit 0 is a successful no-op; the HID backend returns backend_unavailable because hardware wheel events cannot be directed to a window.",
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
 				"x":         intSchema("Client X coordinate."),
 				"y":         intSchema("Client Y coordinate."),
-				"delta":     intSchema("Wheel delta in Win32 increments (120 per notch); explicit 0 is a no-op."),
+				"delta":     intSchema("Wheel delta in Win32 increments (120 per notch); on the message backend an explicit 0 is a no-op."),
 			}, "target_id", "x", "y", "delta"),
 			OutputSchema: okSchema(),
-			ErrorSchema: commonErrorSchema,
-			Annotations: annotations("state_change", true),
+			ErrorSchema:  commonErrorSchema,
+			Annotations:  annotations("state_change", true),
 		},
 	}
 }

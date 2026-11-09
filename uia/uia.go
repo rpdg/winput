@@ -328,7 +328,7 @@ func (p *iuiAutomationValuePattern) release() {
 }
 
 func (p *iuiAutomationValuePattern) currentValue() (string, error) {
-	var bstr uintptr
+	var bstr *uint16
 	hr, _, _ := syscall.SyscallN(
 		p.lpVtbl.GetCurrentValue,
 		uintptr(unsafe.Pointer(p)),
@@ -371,7 +371,7 @@ func (r *iuiAutomationTextRange) release() {
 }
 
 func (r *iuiAutomationTextRange) text() (string, error) {
-	var bstr uintptr
+	var bstr *uint16
 	hr, _, _ := syscall.SyscallN(
 		r.lpVtbl.GetText,
 		uintptr(unsafe.Pointer(r)),
@@ -384,17 +384,17 @@ func (r *iuiAutomationTextRange) text() (string, error) {
 	return bstrToStringAndFree(bstr), nil
 }
 
-func bstrToStringAndFree(bstr uintptr) string {
-	if bstr == 0 {
+func bstrToStringAndFree(bstr *uint16) string {
+	if bstr == nil {
 		return ""
 	}
-	defer procSysFreeString.Call(bstr)
-	n, _, _ := procSysStringLen.Call(bstr)
+	ptr := uintptr(unsafe.Pointer(bstr))
+	defer procSysFreeString.Call(ptr)
+	n, _, _ := procSysStringLen.Call(ptr)
 	if n == 0 {
 		return ""
 	}
-	buf := unsafe.Slice((*uint16)(unsafe.Pointer(bstr)), int(n))
-	return string(utf16.Decode(buf))
+	return string(utf16.Decode(unsafe.Slice(bstr, int(n))))
 }
 
 func findCandidateElement(automation *iuiAutomation, root *iuiAutomationElement) (*iuiAutomationElement, error) {

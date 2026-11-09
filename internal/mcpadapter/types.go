@@ -3,9 +3,9 @@ package mcpadapter
 import "encoding/json"
 
 type InitializeResult struct {
-	ProtocolVersion string                 `json:"protocolVersion"`
-	ServerInfo      ServerInfo             `json:"serverInfo"`
-	Capabilities    map[string]any         `json:"capabilities"`
+	ProtocolVersion string         `json:"protocolVersion"`
+	ServerInfo      ServerInfo     `json:"serverInfo"`
+	Capabilities    map[string]any `json:"capabilities"`
 }
 
 type ServerInfo struct {

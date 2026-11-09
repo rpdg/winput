@@ -51,6 +51,38 @@ func TestReadRequestRejectsHugeContentLength(t *testing.T) {
 	}
 }
 
+func TestReadRequestSkipsBlankLines(t *testing.T) {
+	payload := `{"jsonrpc":"2.0","id":1,"method":"ping"}`
+	raw := "\r\n\n\n" + payload + "\n"
+	req, err := readRequest(bufio.NewReader(strings.NewReader(raw)))
+	if err != nil {
+		t.Fatalf("readRequest failed: %v", err)
+	}
+	if req.Method != "ping" {
+		t.Fatalf("unexpected method: %s", req.Method)
+	}
+}
+
+func TestReadRequestRejectsTooManyHeaders(t *testing.T) {
+	var raw strings.Builder
+	for i := 0; i <= maxHeaderLines; i++ {
+		fmt.Fprintf(&raw, "X-%d: y\r\n", i)
+	}
+	raw.WriteString("\r\n")
+	_, err := readRequest(bufio.NewReader(strings.NewReader(raw.String())))
+	if err == nil || !strings.Contains(err.Error(), "too many header lines") {
+		t.Fatalf("expected header count rejection, got %v", err)
+	}
+}
+
+func TestReadRequestRejectsOverlongHeaderLine(t *testing.T) {
+	raw := "Content-Length: 2\r\nX: " + strings.Repeat("a", maxHeaderBytes) + "\r\n\r\n{}"
+	_, err := readRequest(bufio.NewReader(strings.NewReader(raw)))
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected header line rejection, got %v", err)
+	}
+}
+
 func TestMutatingToolsBlockedByDefault(t *testing.T) {
 	server := NewServer(Config{})
 
@@ -168,6 +200,35 @@ func TestWriteResponseContentLength(t *testing.T) {
 	}
 	if !strings.Contains(got, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`) {
 		t.Fatalf("missing payload: %q", got)
+	}
+}
+
+func TestCatalogToolContract(t *testing.T) {
+	catalog := defaultCatalog()
+	if len(catalog) != 19 {
+		t.Fatalf("catalog has %d tools, want 19", len(catalog))
+	}
+	seen := map[string]bool{}
+	for _, tool := range catalog {
+		if tool.Name == "" || tool.Description == "" {
+			t.Fatalf("tool with empty name or description: %#v", tool)
+		}
+		if seen[tool.Name] {
+			t.Fatalf("duplicate tool name %q", tool.Name)
+		}
+		seen[tool.Name] = true
+		if tool.InputSchema == nil || tool.OutputSchema == nil || tool.ErrorSchema == nil {
+			t.Fatalf("%s missing a schema", tool.Name)
+		}
+		if _, ok := tool.InputSchema["properties"]; !ok {
+			t.Fatalf("%s input schema missing properties", tool.Name)
+		}
+		if got := tool.Annotations["sideEffectLevel"]; got != "read_only" && got != "state_change" && got != "sensitive" && got != "destructive" {
+			t.Fatalf("%s has invalid sideEffectLevel %#v", tool.Name, got)
+		}
+		if _, ok := tool.Annotations["requiresConfirmation"].(bool); !ok {
+			t.Fatalf("%s missing boolean requiresConfirmation", tool.Name)
+		}
 	}
 }
 
@@ -402,6 +463,71 @@ func TestNewScreenToolsRequireCoordinates(t *testing.T) {
 	}
 }
 
+func TestRequireArgsPresenceSemantics(t *testing.T) {
+	if err := requireArgs(map[string]any{"x": 0, "y": 0, "delta": 0}, "x", "y", "delta"); err != nil {
+		t.Fatalf("explicit zero must be accepted: %v", err)
+	}
+	cases := []struct {
+		args map[string]any
+		keys []string
+	}{
+		{map[string]any{}, []string{"x", "y"}},
+		{map[string]any{"x": nil, "y": 0}, []string{"x", "y"}},
+		{map[string]any{"x": 0}, []string{"x", "y"}},
+		{map[string]any{"x": 0, "y": 0, "delta": nil}, []string{"x", "y", "delta"}},
+	}
+	for _, c := range cases {
+		if err := requireArgs(c.args, c.keys...); err == nil {
+			t.Fatalf("requireArgs(%v, %v) accepted missing or null argument", c.args, c.keys)
+		}
+	}
+}
+
+func TestNewScreenToolsRejectNullCoordinates(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	for _, name := range []string{"move_mouse_to", "click_at", "double_click_at"} {
+		t.Run(name, func(t *testing.T) {
+			for _, args := range []map[string]any{
+				{"x": nil, "y": 0},
+				{"x": 0, "y": nil},
+				{"x": nil, "y": nil},
+			} {
+				_, err := server.callTool(context.Background(), ToolCallParams{
+					Name:      name,
+					Arguments: args,
+				})
+				assertValidationError(t, err, "missing required argument")
+			}
+		})
+	}
+}
+
+func TestScrollRejectsNullArguments(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	for _, args := range []map[string]any{
+		{"target_id": "window-1", "x": nil, "y": 0, "delta": 120},
+		{"target_id": "window-1", "x": 0, "y": nil, "delta": 120},
+		{"target_id": "window-1", "x": 0, "y": 0, "delta": nil},
+	} {
+		_, err := server.callTool(context.Background(), ToolCallParams{
+			Name:      "scroll",
+			Arguments: args,
+		})
+		assertValidationError(t, err, "missing required argument")
+	}
+}
+
+func TestScrollAcceptsExplicitZeroDelta(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	_, err := server.callTool(context.Background(), ToolCallParams{
+		Name:      "scroll",
+		Arguments: map[string]any{"target_id": "window-1", "x": 0, "y": 0, "delta": 0},
+	})
+	// Presence validation accepts zero; the unknown target is the next
+	// failure, which proves no input was sent.
+	assertCodedError(t, err, "target_not_found", "")
+}
+
 func TestScrollRequiresDelta(t *testing.T) {
 	server := NewServer(Config{AllowMutations: true})
 	_, err := server.callTool(context.Background(), ToolCallParams{
@@ -419,6 +545,32 @@ func TestScrollWheelMissingStepsRejectedByLibrary(t *testing.T) {
 	})
 	// Missing steps decodes to 0; the library rejects 0 itself (Q13).
 	assertValidationError(t, err, "")
+}
+
+func TestPressHotkeyRejectsEmptyOrNullKeys(t *testing.T) {
+	server := NewServer(Config{AllowMutations: true})
+	for _, args := range []map[string]any{
+		{"target_id": "window-1"},
+		{"target_id": "window-1", "keys": nil},
+		{"target_id": "window-1", "keys": []string{}},
+		{"target_id": "window-1", "keys": []any{}},
+	} {
+		_, err := server.callTool(context.Background(), ToolCallParams{
+			Name:      "press_hotkey",
+			Arguments: args,
+		})
+		assertValidationError(t, err, "")
+	}
+}
+
+func TestNewStateChangeToolsBlockedByDefault(t *testing.T) {
+	server := NewServer(Config{})
+	for _, name := range []string{"move_mouse_to", "click_at", "double_click_at", "scroll_wheel", "scroll"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := server.callTool(context.Background(), ToolCallParams{Name: name})
+			assertCodedError(t, err, "unsafe_operation", "mutating tools are disabled")
+		})
+	}
 }
 
 func TestPressHotkeyMaxKeys(t *testing.T) {
@@ -466,13 +618,39 @@ func TestPidRejectsOutOfRange(t *testing.T) {
 	}
 }
 
+func TestFindWindowPIDZeroMeansUnused(t *testing.T) {
+	_, _, err := findWindow(FindWindowArgs{PID: 0})
+	assertValidationError(t, err, "one of title")
+
+	prev := findTitle
+	findTitle = func(string) (*winput.Window, error) { return &winput.Window{HWND: 7}, nil }
+	defer func() { findTitle = prev }()
+
+	win, count, err := findWindow(FindWindowArgs{Title: "X", PID: 0})
+	if err != nil || win == nil || win.HWND != 7 || count != 0 {
+		t.Fatalf("title with pid 0: win=%#v count=%d err=%v", win, count, err)
+	}
+}
+
 func TestKeyFromNameShortNames(t *testing.T) {
 	table := []struct {
 		name string
 		want winput.Key
 	}{
-		{"ENTER", winput.KeyEnter}, {"enter", winput.KeyEnter}, {" Enter ", winput.KeyEnter},
+		{"A", winput.KeyA}, {"B", winput.KeyB}, {"C", winput.KeyC}, {"D", winput.KeyD},
+		{"E", winput.KeyE}, {"F", winput.KeyF}, {"G", winput.KeyG}, {"H", winput.KeyH},
+		{"I", winput.KeyI}, {"J", winput.KeyJ}, {"K", winput.KeyK}, {"L", winput.KeyL},
+		{"M", winput.KeyM}, {"N", winput.KeyN}, {"O", winput.KeyO}, {"P", winput.KeyP},
+		{"Q", winput.KeyQ}, {"R", winput.KeyR}, {"S", winput.KeyS}, {"T", winput.KeyT},
+		{"U", winput.KeyU}, {"V", winput.KeyV}, {"W", winput.KeyW}, {"X", winput.KeyX},
+		{"Y", winput.KeyY}, {"Z", winput.KeyZ},
+		{"0", winput.Key0}, {"1", winput.Key1}, {"2", winput.Key2}, {"3", winput.Key3},
+		{"4", winput.Key4}, {"5", winput.Key5}, {"6", winput.Key6}, {"7", winput.Key7},
+		{"8", winput.Key8}, {"9", winput.Key9},
 		{"ESC", winput.KeyEsc}, {"TAB", winput.KeyTab}, {"SPACE", winput.KeySpace}, {"BKSP", winput.KeyBkSp},
+		{"F1", winput.KeyF1}, {"F2", winput.KeyF2}, {"F3", winput.KeyF3}, {"F4", winput.KeyF4},
+		{"F5", winput.KeyF5}, {"F6", winput.KeyF6}, {"F7", winput.KeyF7}, {"F8", winput.KeyF8},
+		{"F9", winput.KeyF9}, {"F10", winput.KeyF10}, {"F11", winput.KeyF11}, {"F12", winput.KeyF12},
 		{"CAPS", winput.KeyCaps}, {"NUMLOCK", winput.KeyNumLock}, {"SCROLLLOCK", winput.KeyScroll},
 		{"CTRL", winput.KeyCtrl}, {"SHIFT", winput.KeyShift}, {"ALT", winput.KeyAlt},
 		{"RIGHTCTRL", winput.KeyRightCtrl}, {"RIGHTSHIFT", winput.KeyRightShift}, {"RIGHTALT", winput.KeyRightAlt},
@@ -480,15 +658,17 @@ func TestKeyFromNameShortNames(t *testing.T) {
 		{"UP", winput.KeyArrowUp}, {"DOWN", winput.KeyArrowDown}, {"LEFT", winput.KeyLeft}, {"RIGHT", winput.KeyRight},
 		{"HOME", winput.KeyHome}, {"END", winput.KeyEnd}, {"INSERT", winput.KeyInsert}, {"DELETE", winput.KeyDelete},
 		{"PAGEUP", winput.KeyPageUp}, {"PAGEDOWN", winput.KeyPageDown},
-		{"F1", winput.KeyF1}, {"F12", winput.KeyF12},
 		{"MINUS", winput.KeyMinus}, {"EQUAL", winput.KeyEqual}, {"COMMA", winput.KeyComma}, {"DOT", winput.KeyDot},
 		{"SLASH", winput.KeySlash}, {"SEMI", winput.KeySemi}, {"QUOT", winput.KeyQuot}, {"TICK", winput.KeyTick},
 		{"LBR", winput.KeyLBr}, {"RBR", winput.KeyRBr}, {"BACKSLASH", winput.KeyBackslash},
-		{"NUMPAD0", winput.KeyNumpad0}, {"NUMPAD9", winput.KeyNumpad9}, {"NUMPADDECIMAL", winput.KeyNumpadDecimal},
+		{"NUMPAD0", winput.KeyNumpad0}, {"NUMPAD1", winput.KeyNumpad1}, {"NUMPAD2", winput.KeyNumpad2},
+		{"NUMPAD3", winput.KeyNumpad3}, {"NUMPAD4", winput.KeyNumpad4}, {"NUMPAD5", winput.KeyNumpad5},
+		{"NUMPAD6", winput.KeyNumpad6}, {"NUMPAD7", winput.KeyNumpad7}, {"NUMPAD8", winput.KeyNumpad8},
+		{"NUMPAD9", winput.KeyNumpad9}, {"NUMPADDECIMAL", winput.KeyNumpadDecimal},
 		{"NUMPADMULTIPLY", winput.KeyNumpadMultiply}, {"NUMPADADD", winput.KeyNumpadAdd},
 		{"NUMPADSUBTRACT", winput.KeyNumpadSubtract}, {"NUMPADDIVIDE", winput.KeyNumpadDivide},
 		{"NUMPADENTER", winput.KeyNumpadEnter},
-		{"A", winput.KeyA}, {"Z", winput.KeyZ}, {"0", winput.Key0}, {"9", winput.Key9},
+		{"ENTER", winput.KeyEnter},
 	}
 	for _, tt := range table {
 		got, err := keyFromName(tt.name)
@@ -497,6 +677,27 @@ func TestKeyFromNameShortNames(t *testing.T) {
 		}
 		if got != tt.want {
 			t.Fatalf("keyFromName(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+	if len(keyNames) != len(table) {
+		t.Fatalf("keyNames has %d entries, exhaustive contract test has %d", len(keyNames), len(table))
+	}
+	for name, want := range keyNames {
+		got, err := keyFromName(strings.ToLower(name))
+		if err != nil || got != want {
+			t.Fatalf("keyFromName(%q) = %v, %v; want %v", strings.ToLower(name), got, err, want)
+		}
+	}
+	for _, variant := range []struct {
+		name string
+		want winput.Key
+	}{
+		{"enter", winput.KeyEnter},
+		{" Enter ", winput.KeyEnter},
+	} {
+		got, err := keyFromName(variant.name)
+		if err != nil || got != variant.want {
+			t.Fatalf("keyFromName(%q) = %v, %v; want %v", variant.name, got, err, variant.want)
 		}
 	}
 }
@@ -534,8 +735,13 @@ func TestMapLibraryErrorScrollMappings(t *testing.T) {
 		{winput.ErrInvalidScrollSteps, "validation_error"},
 		{winput.ErrInvalidScrollDelta, "validation_error"},
 		{winput.ErrInvalidMouseCoordinate, "validation_error"},
+		{winput.ErrUnsupportedKey, "validation_error"},
+		{winput.ErrOutsideVirtualDesktop, "validation_error"},
 		{winput.ErrDirectedScrollUnsupported, "backend_unavailable"},
 		{winput.ErrWindowNotFound, "target_not_found"},
+		{winput.ErrWindowGone, "target_not_found"},
+		{winput.ErrWindowNotVisible, "target_not_visible"},
+		{winput.ErrPermissionDenied, "permission_denied"},
 	}
 	for _, c := range cases {
 		var coded *codedError
@@ -582,19 +788,104 @@ func TestNewToolsInCatalog(t *testing.T) {
 	}
 }
 
-func TestPressHotkeySchemaMaxItems(t *testing.T) {
-	catalog := defaultCatalog()
-	var ph Tool
-	for _, tool := range catalog {
-		if tool.Name == "press_hotkey" {
-			ph = tool
-			break
-		}
-	}
+func TestPressHotkeySchemaLimits(t *testing.T) {
+	ph := toolByName(t, "press_hotkey")
 	keys := ph.InputSchema["properties"].(map[string]any)["keys"].(map[string]any)
 	if got := keys["maxItems"]; got != 8 {
 		t.Fatalf("maxItems = %#v, want 8", got)
 	}
+	if got := keys["minItems"]; got != 1 {
+		t.Fatalf("minItems = %#v, want 1", got)
+	}
+}
+
+func TestNewToolSchemas(t *testing.T) {
+	cases := []struct {
+		name     string
+		required []string
+	}{
+		{"move_mouse_to", []string{"x", "y"}},
+		{"click_at", []string{"x", "y"}},
+		{"double_click_at", []string{"x", "y"}},
+		{"scroll_wheel", []string{"steps"}},
+		{"scroll", []string{"target_id", "x", "y", "delta"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tool := toolByName(t, c.name)
+			if tool.OutputSchema == nil || tool.ErrorSchema == nil {
+				t.Fatalf("%s missing outputSchema/errorSchema", c.name)
+			}
+			if got := tool.Annotations["sideEffectLevel"]; got != "state_change" {
+				t.Fatalf("%s sideEffectLevel = %#v, want state_change", c.name, got)
+			}
+			if got := tool.Annotations["requiresConfirmation"]; got != true {
+				t.Fatalf("%s requiresConfirmation = %#v, want true", c.name, got)
+			}
+			required := schemaRequired(t, tool.InputSchema)
+			for _, field := range c.required {
+				if !required[field] {
+					t.Fatalf("%s missing required field %q in %v", c.name, field, required)
+				}
+			}
+			if c.name == "scroll" {
+				for _, want := range []string{"message backend", "backend_unavailable", "120 per notch"} {
+					if !strings.Contains(tool.Description, want) {
+						t.Fatalf("scroll description missing %q: %s", want, tool.Description)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestFindWindowSchemaAndDescription(t *testing.T) {
+	fw := toolByName(t, "find_window")
+	iprops := fw.InputSchema["properties"].(map[string]any)
+	for _, k := range []string{"title", "class", "process_name", "pid", "index"} {
+		if _, ok := iprops[k]; !ok {
+			t.Fatalf("find_window input missing %q", k)
+		}
+	}
+	oprops := fw.OutputSchema["properties"].(map[string]any)
+	for _, k := range []string{"target_id", "kind", "count", "is_valid", "is_visible"} {
+		if _, ok := oprops[k]; !ok {
+			t.Fatalf("find_window output missing %q", k)
+		}
+	}
+	for _, want := range []string{"title > class > process_name > pid", "Z-order", "every process", "read_text"} {
+		if !strings.Contains(fw.Description, want) {
+			t.Fatalf("find_window description missing %q: %s", want, fw.Description)
+		}
+	}
+}
+
+func toolByName(t *testing.T, name string) Tool {
+	t.Helper()
+	for _, tool := range defaultCatalog() {
+		if tool.Name == name {
+			return tool
+		}
+	}
+	t.Fatalf("tool %q missing from catalog", name)
+	return Tool{}
+}
+
+func schemaRequired(t *testing.T, schema map[string]any) map[string]bool {
+	t.Helper()
+	required := map[string]bool{}
+	raw, ok := schema["required"]
+	if !ok {
+		return required
+	}
+	fields, ok := raw.([]string)
+	if !ok {
+		t.Fatalf("required is %T, want []string", raw)
+	}
+	for _, field := range fields {
+		required[field] = true
+	}
+	return required
 }
 
 func TestFindWindowTitleIndexRejected(t *testing.T) {

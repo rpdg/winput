@@ -138,8 +138,7 @@ Notes:
 - `ping` and protocol version negotiation are supported
 
 Further MCP details:
-- adapter design: [docs/mcp-tools.md](docs/mcp-tools.md)
-- gap-fill design: [docs/mcp-tools-gaps.md](docs/mcp-tools-gaps.md)
+- adapter design and decisions: [docs/mcp-tools.md](docs/mcp-tools.md)
 - example framed session: [docs/mcp-example-session.md](docs/mcp-example-session.md)
 - server entrypoint notes: [cmd/mcp-server/README.md](cmd/mcp-server/README.md)
 
