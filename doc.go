@@ -57,7 +57,9 @@
 //     window will accept the input.
 //   - NewInput binds BackendMessage or BackendHID. Window calls use WindowInput. Screen and
 //     windowless calls use DesktopInput. A later SetBackend does not change that executor.
-//     PasteByClipboard, window search, text reads, cursor position, and DPI stay on the global backend.
+//     The package-level PasteByClipboard keeps the global backend; DesktopInput.PasteByClipboard
+//     uses the executor's fixed backend. Window search, text reads, cursor position, and DPI
+//     stay outside Input.
 //
 // Example:
 //

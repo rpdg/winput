@@ -6,7 +6,7 @@
 - 本稿取代提交 `330821a` 所载的完整推荐引擎方案：那一版的技术约束（UIPI 措辞、目标 HWND 与后代控件的区分、`UseBackend` 不可行、`Backend` 零值冲突等）在恢复推荐功能时仍须遵守，见 §12
 - 术语：`ProbeTarget`、`ProbeHID`、`IntegrityRelation`、`CallerUIAccess`、`Input` 以本稿 §4、§5 定义为准
 
-> 本轮状态：**已实施（本地工作区，未提交）**。基线为 `9ff95cbb0a28572dbaa8048362e36609153fe72c`。本轮将目标进程句柄贯穿采集升级为正式要求，并新增 `DesktopInput.PasteByClipboard`；设计与实现均以本稿为准。旧实现符合原契约。实施结果与未执行项见 §10，验收表见 §4.6 / §5.3。
+> 本轮状态：**已实施并提交（`943d17c`）**。基线为 `9ff95cbb0a28572dbaa8048362e36609153fe72c`。本轮将目标进程句柄贯穿采集升级为正式要求，并新增 `DesktopInput.PasteByClipboard`；设计与实现均以本稿为准。旧实现符合原契约。实施结果与未执行项见 §10，验收表见 §4.6 / §5.3。
 
 ## 1. 背景与一句话目标
 
@@ -450,7 +450,7 @@ func PasteByClipboard(text string) error
 
 ## 10. 实施顺序
 
-本轮实施已完成（本地工作区，未提交）。§4.1 持句柄要求与 §5 桌面粘贴已落地；旧实现符合原契约。实施结果与未执行项见下。
+本轮实施已完成并提交（`943d17c`）。§4.1 持句柄要求与 §5 桌面粘贴已落地；旧实现符合原契约。实施结果与未执行项见下。
 
 按可独立评审的范围推进：
 
@@ -464,7 +464,7 @@ func PasteByClipboard(text string) error
 
 ## 11. 变更说明
 
-- 本轮修订（已实施，本地工作区未提交）：将目标进程句柄贯穿采集与最终核对升级为正式要求，补完整中间身份/类名和 PID0/TID0 规则、失败降级与清理验收（§4.1 / §4.5 / §4.6）；将 PasteByClipboard 纳入 DesktopInput，保留包级 global、新门面 fixed，补 ready 优先级、初始化职责、cb 并发边界、Unicode-only 格式/资源限制、异常恢复及完整 12/18 验收（§5 / §7 / §8）。现有底层 HID 同步与运行期行为不变；新增构造失败直接测试要求，不新增锁或 Once，不改 MCP / SetBackend。
+- 本轮修订（已实施并提交，`943d17c`）：将目标进程句柄贯穿采集与最终核对升级为正式要求，补完整中间身份/类名和 PID0/TID0 规则、失败降级与清理验收（§4.1 / §4.5 / §4.6）；将 PasteByClipboard 纳入 DesktopInput，保留包级 global、新门面 fixed，补 ready 优先级、初始化职责、cb 并发边界、Unicode-only 格式/资源限制、异常恢复及完整 12/18 验收（§5 / §7 / §8）。现有底层 HID 同步与运行期行为不变；新增构造失败直接测试要求，不新增锁或 Once，不改 MCP / SetBackend。
 - 本轮引用修正：移除无法验证的 ADR、术语及原则文件引用，改用本稿章节和存在源码；历史决定保留，下列旧 Paste 排除决定标为已被替代。
 - 此前评审：`NewInput` 对非法 `Backend` 返回 `ErrInvalidBackend`，且发生在 HID 初始化之前（§5.1）。`BackendMessage` 合法。`SetBackend` 仍不收紧。当时决定“PasteByClipboard 留在全局后端上，不进入 DesktopInput”——**已被本轮修订替代（superseded）**：包级兼容保留，DesktopInput 新增固定后端方法；该历史句不是当前排除规则。
 - 上一轮：HID 状态用哨兵和 `errors.Is` 识别。`hid.ErrSymbolsMissing` 与 `hid.ErrDevicesUnavailable` 为新哨兵，`hid.ErrLibraryNotFound` 别名已有的库错误。哨兵从 `hid` 导出，`winput` 不重新公开（§4.2）。`ErrDLLLoadFailed` 的 `errors.Is` 结果保持不变，旧英文文案不再作为契约。
