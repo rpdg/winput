@@ -86,6 +86,8 @@ var (
     ErrSendInputPartial   = errors.New("SendInput partially inserted and was repaired") // 只写入按下，补抬起成功
     ErrSendInputStuck     = errors.New("SendInput partially inserted and could not be repaired") // 只写入按下，补抬起失败
     ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling") // HID 不能把滚轮定向到窗口
+    // 窗口键盘在 HID 上发现顶层祖先不是前台时返回它，并且不发送这次按下。
+    ErrTargetNotForeground = errors.New("target window is not the foreground window")
     ErrInvalidMouseButton = errors.New("invalid mouse button") // 按钮身份非法
     // 别名 mouse.ErrInvalidScrollDelta。消息路径的 Window.Scroll 返回它。hid.ErrInvalidScrollDelta 是另一个哨兵。
     ErrInvalidScrollDelta = mouse.ErrInvalidScrollDelta        // 滚轮增量超出 int16
@@ -468,21 +470,21 @@ Text 使用标准 Win32 文本读取路径获取目标窗口/控件的当前文�
 ```go
 func (w *Window) KeyDown(key Key) error
 ```
-KeyDown 向窗口发送按键按下事件。
+KeyDown 向窗口发送按键按下事件。`BackendHID` 要求该窗口的顶层祖先已经是前台窗口，否则返回 `ErrTargetNotForeground` 并且不发送。子窗口按这个祖先判断，不按子句柄本身判断。包级 `KeyDown` 是全局输入，不使用这条规则。
 
 #### func (*Window) KeyUp
 
 ```go
 func (w *Window) KeyUp(key Key) error
 ```
-KeyUp 向窗口发送按键抬起事件。
+KeyUp 向窗口发送按键抬起事件。`BackendHID` 在窗口不在前台时仍然发送抬起，以便松开已经按下的键。
 
 #### func (*Window) Press
 
 ```go
 func (w *Window) Press(key Key, interval ...time.Duration) error
 ```
-Press 模拟一次完整的按键过程。可选的 `interval` 在两条后端都是按住时间（按下成功后到抬起之间的延迟）；不传时按住 30ms。`Press(key, 0)` 不睡眠。间隔为负数或参数多于一个时，在任何按键之前返回 `ErrInvalidInterval`。
+Press 模拟一次完整的按键过程。可选的 `interval` 在两条后端都是按住时间（按下成功后到抬起之间的延迟）；不传时按住 30ms。`Press(key, 0)` 不睡眠。间隔为负数或参数多于一个时，在任何按键之前返回 `ErrInvalidInterval`。`BackendHID` 只在该窗口的顶层祖先已是前台时发送按下，否则返回 `ErrTargetNotForeground` 并且不按下。
 
 #### func (*Window) PressHotkey
 
@@ -492,14 +494,14 @@ func (w *Window) PressHotkey(keys ...Key) error
 PressHotkey 执行组合键（如 Ctrl+A）。
 当它作用于窗口且使用 `BackendMessage` 时，包含 `Ctrl`、`Alt`、`Shift`
 等修饰键的组合会回退为前台键盘事件发送，而不是纯 `PostMessage`。
-原因是很多应用仅靠窗口消息无法可靠识别修饰键状态。
+原因是很多应用仅靠窗口消息无法可靠识别修饰键状态。前台身份是顶层祖先，所以子窗口在其顶层祖先已是前台时可以通过。组合键仍进入当前拥有键盘焦点的控件。`BackendHID` 上每一次按下都要求这个祖先是前台，否则返回 `ErrTargetNotForeground`，并松开本次调用已经按下的键。
 
 #### func (*Window) Type
 
 ```go
 func (w *Window) Type(text string, interval ...time.Duration) error
 ```
-输入字符串，自动处理大写字母和符号的 Shift 切换。可选的 `interval` 是字符间隙：消息后端在连续 rune 之间睡眠该间隙（默认 30ms，内部走 `keyboard.TypeWithInterval`），最后一个 rune 之后不再多睡；HID 每个字符的固定按住不变，只有传入显式间隔时才会在字符松开后再睡一段。间隔为负数或参数多于一个时，在任何字符发送之前返回 `ErrInvalidInterval`。
+输入字符串，自动处理大写字母和符号的 Shift 切换。可选的 `interval` 是字符间隙：消息后端在连续 rune 之间睡眠该间隙（默认 30ms，内部走 `keyboard.TypeWithInterval`），最后一个 rune 之后不再多睡；HID 每个字符的固定按住不变，只有传入显式间隔时才会在字符松开后再睡一段。间隔为负数或参数多于一个时，在任何字符发送之前返回 `ErrInvalidInterval`。`BackendHID` 在每个字符按下前（包括该字符需要的 Shift）检查顶层祖先是否仍是前台。失败时返回 `ErrTargetNotForeground`，不再输入后续字符。这次检查不证明哪个子控件拥有插入符，前台也可能在驱动送达笔画之前改变。
 
 #### func (*Window) Value
 

@@ -1,6 +1,9 @@
 package screen
 
 import (
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -49,39 +52,66 @@ func ImageToVirtual(imageX, imageY int32) (int32, int32) {
 	return imageX + int32(vx), imageY + int32(vy)
 }
 
-// Monitors returns a list of all active monitors.
-func Monitors() ([]Monitor, error) {
-	var monitors []Monitor
+// monitorList is the accumulator for the one registered EnumDisplayMonitors
+// callback. The callback runs on the calling thread while monitorMu is held.
+type monitorList struct {
+	items []Monitor
+}
 
-	cb := syscall.NewCallback(func(hMonitor uintptr, hdcMonitor uintptr, lprcMonitor uintptr, dwData uintptr) uintptr {
-		var mi monitorInfoExW
-		mi.Size = uint32(unsafe.Sizeof(mi))
+var (
+	monitorMu    sync.Mutex
+	monitorVisit atomic.Pointer[monitorList]
+	monitorEnum  = syscall.NewCallback(monitorThunk)
+)
 
-		ret, _, _ := window.ProcGetMonitorInfoW.Call(hMonitor, uintptr(unsafe.Pointer(&mi)))
-		if ret != 0 {
-			mon := Monitor{
-				Handle: hMonitor,
-				Bounds: Rect{
-					Left:   mi.Monitor.Left,
-					Top:    mi.Monitor.Top,
-					Right:  mi.Monitor.Right,
-					Bottom: mi.Monitor.Bottom,
-				},
-				WorkArea: Rect{
-					Left:   mi.Work.Left,
-					Top:    mi.Work.Top,
-					Right:  mi.Work.Right,
-					Bottom: mi.Work.Bottom,
-				},
-				Primary: (mi.Flags & 1) != 0, // MONITORINFOF_PRIMARY = 1
-			}
-			monitors = append(monitors, mon)
-		}
+func monitorThunk(hMonitor uintptr, _ uintptr, _ uintptr, _ uintptr) uintptr {
+	list := monitorVisit.Load()
+	if list == nil {
 		return 1
+	}
+	var mi monitorInfoExW
+	mi.Size = uint32(unsafe.Sizeof(mi))
+	ret, _, _ := window.ProcGetMonitorInfoW.Call(hMonitor, uintptr(unsafe.Pointer(&mi)))
+	if ret == 0 {
+		return 1
+	}
+	list.items = append(list.items, Monitor{
+		Handle: hMonitor,
+		Bounds: Rect{
+			Left:   mi.Monitor.Left,
+			Top:    mi.Monitor.Top,
+			Right:  mi.Monitor.Right,
+			Bottom: mi.Monitor.Bottom,
+		},
+		WorkArea: Rect{
+			Left:   mi.Work.Left,
+			Top:    mi.Work.Top,
+			Right:  mi.Work.Right,
+			Bottom: mi.Work.Bottom,
+		},
+		Primary: (mi.Flags & 1) != 0, // MONITORINFOF_PRIMARY = 1
 	})
+	return 1
+}
 
-	window.ProcEnumDisplayMonitors.Call(0, 0, cb, 0)
-	return monitors, nil
+// Monitors returns a list of all active monitors.
+// A failed EnumDisplayMonitors call returns an error rather than an empty list.
+func Monitors() ([]Monitor, error) {
+	monitorMu.Lock()
+	defer monitorMu.Unlock()
+
+	list := &monitorList{}
+	monitorVisit.Store(list)
+	defer monitorVisit.Store(nil)
+
+	r, _, e := window.ProcEnumDisplayMonitors.Call(0, 0, monitorEnum, 0)
+	if r == 0 {
+		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
+			return nil, fmt.Errorf("EnumDisplayMonitors failed: %v", errno)
+		}
+		return nil, fmt.Errorf("EnumDisplayMonitors failed")
+	}
+	return list.items, nil
 }
 
 type monitorInfoExW struct {

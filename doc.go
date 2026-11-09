@@ -39,6 +39,9 @@
 // NewInput returns ErrInvalidBackend for any value other than BackendMessage or BackendHID,
 // before it touches HID. A zero Input or a facade that did not come from ForWindow or Desktop
 // returns ErrInputInvalid. ForWindow(nil) returns ErrWindowGone when a method is called.
+// A window key-down on BackendHID returns ErrTargetNotForeground, and sends nothing,
+// when that window's top-level ancestor is not the foreground window. Window.KeyUp
+// still sends, so a key that is already down can be released.
 //
 // 6. Thread Safety:
 // All public input methods are thread-safe and serialized using an internal mutex. This prevents state pollution

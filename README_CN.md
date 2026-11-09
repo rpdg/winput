@@ -164,7 +164,7 @@ go run ./cmd/mcp-server -allow-mutations -allow-sensitive
     *   **依赖驱动**: 必须安装 Interception 驱动。
     *   **阻塞调用**: `Move` 操作是同步且阻塞的（为了模拟人类速度）。
     *   **鼠标移动**: 会实际移动物理光标。
-    *   **焦点**: 通常需要窗口处于前台才能正确响应输入。
+    *   **焦点**: 窗口上的按下、`Press`、`PressHotkey` 和 `Type` 只在该窗口的顶层祖先已是前台时发送。否则返回 `ErrTargetNotForeground`，并且不按下这一键。`KeyUp` 仍会发送，以便松开已经按下的键。全局键盘方法不做这次检查。
 
 
 
@@ -324,7 +324,8 @@ if err := winput.SetBackend(winput.BackendHID); err != nil {
     // 无需额外操作，默认即为 BackendMessage
 }
 
-w.Type("password") // 使用当前激活的后端工作
+// 消息后端把文本送进 w。HID 在 w 的顶层窗口还不是前台时返回 ErrTargetNotForeground。
+w.Type("password")
 ```
 
 ### 3. 探针和任务级执行器

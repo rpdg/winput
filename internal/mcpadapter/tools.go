@@ -234,9 +234,12 @@ func defaultCatalog() []Tool {
 			Annotations:  annotations("state_change", true),
 		},
 		{
-			Name:        "type_text",
-			Title:       "Type Text",
-			Description: "Type text into a target window or control.",
+			Name:  "type_text",
+			Title: "Type Text",
+			Description: "Type text into a target window or control. " +
+				"The message backend posts characters to that window. " +
+				"The HID backend sends hardware keys only while the target's top-level window is foreground; otherwise it returns target_not_foreground and does not send. " +
+				"The check does not prove which child control has the caret.",
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
 				"text":      requiredStringSchema("Text to type."),
@@ -246,9 +249,11 @@ func defaultCatalog() []Tool {
 			Annotations:  annotations("state_change", true),
 		},
 		{
-			Name:        "press_key",
-			Title:       "Press Key",
-			Description: "Press a single key on a target window. " + keyNamesDescription,
+			Name:  "press_key",
+			Title: "Press Key",
+			Description: "Press a single key on a target window. " +
+				"On the HID backend the target's top-level window must already be foreground; otherwise the call returns target_not_foreground and does not press the key. " +
+				keyNamesDescription,
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
 				"key":       requiredStringSchema(keyNamesDescription),
@@ -258,9 +263,11 @@ func defaultCatalog() []Tool {
 			Annotations:  annotations("state_change", true),
 		},
 		{
-			Name:        "press_hotkey",
-			Title:       "Press Hotkey",
-			Description: "Press a key combination on a target window (1-8 keys). " + keyNamesDescription,
+			Name:  "press_hotkey",
+			Title: "Press Hotkey",
+			Description: "Press a key combination on a target window (1-8 keys). " +
+				"On the HID backend each key-down requires the target's top-level window to be foreground; otherwise the call returns target_not_foreground and releases keys this call already pressed. " +
+				keyNamesDescription,
 			InputSchema: objectSchema(map[string]any{
 				"target_id": requiredStringSchema("Opaque target_id."),
 				"keys": map[string]any{

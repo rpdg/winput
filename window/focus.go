@@ -2,6 +2,22 @@ package window
 
 import "syscall"
 
+// GA_ROOT asks GetAncestor for the top-level window that is not itself an
+// owned window's owner. A top-level window is its own root. A WS_CHILD is not
+// what GetForegroundWindow returns.
+const gaRoot = 2
+
+// AncestorRoot returns the top-level ancestor of hwnd.
+// An invalid hwnd returns 0. GA_ROOTOWNER is intentionally not used: an owned
+// dialog and its owner are different foreground identities.
+func AncestorRoot(hwnd uintptr) uintptr {
+	if hwnd == 0 {
+		return 0
+	}
+	root, _, _ := ProcGetAncestor.Call(hwnd, gaRoot)
+	return root
+}
+
 // GetForegroundWindow returns the current foreground window handle.
 func GetForegroundWindow() uintptr {
 	r, _, _ := ProcGetForegroundWindow.Call()

@@ -79,6 +79,16 @@ var (
 	// event to a specific window.
 	ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling")
 
+	// ErrTargetNotForeground means a window key-down on BackendHID did not
+	// send because the window's top-level ancestor was not the foreground
+	// window. The check runs again before each key-down of Type and
+	// PressHotkey. It does not prove which child control has the caret, and
+	// the foreground can still change before the driver delivers the stroke.
+	// Window.KeyUp does not return this error: a release is still sent so a
+	// key that is already down can be lifted. Package-level and DesktopInput
+	// keyboard methods are global and do not return it either.
+	ErrTargetNotForeground = errors.New("target window is not the foreground window")
+
 	// ErrInvalidMouseButton means the MouseButton value is not one of the exported identities.
 	ErrInvalidMouseButton = errors.New("invalid mouse button")
 

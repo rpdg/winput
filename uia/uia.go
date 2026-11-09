@@ -47,14 +47,6 @@ var (
 	iidIUIAutomation   = guid{0x30CBE57D, 0xD9D0, 0x452A, [8]byte{0xAB, 0x13, 0x7A, 0xC5, 0xAC, 0x48, 0x25, 0xEE}}
 )
 
-type variant struct {
-	VT        uint16
-	Reserved1 uint16
-	Reserved2 uint16
-	Reserved3 uint16
-	Val       int64
-}
-
 type iuiAutomation struct {
 	lpVtbl *iuiAutomationVtbl
 }
@@ -250,15 +242,8 @@ func (a *iuiAutomation) elementFromHandle(hwnd uintptr) (*iuiAutomationElement, 
 }
 
 func (a *iuiAutomation) createControlTypeCondition(controlType int32) (*iuiAutomationCondition, error) {
-	var cond *iuiAutomationCondition
 	value := variant{VT: vtI4, Val: int64(controlType)}
-	hr, _, _ := syscall.SyscallN(
-		a.lpVtbl.CreatePropertyCondition,
-		uintptr(unsafe.Pointer(a)),
-		uiaControlTypePropertyID,
-		uintptr(unsafe.Pointer(&value)),
-		uintptr(unsafe.Pointer(&cond)),
-	)
+	cond, hr := callCreatePropertyCondition(a, uintptr(uiaControlTypePropertyID), value)
 	if !succeeded(hr) {
 		return nil, hresultErr("IUIAutomation.CreatePropertyCondition", hr)
 	}

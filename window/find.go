@@ -3,6 +3,8 @@ package window
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 )
@@ -65,34 +67,90 @@ func FindChildByClass(parent uintptr, class string) (uintptr, error) {
 	return ret, nil
 }
 
+// hwndVisitor is one EnumWindows callback. The pointer is published with an
+// atomic so the single registered thunk can see it. The callback runs on the
+// calling thread while enumMu is held, and it must not call enumTopLevel.
+type hwndVisitor func(hwnd uintptr)
+
+var (
+	enumMu      sync.Mutex
+	enumVisit   atomic.Pointer[hwndVisitor]
+	enumWindows = syscall.NewCallback(enumWindowsThunk)
+)
+
+func enumWindowsThunk(hwnd uintptr, _ uintptr) uintptr {
+	visit := enumVisit.Load()
+	if visit != nil {
+		(*visit)(hwnd)
+	}
+	return 1
+}
+
+// enumTopLevel visits every top-level window. Concurrent callers wait, because
+// one process-wide callback slot carries the visitor.
+func enumTopLevel(visit hwndVisitor) error {
+	enumMu.Lock()
+	defer enumMu.Unlock()
+	// Heap copy: the thunk reads this pointer while EnumWindows is inside
+	// the syscall, and a stack address would not stay valid across that call.
+	held := new(hwndVisitor)
+	*held = visit
+	enumVisit.Store(held)
+	defer enumVisit.Store(nil)
+
+	r, _, e := ProcEnumWindows.Call(enumWindows, 0)
+	if r == 0 {
+		// The thunk always returns 1, so 0 means EnumWindows itself failed.
+		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
+			return fmt.Errorf("EnumWindows failed: %w", errno)
+		}
+		return fmt.Errorf("EnumWindows failed")
+	}
+	return nil
+}
+
 // FindByPID returns all top-level windows belonging to the specified Process ID.
 func FindByPID(targetPid uint32) ([]uintptr, error) {
 	var hwnds []uintptr
-
-	cb := syscall.NewCallback(func(hwnd uintptr, lparam uintptr) uintptr {
+	err := enumTopLevel(func(hwnd uintptr) {
 		var pid uint32
 		ProcGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
-
 		if pid == targetPid {
 			hwnds = append(hwnds, hwnd)
 		}
-		return 1 // Continue enumeration
 	})
-
-	r, _, e := ProcEnumWindows.Call(cb, 0)
-	if r == 0 {
-		// EnumWindows returns 0 if it fails OR if the callback stops it.
-		// Since our callback always returns 1, r==0 implies failure or no windows (unlikely).
-		// Check LastError.
-		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
-			return nil, fmt.Errorf("EnumWindows failed: %w", errno)
-		}
+	if err != nil {
+		return nil, err
 	}
-
 	if len(hwnds) == 0 {
 		return nil, fmt.Errorf("no windows found for PID: %d", targetPid)
 	}
+	return hwnds, nil
+}
 
+// FindByPIDs returns every top-level window whose process is in pids.
+// One EnumWindows pass covers the whole set. An empty pids list or a set
+// that owns no windows returns an empty slice and a nil error. Enumeration
+// failure returns the EnumWindows error.
+func FindByPIDs(pids []uint32) ([]uintptr, error) {
+	if len(pids) == 0 {
+		return nil, nil
+	}
+	want := make(map[uint32]struct{}, len(pids))
+	for _, pid := range pids {
+		want[pid] = struct{}{}
+	}
+	var hwnds []uintptr
+	err := enumTopLevel(func(hwnd uintptr) {
+		var pid uint32
+		ProcGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+		if _, ok := want[pid]; ok {
+			hwnds = append(hwnds, hwnd)
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
 	return hwnds, nil
 }
 

@@ -108,9 +108,9 @@ Initial tool set:
 - `double_click`
 - `right_click`
 - `move_mouse`
-- `type_text`
-- `press_key`
-- `press_hotkey`
+- `type_text` (HID returns `target_not_foreground` unless the target's top-level window is already foreground)
+- `press_key` (same HID foreground rule)
+- `press_hotkey` (same HID foreground rule; message-backend modifier chords use the top-level ancestor)
 - `read_text`
 - `capture_screen`
 - `switch_backend`

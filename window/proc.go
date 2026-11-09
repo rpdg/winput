@@ -13,6 +13,7 @@ var (
 	ProcFindWindowExW            = user32.NewProc("FindWindowExW")
 	ProcGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	ProcGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
+	ProcGetAncestor              = user32.NewProc("GetAncestor")
 	ProcSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
 	ProcAttachThreadInput        = user32.NewProc("AttachThreadInput")
 	ProcEnumWindows              = user32.NewProc("EnumWindows")

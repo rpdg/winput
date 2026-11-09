@@ -54,40 +54,66 @@ func NewServer(cfg Config) *Server {
 	}
 }
 
+// readOutcome is one framed request, or the error from reading it.
+type readOutcome struct {
+	req *JSONRPCRequest
+	err error
+}
+
+// Serve reads JSON-RPC messages until EOF or ctx is cancelled.
+//
+// The read runs on its own goroutine so a cancelled ctx returns even when
+// the underlying read is blocked. Cancelling does not interrupt that read.
+// A blocked ReadFile on Windows stays blocked until the read finishes or
+// the process exits; closing os.Stdin from another thread does not wake it.
+// After Serve returns, a read still blocked in the OS ends when the process
+// exits or the next read completes and sees ctx.Done.
 func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	reader := bufio.NewReader(in)
+	outcomes := make(chan readOutcome)
+	go func() {
+		for {
+			req, err := readRequest(reader)
+			select {
+			case outcomes <- readOutcome{req: req, err: err}:
+			case <-ctx.Done():
+				return
+			}
+			if errors.Is(err, io.EOF) {
+				return
+			}
+		}
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-		}
-
-		req, err := readRequest(reader)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
+		case got := <-outcomes:
+			if got.err != nil {
+				if errors.Is(got.err, io.EOF) {
+					return nil
+				}
+				if writeErr := writeResponse(out, JSONRPCResponse{
+					JSONRPC: "2.0",
+					Error: &JSONRPCErrorObj{
+						Code:    -32700,
+						Message: "parse error",
+						Data:    &JSONRPCErrorData{Details: got.err.Error()},
+					},
+				}); writeErr != nil {
+					return writeErr
+				}
+				continue
 			}
-			if writeErr := writeResponse(out, JSONRPCResponse{
-				JSONRPC: "2.0",
-				Error: &JSONRPCErrorObj{
-					Code:    -32700,
-					Message: "parse error",
-					Data:    &JSONRPCErrorData{Details: err.Error()},
-				},
-			}); writeErr != nil {
-				return writeErr
-			}
-			continue
-		}
 
-		resp := s.handleRequest(ctx, *req)
-		if req.ID == nil {
-			continue
-		}
-		if err := writeResponse(out, resp); err != nil {
-			return err
+			resp := s.handleRequest(ctx, *got.req)
+			if got.req.ID == nil {
+				continue
+			}
+			if err := writeResponse(out, resp); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -621,6 +647,8 @@ func mapLibraryError(err error) error {
 		return &codedError{Code: "target_not_visible", Message: "target not visible", Retryable: false, Cause: err}
 	case errors.Is(err, winput.ErrPermissionDenied):
 		return &codedError{Code: "permission_denied", Message: "permission denied", Retryable: false, Cause: err}
+	case errors.Is(err, winput.ErrTargetNotForeground):
+		return &codedError{Code: "target_not_foreground", Message: "target is not the foreground window", Retryable: false, Cause: err}
 	case errors.Is(err, winput.ErrDriverNotInstalled), errors.Is(err, winput.ErrDLLLoadFailed), errors.Is(err, winput.ErrDirectedScrollUnsupported):
 		return &codedError{Code: "backend_unavailable", Message: "backend unavailable", Retryable: false, Cause: err}
 	case errors.Is(err, winput.ErrInvalidScrollSteps),

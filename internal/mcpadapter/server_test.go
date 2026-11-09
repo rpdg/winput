@@ -19,6 +19,29 @@ import (
 	"github.com/rpdg/winput/screen"
 )
 
+func TestServeReturnsWhenCancelledDuringBlockedRead(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	defer pr.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- NewServer(Config{}).Serve(ctx, pr, io.Discard)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Serve = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Serve stayed blocked in read after cancel")
+	}
+}
+
 func TestReadRequestContentLength(t *testing.T) {
 	payload := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
 	raw := fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(payload), payload)
@@ -742,6 +765,7 @@ func TestMapLibraryErrorScrollMappings(t *testing.T) {
 		{winput.ErrWindowGone, "target_not_found"},
 		{winput.ErrWindowNotVisible, "target_not_visible"},
 		{winput.ErrPermissionDenied, "permission_denied"},
+		{winput.ErrTargetNotForeground, "target_not_foreground"},
 	}
 	for _, c := range cases {
 		var coded *codedError

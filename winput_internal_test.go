@@ -3,6 +3,7 @@ package winput
 import (
 	"errors"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 	"unicode/utf16"
@@ -324,6 +325,53 @@ func TestScrollWheelValidation(t *testing.T) {
 		if err := ScrollWheel(steps); !errors.Is(err, ErrInvalidScrollSteps) {
 			t.Errorf("ScrollWheel(%d) = %v, want ErrInvalidScrollSteps", steps, err)
 		}
+	}
+}
+
+func TestKeyDownImplHIDRefusesBackgroundWindow(t *testing.T) {
+	hwnd := createStaticWindow(true)
+	if hwnd == 0 {
+		t.Fatal("CreateWindowEx failed")
+	}
+	defer destroyWindow(hwnd)
+	root := window.AncestorRoot(hwnd)
+	if root == 0 {
+		t.Fatal("popup has no ancestor root")
+	}
+	if window.GetForegroundWindow() == root {
+		t.Skip("static window is the foreground window")
+	}
+	err := keyDownImpl(BackendHID, hwnd, KeyA)
+	if !errors.Is(err, ErrTargetNotForeground) {
+		t.Fatalf("keyDownImpl = %v, want ErrTargetNotForeground", err)
+	}
+	if err := requireHIDTargetForeground(0); err != nil {
+		t.Fatalf("global hwnd: %v", err)
+	}
+}
+
+func TestAncestorRootOfChildIsTopLevel(t *testing.T) {
+	parent := createStaticWindow(true)
+	if parent == 0 {
+		t.Fatal("CreateWindowEx failed")
+	}
+	defer destroyWindow(parent)
+	class, err := syscall.UTF16PtrFromString("Static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proc := syscall.NewLazyDLL("user32.dll").NewProc("CreateWindowExW")
+	const (
+		wsChild   = 0x40000000
+		wsVisible = 0x10000000
+	)
+	child, _, _ := proc.Call(0, uintptr(unsafe.Pointer(class)), 0, wsChild|wsVisible, 0, 0, 4, 4, parent, 0, 0, 0)
+	if child == 0 {
+		t.Fatal("CreateWindowEx child failed")
+	}
+	defer destroyWindow(child)
+	if got := window.AncestorRoot(child); got != parent {
+		t.Fatalf("child root = %#x, want parent %#x", got, parent)
 	}
 }
 

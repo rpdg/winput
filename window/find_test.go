@@ -2,6 +2,7 @@ package window
 
 import (
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 )
@@ -52,6 +53,43 @@ func TestMatchingPIDsKeepsEveryExe(t *testing.T) {
 	}
 	if len(matchingPIDs(entries, "missing")) != 0 {
 		t.Fatal("missing exe returned a pid")
+	}
+}
+
+func TestFindByPIDReusesOneCallback(t *testing.T) {
+	// More calls than the process-wide NewCallback table. A fresh callback
+	// per call aborts the process at 2000.
+	for i := 0; i < 2100; i++ {
+		_, err := FindByPID(^uint32(0))
+		if err == nil {
+			t.Fatal("expected no windows for an unused pid")
+		}
+	}
+}
+
+func TestFindByPIDConcurrent(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(pid uint32) {
+			defer wg.Done()
+			_, _ = FindByPID(pid)
+		}(uint32(i + 1))
+	}
+	wg.Wait()
+}
+
+func TestFindByPIDsOnePassEmpty(t *testing.T) {
+	hwnds, err := FindByPIDs(nil)
+	if err != nil || len(hwnds) != 0 {
+		t.Fatalf("FindByPIDs(nil) = %v, %v", hwnds, err)
+	}
+	hwnds, err = FindByPIDs([]uint32{^uint32(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hwnds) != 0 {
+		t.Fatalf("unused pid matched %d windows", len(hwnds))
 	}
 }
 

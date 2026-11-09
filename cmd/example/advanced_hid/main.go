@@ -45,7 +45,10 @@ func main() {
 
 	fmt.Println("👉 Typing via Hardware Simulation...")
 	target.Click(100, 100) // Click to focus caret
-	target.Type("HID Input Test")
+	// HID Type sends only while this window's top-level ancestor is foreground.
+	if err := target.Type("HID Input Test"); err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Println("=== Done ===")
 }

@@ -64,7 +64,18 @@ func FindByProcessName(name string) ([]*Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	return windowsForPIDs(pids, FindByPID)
+	hwnds, err := window.FindByPIDs(pids)
+	if err != nil {
+		return nil, err
+	}
+	if len(hwnds) == 0 {
+		return nil, ErrWindowNotFound
+	}
+	windows := make([]*Window, len(hwnds))
+	for i, hwnd := range hwnds {
+		windows[i] = &Window{HWND: hwnd}
+	}
+	return windows, nil
 }
 
 // lookupError keeps ErrWindowNotFound for an ordinary miss. An embedded NUL
@@ -323,6 +334,12 @@ var (
 
 func keyDownImpl(cb Backend, hwnd uintptr, k Key) error {
 	if cb == BackendHID {
+		// hwnd 0 is a global key. A window key-down is hardware input and
+		// lands in whichever top-level window is foreground, so refuse it
+		// until that ancestor is foreground. Key-up does not use this check.
+		if err := requireHIDTargetForeground(hwnd); err != nil {
+			return err
+		}
 		return hid.KeyDown(uint16(k))
 	}
 	if hwnd == 0 {
@@ -357,6 +374,20 @@ func hotkeyNeedsForeground(keys []Key) bool {
 		}
 	}
 	return false
+}
+
+// requireHIDTargetForeground allows a global call (hwnd 0) and a window
+// whose top-level ancestor is the foreground window. The comparison is
+// GA_ROOT, not the raw hwnd: GetForegroundWindow never returns a WS_CHILD.
+func requireHIDTargetForeground(hwnd uintptr) error {
+	if hwnd == 0 {
+		return nil
+	}
+	root := window.AncestorRoot(hwnd)
+	if root == 0 || window.GetForegroundWindow() != root {
+		return ErrTargetNotForeground
+	}
+	return nil
 }
 
 func validateKey(cb Backend, hwnd uintptr, k Key) error {
@@ -416,21 +447,29 @@ func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
 		return err
 	}
 
+	// GetForegroundWindow returns a top-level window. A child from
+	// FindChildByClass must be compared and activated through its root, or
+	// the equality check against the child hwnd always fails.
+	root := window.AncestorRoot(hwnd)
+	if root == 0 {
+		return ErrWindowGone
+	}
+
 	prev := window.GetForegroundWindow()
-	if prev != hwnd {
+	if prev != root {
 		// Once a foreground switch is attempted, every error exit restores prev.
 		defer func() {
-			if prev != 0 && prev != hwnd {
+			if prev != 0 && prev != root {
 				if restoreErr := window.ForceSetForegroundWindow(prev); restoreErr != nil {
 					err = errors.Join(err, fmt.Errorf("%w: failed to restore foreground window: %v", ErrPermissionDenied, restoreErr))
 				}
 			}
 		}()
 
-		if err := window.ForceSetForegroundWindow(hwnd); err != nil {
+		if err := window.ForceSetForegroundWindow(root); err != nil {
 			return fmt.Errorf("%w: failed to foreground target window for modifier hotkey: %v", ErrPermissionDenied, err)
 		}
-		if window.GetForegroundWindow() != hwnd {
+		if window.GetForegroundWindow() != root {
 			return fmt.Errorf("%w: target window did not become foreground (ASFW restriction)", ErrPermissionDenied)
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -1240,6 +1279,11 @@ func resolveInterval(interval []time.Duration, fallback time.Duration) (d time.D
 // Public Wrappers using Lock
 
 // KeyDown sends a key down event to the window.
+//
+// Under BackendHID the window's top-level ancestor must already be the
+// foreground window. Otherwise the call returns ErrTargetNotForeground and
+// sends nothing. A child hwnd is judged by that ancestor, not by itself.
+// Package-level KeyDown is global and does not use this rule.
 func (w *Window) KeyDown(key Key) error {
 	return keyDownWindow(w, key, nil)
 }
@@ -1258,6 +1302,10 @@ func keyDownWindow(w *Window, key Key, fixed *Backend) error {
 }
 
 // KeyUp sends a key up event to the window.
+//
+// Under BackendHID the release is still sent when the window is not
+// foreground, so a key that is already down can be lifted. The up lands in
+// the hardware stream, which belongs to whichever window is foreground.
 func (w *Window) KeyUp(key Key) error {
 	return keyUpWindow(w, key, nil)
 }
@@ -1282,7 +1330,9 @@ func keyUpWindow(w *Window, key Key, fixed *Backend) error {
 // speed" knob. The two backends both honor it. Without an argument the hold is
 // defaultPressHold; an explicit 0 means no sleep between down and up. A
 // negative interval or more than one interval returns ErrInvalidInterval
-// before any key is pressed.
+// before any key is pressed. Under BackendHID the key-down is sent only
+// when the window's top-level ancestor is the foreground window; otherwise
+// ErrTargetNotForeground is returned and the key is not pressed.
 func (w *Window) Press(key Key, interval ...time.Duration) (err error) {
 	hold, _, err := resolveInterval(interval, defaultPressHold)
 	if err != nil {
@@ -1326,7 +1376,14 @@ func pressWindow(w *Window, key Key, hold time.Duration, fixed *Backend) (err er
 // PressHotkey presses a combination of keys (e.g., Ctrl+A).
 // Under BackendMessage, modifier combinations (Ctrl/Alt/Shift + another key)
 // are promoted to foreground keyboard events because PostMessage alone does
-// not provide reliable modifier state to many target windows.
+// not provide reliable modifier state to many target windows. The foreground
+// identity is the top-level ancestor, so a child hwnd is accepted once that
+// ancestor is foreground. The chord still reaches whichever control has the
+// keyboard focus.
+//
+// Under BackendHID each key-down is sent only while that same ancestor is
+// the foreground window. Otherwise the call returns ErrTargetNotForeground
+// and does not press that key. Keys this call already pressed are released.
 func (w *Window) PressHotkey(keys ...Key) (err error) {
 	return pressHotkeyWindow(w, nil, keys...)
 }
@@ -1376,6 +1433,12 @@ func pressHotkeyWindow(w *Window, fixed *Backend, keys ...Key) (err error) {
 // an interval. The last rune is not followed by an extra sleep, and consecutive
 // Type calls do not sleep between each other. A negative interval or more than
 // one interval returns ErrInvalidInterval before any character is sent.
+// Under BackendHID each character's key-down, including Shift when that
+// character needs it, is sent only while the window's top-level ancestor
+// is the foreground window. The first failure returns
+// ErrTargetNotForeground, releases Shift or the character key if this
+// character already pressed one, and does not type the rest. The check
+// does not prove which child has the caret.
 func (w *Window) Type(text string, interval ...time.Duration) error {
 	gap, explicit, err := resolveInterval(interval, keyboard.DefaultTypeGap)
 	if err != nil {
@@ -1402,12 +1465,16 @@ func typeWindow(w *Window, text string, gap time.Duration, explicit bool, fixed 
 		return keyboard.TypeWithInterval(w.HWND, text, gap)
 	}
 
-	return typeHID(text, gap, explicit)
+	return typeHID(text, gap, explicit, w.HWND)
 }
 
 // typeHID types text with the HID backend. The whole string is validated
 // before the first key is pressed; each character's Shift state is released
 // before the next character starts.
+//
+// hwnd 0 is the global Type path and does not consult the foreground window.
+// A non-zero hwnd is checked before Shift, when used, and again before the
+// character key. A failed check sends no further key-down.
 //
 // gap is the idle time between the releases of consecutive characters and is
 // applied only when explicit is true: an unspecified interval adds no gap
@@ -1415,7 +1482,7 @@ func typeWindow(w *Window, text string, gap time.Duration, explicit bool, fixed 
 // idle time between), while Type(text, d) sleeps d after each character's
 // Release returns. gap == 0 therefore only suppresses the extra gap; it never
 // removes the fixed hold before Release.
-func typeHID(text string, gap time.Duration, explicit bool) error {
+func typeHID(text string, gap time.Duration, explicit bool, hwnd uintptr) error {
 	for _, r := range text {
 		if _, _, ok := keyboard.LookupKey(r); !ok {
 			return ErrUnsupportedKey
@@ -1430,6 +1497,9 @@ func typeHID(text string, gap time.Duration, explicit bool) error {
 			defer func() {
 				err = errors.Join(err, scope.Release())
 			}()
+			if err := requireHIDTargetForeground(hwnd); err != nil {
+				return err
+			}
 			if shifted {
 				if err := scope.Press(
 					func() error { return hid.KeyDown(uint16(KeyShift)) },
@@ -1438,6 +1508,9 @@ func typeHID(text string, gap time.Duration, explicit bool) error {
 					return err
 				}
 				time.Sleep(10 * time.Millisecond)
+				if err := requireHIDTargetForeground(hwnd); err != nil {
+					return err
+				}
 			}
 			if err := scope.Press(
 				func() error { return hid.KeyDown(uint16(k)) },
@@ -1603,7 +1676,7 @@ func typeGlobal(text string, gap time.Duration, explicit bool, fixed *Backend) e
 	}
 
 	if cb == BackendHID {
-		return typeHID(text, gap, explicit)
+		return typeHID(text, gap, explicit, 0)
 	}
 
 	runes := []rune(text)

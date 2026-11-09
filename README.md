@@ -163,7 +163,7 @@ Further MCP details:
     *   **Driver Required**: Must install Interception driver.
     *   **Blocking**: `Move` operations are synchronous and blocking (to simulate human speed).
     *   **Mouse Movement**: Physically moves the cursor.
-    *   **Focus**: Usually requires the window to be active/foreground.
+    *   **Focus**: Window key-down, `Press`, `PressHotkey`, and `Type` send only while the window's top-level ancestor is the foreground window. Otherwise they return `ErrTargetNotForeground` and do not press that key. `KeyUp` still sends, so a key that is already down can be released. Global keyboard methods are not checked.
 
 ## Installation
 
@@ -314,7 +314,9 @@ if err := winput.SetBackend(winput.BackendHID); err != nil {
     // No action needed, default is already BackendMessage
 }
 
-w.Type("password") // Works with whatever backend is active
+// Message types into w. HID returns ErrTargetNotForeground unless w's
+// top-level window is already foreground.
+w.Type("password")
 ```
 
 ### 3. Probes and a task-level executor

@@ -118,6 +118,10 @@ var (
     // event to a specific window.
     ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling")
 
+    // ErrTargetNotForeground means a window key-down on BackendHID did not send
+    // because the window's top-level ancestor was not the foreground window.
+    ErrTargetNotForeground = errors.New("target window is not the foreground window")
+
     // ErrInvalidMouseButton means the MouseButton value is not one of the exported identities.
     ErrInvalidMouseButton = errors.New("invalid mouse button")
 
@@ -566,14 +570,14 @@ Text returns the current text of the target window/control using standard Win32 
 ```go
 func (w *Window) KeyDown(key Key) error
 ```
-KeyDown sends a key down event to the window.
+KeyDown sends a key down event to the window. Under `BackendHID` the window's top-level ancestor must already be the foreground window, or the call returns `ErrTargetNotForeground` and sends nothing. A child hwnd is judged by that ancestor. Package-level `KeyDown` is global and does not use this rule.
 
 #### func (*Window) KeyUp
 
 ```go
 func (w *Window) KeyUp(key Key) error
 ```
-KeyUp sends a key up event to the window.
+KeyUp sends a key up event to the window. Under `BackendHID` the release is still sent when the window is not foreground, so a key that is already down can be lifted.
 
 #### func (*Window) Press
 
@@ -584,7 +588,10 @@ Press simulates a full keystroke (KeyDown followed by KeyUp). The optional
 `interval` is the hold time (delay between a successful key-down and the
 release) on both backends; without it the hold is 30ms. `Press(key, 0)` does
 not sleep between down and up. A negative interval, or more than one interval,
-returns `ErrInvalidInterval` before any key is pressed.
+returns `ErrInvalidInterval` before any key is pressed. Under `BackendHID` the
+key-down is sent only when the window's top-level ancestor is the foreground
+window; otherwise the call returns `ErrTargetNotForeground` and does not press
+the key.
 
 #### func (*Window) PressHotkey
 
@@ -595,7 +602,7 @@ PressHotkey presses a combination of keys in order and releases them in reverse 
 When used on a window with `BackendMessage`, combinations that include modifier keys
 such as `Ctrl`, `Alt`, or `Shift` are sent via foreground keyboard events instead of
 pure `PostMessage`, because many applications do not recognize modifier state reliably
-through window messages alone.
+through window messages alone. The foreground identity is the top-level ancestor, so a child hwnd is accepted once that ancestor is foreground. The chord still reaches whichever control has the keyboard focus. Under `BackendHID` each key-down is sent only while that ancestor is the foreground window; otherwise the call returns `ErrTargetNotForeground` and releases keys this call already pressed.
 
 #### func (*Window) Type
 
@@ -607,7 +614,12 @@ is the character gap: on the message backend it is slept between runes (30ms
 by default, via `keyboard.TypeWithInterval`) and not after the last rune; on
 HID the fixed per-character hold is unchanged and an explicit interval is
 slept between character releases. A negative interval, or more than one
-interval, returns `ErrInvalidInterval` before any character is sent.
+interval, returns `ErrInvalidInterval` before any character is sent. Under
+`BackendHID` each character's key-down, including Shift when needed, is sent
+only while the window's top-level ancestor is the foreground window. A failed
+check returns `ErrTargetNotForeground` and does not type the rest. The check
+does not prove which child has the caret, and the foreground can change before
+the driver delivers a stroke.
 
 #### func (*Window) Value
 

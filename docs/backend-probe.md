@@ -20,7 +20,7 @@
 2. 当前环境能否使用 HID？
 3. 当前任务需要哪种输入语义（可否抢前台、要不要定向滚动、可靠性与后台约束如何权衡）？
 
-Windows 没有可靠的静态接口，可以证明任意 HWND 会消费某种输入消息。`PostMessage` 成功也不等于目标处理了输入。因此第 3 问不能由窗口静态特征单独决定：最佳后端是应用、操作类型与任务约束的函数，不是窗口特征的函数。例如定向 `Window.Scroll` 在 HID 上返回 `ErrDirectedScrollUnsupported`；Message 下带 Ctrl/Alt/Shift 的 `PressHotkey` 会走 `pressHotkeyForeground`，可能切换前台。窗口门面与桌面门面即使方法名相近，底层语义也不相同，不能互相替代。
+Windows 没有可靠的静态接口，可以证明任意 HWND 会消费某种输入消息。`PostMessage` 成功也不等于目标处理了输入。因此第 3 问不能由窗口静态特征单独决定：最佳后端是应用、操作类型与任务约束的函数，不是窗口特征的函数。例如定向 `Window.Scroll` 在 HID 上返回 `ErrDirectedScrollUnsupported`；窗口键盘的按下在 HID 上要求该窗口的顶层祖先已经是前台，否则返回 `ErrTargetNotForeground` 并且不发送。Message 下带 Ctrl/Alt/Shift 的 `PressHotkey` 会走 `pressHotkeyForeground`，可能切换前台；前台身份按顶层祖先比较，子控件不再因为句柄不等于 `GetForegroundWindow` 而直接失败。窗口门面与桌面门面即使方法名相近，底层语义也不相同，不能互相替代。
 
 一句话目标：**`ProbeTarget` 报告完整性关系、调用方 UIAccess、目标窗口自身类名与进程名；`ProbeHID` 报告本进程 HID 初始化结果。二者都不推荐后端，也都不修改全局后端。任务级 `Input` 是独立的状态隔离能力，不依赖探针。**
 
