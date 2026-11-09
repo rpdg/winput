@@ -127,10 +127,17 @@ func classifyHID(err error) HIDStatus {
 	}
 }
 
+// identityUnusable reports a snapshot that cannot identify a target window.
+// A zero process or thread id is not a usable identity even when the system
+// call returned without an error.
+func identityUnusable(s idSnap) bool {
+	return !s.valid || !s.idOK || s.pid == 0 || s.tid == 0
+}
+
 // resolveIdentity applies the class-name and identity table.
 // A class read that returned a value, including an empty string, is known.
 func resolveIdentity(start, end idSnap) (string, error) {
-	if !start.valid || !end.valid || !start.idOK || !end.idOK {
+	if identityUnusable(start) || identityUnusable(end) {
 		return "", ErrWindowGone
 	}
 	if start.pid != end.pid || start.tid != end.tid {
@@ -150,30 +157,62 @@ func resolveIdentity(start, end idSnap) (string, error) {
 	}
 }
 
-// readIdentity is the Win32 snapshot used by ProbeTarget. Tests replace it.
-var readIdentity = readWindowIdentity
+// Probe seams. The production values are the Win32 paths; tests replace them
+// to make handle ownership and identity changes deterministic.
+var (
+	readIdentity = readWindowIdentity
+	// openTargetProcess opens the target with PROCESS_QUERY_LIMITED_INFORMATION.
+	// A failed open returns openOK == false and degrades target facts.
+	openTargetProcess = openProcessForProbe
+	// closeTargetProcess releases the one target process handle. Every return
+	// path that opened it must close it exactly once.
+	closeTargetProcess = closeOSHandle
+	// collectFacts reads process facts through the target process handle.
+	collectFacts = readTargetFacts
 
-// collectFacts reads the process name, integrity relation, and caller UIAccess.
-// Tests replace it. The default closes every process handle it opens.
-var collectFacts = readTargetFacts
+	readTargetProcessName   = processFileName
+	openTargetToken         = openToken
+	readTargetIntegrityRID  = tokenIntegrityRID
+	closeTargetProcessToken = closeOSHandle
+)
 
 // ProbeTarget reports facts about w. It does not initialize HID, take the
 // input lock, or change the global backend. An invalid window or a window
 // whose process or thread id cannot be read returns ErrWindowGone and no report.
+//
+// A successful OpenProcess handle is held from before the post-open identity
+// check until after the final identity check. The process name and target token
+// are read through that same handle. An OpenProcess failure is not fatal: the
+// probe succeeds when the window identity stays stable, with an empty process
+// name and an unknown integrity relation. No later PID reopen is attempted.
 func ProbeTarget(w *Window) (*TargetProbe, error) {
 	if w == nil {
 		return nil, ErrWindowGone
 	}
 	// Hold the handle taken at entry. A caller that mutates w.HWND while the
-	// process token is being read must not splice that new handle into the end
-	// snapshot. Facts are read only after a usable start snapshot, and the end
-	// snapshot is taken after those reads. A mismatch discards the facts.
+	// process facts are being read must not splice that new handle into the end
+	// snapshot. A mismatch discards the facts.
 	hwnd := w.HWND
 	start := readIdentity(hwnd)
-	if !start.valid || !start.idOK {
+	if identityUnusable(start) {
 		return nil, ErrWindowGone
 	}
-	name, rel, access := collectFacts(start.pid)
+
+	// Open as early as possible after the start identity is usable. The same
+	// handle remains open through the end identity check and is closed once.
+	proc, openOK := openTargetProcess(start.pid)
+	if openOK {
+		defer closeTargetProcess(proc)
+
+		// Recheck after opening without promoting afterOpen into a new baseline.
+		// A class name read as null here is not a separate error.
+		afterOpen := readIdentity(hwnd)
+		if _, err := resolveIdentity(start, afterOpen); err != nil {
+			return nil, err
+		}
+	}
+
+	name, rel, access := collectFacts(proc, openOK)
 	end := readIdentity(hwnd)
 	class, err := resolveIdentity(start, end)
 	if err != nil {
@@ -210,7 +249,7 @@ func readWindowIdentity(hwnd uintptr) idSnap {
 	}
 	var pid uint32
 	tid, _, _ := window.ProcGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
-	if tid == 0 {
+	if tid == 0 || pid == 0 {
 		return snap
 	}
 	snap.idOK = true
@@ -238,10 +277,42 @@ const (
 	tokenUIAccessClass  = 26
 )
 
-func readTargetFacts(pid uint32) (string, IntegrityRelation, UIAccess) {
+func openProcessForProbe(pid uint32) (syscall.Handle, bool) {
+	if pid == 0 {
+		return 0, false
+	}
+	proc, _, _ := window.ProcOpenProcess.Call(processQueryLimited, 0, uintptr(pid))
+	if proc == 0 {
+		return 0, false
+	}
+	return syscall.Handle(proc), true
+}
+
+// readTargetFacts reads the caller token independently and the target facts
+// through the already-open target process handle. openOK == false is the
+// degraded path: it does not attempt a second OpenProcess.
+func readTargetFacts(proc syscall.Handle, openOK bool) (string, IntegrityRelation, UIAccess) {
 	access, callerRID, callerOK := readCallerToken()
-	name, targetRID, targetOK := readProcessToken(pid)
+	name, targetRID, targetOK := readProcessFacts(proc, openOK)
 	return name, integrityRelation(callerRID, callerOK, targetRID, targetOK), access
+}
+
+// readProcessFacts reads the executable name and target integrity RID through
+// one process handle. Name and token failures are independent: a token failure
+// keeps the name, and a name failure still allows the token to be read. The
+// token handle is closed on every path after it is opened.
+func readProcessFacts(proc syscall.Handle, openOK bool) (name string, rid uint32, ok bool) {
+	if !openOK {
+		return "", 0, false
+	}
+	name = readTargetProcessName(proc)
+	token, tokenOK := openTargetToken(uintptr(proc))
+	if !tokenOK {
+		return name, 0, false
+	}
+	defer closeTargetProcessToken(token)
+	rid, ok = readTargetIntegrityRID(token)
+	return name, rid, ok
 }
 
 func integrityRelation(caller uint32, callerOK bool, target uint32, targetOK bool) IntegrityRelation {
@@ -270,25 +341,6 @@ func readCallerToken() (UIAccess, uint32, bool) {
 	defer closeOSHandle(token)
 	rid, ridOK := tokenIntegrityRID(token)
 	return tokenUIAccess(token), rid, ridOK
-}
-
-func readProcessToken(pid uint32) (string, uint32, bool) {
-	if pid == 0 {
-		return "", 0, false
-	}
-	proc, _, _ := window.ProcOpenProcess.Call(processQueryLimited, 0, uintptr(pid))
-	if proc == 0 {
-		return "", 0, false
-	}
-	defer closeOSHandle(syscall.Handle(proc))
-	name := processFileName(syscall.Handle(proc))
-	token, ok := openToken(proc)
-	if !ok {
-		return name, 0, false
-	}
-	defer closeOSHandle(token)
-	rid, ridOK := tokenIntegrityRID(token)
-	return name, rid, ridOK
 }
 
 func openToken(proc uintptr) (syscall.Handle, bool) {

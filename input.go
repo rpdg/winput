@@ -321,7 +321,11 @@ func (d *DesktopInput) PressHotkey(keys ...Key) error {
 	}
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
-	return pressHotkeyWith(d.input.backend, keys...)
+	cb, err := acquireBackend(d.backend())
+	if err != nil {
+		return err
+	}
+	return pressHotkeyWith(cb, keys...)
 }
 
 // Type types text with windowless keyboard input.
@@ -334,4 +338,28 @@ func (d *DesktopInput) Type(text string, interval ...time.Duration) error {
 		return err
 	}
 	return typeGlobal(text, gap, explicit, d.backend())
+}
+
+// PasteByClipboard pastes text into the current foreground window with
+// Ctrl+V, using this executor's fixed backend. It does not read the global
+// backend. The clipboard is still process-wide, the target is whatever window
+// is foreground when the call runs, and no HWND is accepted. See the package
+// PasteByClipboard for the clipboard format, restore, and consumption limits;
+// this method has the same limits.
+//
+// A nil or zero receiver returns ErrInputInvalid before text validation, backend
+// resolution, or the clipboard is touched. Empty text on a valid receiver
+// returns ErrEmptyPasteText without taking the input lock or opening the
+// clipboard.
+//
+// The fixed-backend path adds no wrapper-level initialization or availability
+// check: HID initialization remains at NewInput(BackendHID), and lower-level
+// runtime behavior is unchanged. A runtime backend error can therefore occur
+// after the clipboard swap; restore is still attempted and errors are joined,
+// so errors.Is continues to match each stage.
+func (d *DesktopInput) PasteByClipboard(text string) error {
+	if err := d.ready(); err != nil {
+		return err
+	}
+	return pasteByClipboard(text, d.backend())
 }

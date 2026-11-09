@@ -27,6 +27,7 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [func Press](#func-press)
 *   [func PressHotkey](#func-presshotkey)
 *   [func PasteByClipboard](#func-pastebyclipboard)
+*   [func (*DesktopInput) PasteByClipboard](#func-desktopinput-pastebyclipboard)
 *   [func Type](#func-type)
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
@@ -407,6 +408,33 @@ the clipboard is opened and before any key is sent. PasteByClipboard is not a
 replacement for `Type`; controls that reject paste (for example password
 fields) will not succeed.
 
+### func (*DesktopInput) PasteByClipboard
+
+```go
+func (d *DesktopInput) PasteByClipboard(text string) error
+```
+PasteByClipboard pastes text into the current foreground window with Ctrl+V,
+using the executor's fixed backend. The backend is chosen at `NewInput`, not at
+paste time; a later `SetBackend` does not change it. The target is still
+whatever window is foreground when the call runs, and no HWND is accepted. The
+clipboard is process-wide and shared with other programs and with the
+package-level function.
+
+A nil or zero `DesktopInput` returns `ErrInputInvalid` before text validation,
+backend resolution, or any clipboard access. Empty text on a valid facade
+returns `ErrEmptyPasteText` without taking the input lock or opening the
+clipboard. Whitespace-only text is legal.
+
+The fixed-backend path does not run an extra wrapper-level availability check
+or initialize HID while resolving the backend; HID initialization during
+construction remains at `NewInput(BackendHID)`, and lower-level runtime
+behavior is unchanged. A runtime backend error can therefore occur after the
+clipboard swap, in which case restore is still attempted. The clipboard format,
+restore, `inputMutex`, foreground, and consumption limits are the same as the
+package-level `PasteByClipboard`: only `CF_UNICODETEXT` is restored, a nil
+return does not prove the target consumed the text, and a non-nil return does
+not prove no key was sent. The method does not provide foreground-window
+isolation or cross-process clipboard exclusivity.
 
 ### func CaptureVirtualDesktop
 
@@ -642,5 +670,5 @@ changed reliably later.
 
 `ProbeHID` returns `initialized`, `dll_unavailable`, `driver_unavailable`, `devices_unavailable`, or `unknown`. A failed initialization still returns a status. It does not change the global backend. `SetBackend`, `checkBackend`, and `NewInput(BackendHID)` keep today's public errors.
 
-`NewInput` binds `BackendMessage` or `BackendHID`. Any other integer returns `ErrInvalidBackend` before HID initialization. `ForWindow` and `Desktop` split window operations from screen operations. The executor does not read the global backend. `PasteByClipboard`, cursor queries, window search, text reads, and DPI stay on the existing functions.
+`NewInput` binds `BackendMessage` or `BackendHID`. Any other integer returns `ErrInvalidBackend` before HID initialization. `ForWindow` and `Desktop` split window operations from screen operations. The executor does not read the global backend. The package-level `PasteByClipboard` remains the global-backend compatibility entry; `DesktopInput.PasteByClipboard` is the fixed-backend form. Cursor queries, window search, text reads, and DPI stay on the existing functions.
 

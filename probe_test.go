@@ -7,6 +7,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/rpdg/winput/hid"
@@ -100,6 +101,10 @@ func TestResolveIdentity(t *testing.T) {
 		{"invalid end", base, idSnap{idOK: true}, "", ErrWindowGone},
 		{"start pid missing", idSnap{valid: true}, base, "", ErrWindowGone},
 		{"end tid missing", base, idSnap{valid: true, pid: 7}, "", ErrWindowGone},
+		{"start pid zero", idSnap{valid: true, idOK: true, pid: 0, tid: 9}, base, "", ErrWindowGone},
+		{"start tid zero", idSnap{valid: true, idOK: true, pid: 7, tid: 0}, base, "", ErrWindowGone},
+		{"end pid zero", base, idSnap{valid: true, idOK: true, pid: 0, tid: 9}, "", ErrWindowGone},
+		{"end tid zero", base, idSnap{valid: true, idOK: true, pid: 7, tid: 0}, "", ErrWindowGone},
 		{"pid changed", base, idSnap{valid: true, idOK: true, pid: 8, tid: 9, class: base.class}, "", ErrTargetChanged},
 		{"tid changed", base, idSnap{valid: true, idOK: true, pid: 7, tid: 10, class: base.class}, "", ErrTargetChanged},
 		{"class changed", base, idSnap{valid: true, idOK: true, pid: 7, tid: 9, class: classSnap{known: true, value: "Button"}}, "", ErrTargetChanged},
@@ -136,32 +141,42 @@ func TestProbeTargetNilAndSeams(t *testing.T) {
 		t.Fatalf("zero hwnd = %v, %v", report, err)
 	}
 
-	reads := 0
-	restoreID := swapIdentity(func(uintptr) idSnap {
-		reads++
-		class := "Edit"
-		if reads > 1 {
-			class = "Button"
+	const hwnd = uintptr(1)
+	stable := idSnap{valid: true, idOK: true, pid: 4, tid: 5}
+	restoreID := swapIdentity(func(got uintptr) idSnap {
+		if got != hwnd {
+			t.Fatalf("identity read used hwnd %d", got)
 		}
-		return idSnap{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: class}}
+		return stable
 	})
-	_, err = ProbeTarget(&Window{HWND: 1})
-	restoreID()
-	if !errors.Is(err, ErrTargetChanged) {
-		t.Fatalf("changed class = %v", err)
-	}
-
-	n := 0
-	restoreID = swapIdentity(func(uintptr) idSnap {
-		n++
-		return idSnap{valid: true, idOK: true, pid: 4, tid: 5}
+	defer restoreID()
+	handle := syscall.Handle(0x77)
+	opens := 0
+	restoreOpen := swapOpenProcess(func(pid uint32) (syscall.Handle, bool) {
+		opens++
+		if pid != stable.pid {
+			t.Fatalf("opened pid %d, want %d", pid, stable.pid)
+		}
+		return handle, true
 	})
-	restoreFacts := swapFacts(func(uint32) (string, IntegrityRelation, UIAccess) {
+	defer restoreOpen()
+	closes := 0
+	restoreClose := swapCloseProcess(func(got syscall.Handle) {
+		closes++
+		if got != handle {
+			t.Fatalf("closed handle %v, want %v", got, handle)
+		}
+	})
+	defer restoreClose()
+	restoreFacts := swapFacts(func(proc syscall.Handle, openOK bool) (string, IntegrityRelation, UIAccess) {
+		if !openOK || proc != handle {
+			t.Fatalf("facts handle = %v, openOK = %v", proc, openOK)
+		}
 		return "", IntegrityUnknown, UIAccessUnknown
 	})
-	report, err = ProbeTarget(&Window{HWND: 1})
-	restoreID()
-	restoreFacts()
+	defer restoreFacts()
+
+	report, err = ProbeTarget(&Window{HWND: hwnd})
 	if err != nil || report == nil {
 		t.Fatalf("unknown facts = %v, %v", report, err)
 	}
@@ -175,68 +190,478 @@ func TestProbeTargetNilAndSeams(t *testing.T) {
 	if !reflect.DeepEqual(report.Warnings, want) {
 		t.Fatalf("warnings = %#v", report.Warnings)
 	}
+	if opens != 1 || closes != 1 {
+		t.Fatalf("opens/closes = %d/%d, want 1/1", opens, closes)
+	}
 	if inits != 0 {
 		t.Fatalf("ProbeTarget called HID init %d times", inits)
 	}
 	assertNoSuggestionFields(t)
 }
 
-func TestProbeTargetRechecksIdentityAfterFacts(t *testing.T) {
-	w := &Window{HWND: 1}
-	changed := false
-	restoreID := swapIdentity(func(hwnd uintptr) idSnap {
-		if hwnd != 1 {
-			t.Fatalf("identity read used hwnd %d", hwnd)
+func TestProbeTargetStartRejectsWithoutOpening(t *testing.T) {
+	cases := []struct {
+		name string
+		snap idSnap
+	}{
+		{"invalid hwnd", idSnap{}},
+		{"identity unreadable", idSnap{valid: true}},
+		{"pid zero", idSnap{valid: true, idOK: true, pid: 0, tid: 9}},
+		{"tid zero", idSnap{valid: true, idOK: true, pid: 7, tid: 0}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			restoreID := swapIdentity(func(uintptr) idSnap { return tc.snap })
+			defer restoreID()
+			opens := 0
+			restoreOpen := swapOpenProcess(func(uint32) (syscall.Handle, bool) {
+				opens++
+				return 1, true
+			})
+			defer restoreOpen()
+
+			report, err := ProbeTarget(&Window{HWND: 1})
+			if report != nil || !errors.Is(err, ErrWindowGone) {
+				t.Fatalf("probe = %v, %v; want ErrWindowGone", report, err)
+			}
+			if opens != 0 {
+				t.Fatalf("opened process %d times for an unusable start snapshot", opens)
+			}
+		})
+	}
+}
+
+func TestProbeTargetDoesNotTakeInputMutexOrChangeBackend(t *testing.T) {
+	prev := getBackend()
+	defer setGlobalBackend(prev)
+	setGlobalBackend(BackendHID)
+
+	const hwnd = uintptr(6)
+	stable := idSnap{valid: true, idOK: true, pid: 4, tid: 5}
+	restoreID := swapIdentity(func(uintptr) idSnap { return stable })
+	defer restoreID()
+	restoreOpen := swapOpenProcess(func(uint32) (syscall.Handle, bool) { return 0, false })
+	defer restoreOpen()
+	restoreFacts := swapFacts(func(syscall.Handle, bool) (string, IntegrityRelation, UIAccess) {
+		return "", IntegrityUnknown, UIAccessUnknown
+	})
+	defer restoreFacts()
+
+	inputMutex.Lock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := ProbeTarget(&Window{HWND: hwnd})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		inputMutex.Unlock()
+		if err != nil {
+			t.Fatalf("probe under held inputMutex = %v", err)
 		}
-		class := "Edit"
-		pid := uint32(9)
-		if changed {
-			class = "Button"
-			pid = 10
+	case <-time.After(2 * time.Second):
+		inputMutex.Unlock()
+		t.Fatal("ProbeTarget waited for inputMutex")
+	}
+	if got := getBackend(); got != BackendHID {
+		t.Fatalf("ProbeTarget changed the global backend to %v", got)
+	}
+}
+
+func TestProbeTargetHoldsOneProcessHandle(t *testing.T) {
+	const hwnd = uintptr(11)
+	stable := idSnap{valid: true, idOK: true, pid: 77, tid: 8, class: classSnap{known: true, value: "Edit"}}
+	w := &Window{HWND: hwnd}
+	var events []string
+	restoreID := swapIdentity(func(got uintptr) idSnap {
+		if got != hwnd {
+			t.Fatalf("identity read used hwnd %d, want %d", got, hwnd)
 		}
-		return idSnap{valid: true, idOK: true, pid: pid, tid: 3, class: classSnap{known: true, value: class}}
+		events = append(events, "identity")
+		return stable
 	})
 	defer restoreID()
-	facts := 0
-	restoreFacts := swapFacts(func(pid uint32) (string, IntegrityRelation, UIAccess) {
-		facts++
-		if pid != 9 {
-			t.Fatalf("facts collected for pid %d", pid)
+	handle := syscall.Handle(0x1234)
+	opens := 0
+	restoreOpen := swapOpenProcess(func(pid uint32) (syscall.Handle, bool) {
+		opens++
+		if pid != stable.pid {
+			t.Fatalf("opened pid %d, want %d", pid, stable.pid)
 		}
-		changed = true
-		w.HWND = 99
+		events = append(events, "open")
+		return handle, true
+	})
+	defer restoreOpen()
+	closes := 0
+	restoreClose := swapCloseProcess(func(got syscall.Handle) {
+		closes++
+		if got != handle {
+			t.Fatalf("closed handle %v, want %v", got, handle)
+		}
+		events = append(events, "close")
+	})
+	defer restoreClose()
+	restoreFacts := swapFacts(func(proc syscall.Handle, openOK bool) (string, IntegrityRelation, UIAccess) {
+		if !openOK || proc != handle {
+			t.Fatalf("facts handle = %v, openOK = %v; want %v/true", proc, openOK, handle)
+		}
+		events = append(events, "facts")
+		w.HWND = 999 // The probe must keep the hwnd read at entry.
 		return "notepad.exe", IntegrityEqual, UIAccessEnabled
 	})
 	defer restoreFacts()
 
 	report, err := ProbeTarget(w)
-	if facts != 1 {
-		t.Fatalf("collectFacts calls = %d", facts)
+	if err != nil || report == nil {
+		t.Fatalf("probe = %v, %v", report, err)
 	}
-	if report != nil || !errors.Is(err, ErrTargetChanged) {
-		t.Fatalf("change during facts = report %v, err %v", report, err)
+	wantEvents := []string{"identity", "open", "identity", "facts", "identity", "close"}
+	if !reflect.DeepEqual(events, wantEvents) {
+		t.Fatalf("events = %#v, want %#v", events, wantEvents)
 	}
+	if opens != 1 || closes != 1 {
+		t.Fatalf("opens/closes = %d/%d, want 1/1", opens, closes)
+	}
+	if report.Features.ProcessName != "notepad.exe" ||
+		report.Features.TargetClass != "Edit" ||
+		report.Features.IntegrityRelation != IntegrityEqual ||
+		report.Features.CallerUIAccess != UIAccessEnabled {
+		t.Fatalf("features = %+v", report.Features)
+	}
+}
 
-	changed = false
-	w.HWND = 1
-	restoreFacts()
-	restoreID()
-	restoreFacts = swapFacts(func(uint32) (string, IntegrityRelation, UIAccess) {
-		changed = true
-		return "notepad.exe", IntegrityEqual, UIAccessEnabled
-	})
-	restoreID = swapIdentity(func(uintptr) idSnap {
-		if changed {
-			return idSnap{}
-		}
-		return idSnap{valid: true, idOK: true, pid: 9, tid: 3, class: classSnap{known: true, value: "Edit"}}
-	})
-	report, err = ProbeTarget(w)
-	restoreFacts()
-	restoreID()
-	if report != nil || !errors.Is(err, ErrWindowGone) {
-		t.Fatalf("gone during facts = report %v, err %v", report, err)
+func TestProbeTargetAfterOpenResolution(t *testing.T) {
+	const hwnd = uintptr(21)
+	known := idSnap{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Edit"}}
+	withoutID := idSnap{valid: true, idOK: true, pid: 4, tid: 5}
+	unknownClass := idSnap{valid: true, idOK: true, pid: 4, tid: 5}
+	emptyKnown := idSnap{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: ""}}
+
+	cases := []struct {
+		name      string
+		snaps     []idSnap
+		wantErr   error
+		wantClass string
+		wantFacts int
+	}{
+		{"gone after open", []idSnap{known, {}}, ErrWindowGone, "", 0},
+		{"identity unreadable after open", []idSnap{known, {valid: true}}, ErrWindowGone, "", 0},
+		{"pid zero after open", []idSnap{known, {valid: true, idOK: true, pid: 0, tid: 5, class: known.class}}, ErrWindowGone, "", 0},
+		{"tid zero after open", []idSnap{known, {valid: true, idOK: true, pid: 4, tid: 0, class: known.class}}, ErrWindowGone, "", 0},
+		{"pid changed after open", []idSnap{known, {valid: true, idOK: true, pid: 9, tid: 5, class: known.class}}, ErrTargetChanged, "", 0},
+		{"tid changed after open", []idSnap{known, {valid: true, idOK: true, pid: 4, tid: 9, class: known.class}}, ErrTargetChanged, "", 0},
+		{"class changed after open", []idSnap{known, {valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Button"}}}, ErrTargetChanged, "", 0},
+		{"class unread after open keeps start", []idSnap{known, withoutID, known}, nil, "Edit", 1},
+		{"empty known class changed after open", []idSnap{emptyKnown, {valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Edit"}}}, ErrTargetChanged, "", 0},
+		{"start unknown is not promoted from afterOpen", []idSnap{
+			unknownClass,
+			{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Edit"}},
+			{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Button"}},
+		}, nil, "Button", 1},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			restoreID := swapIdentity(func(got uintptr) idSnap {
+				if got != hwnd {
+					t.Fatalf("identity read used hwnd %d", got)
+				}
+				if calls >= len(tc.snaps) {
+					t.Fatalf("identity read %d exceeded %d snapshots", calls+1, len(tc.snaps))
+				}
+				snap := tc.snaps[calls]
+				calls++
+				return snap
+			})
+			defer restoreID()
+			handle := syscall.Handle(0x88)
+			restoreOpen := swapOpenProcess(func(uint32) (syscall.Handle, bool) { return handle, true })
+			defer restoreOpen()
+			closes := 0
+			restoreClose := swapCloseProcess(func(got syscall.Handle) {
+				closes++
+				if got != handle {
+					t.Fatalf("closed handle %v", got)
+				}
+			})
+			defer restoreClose()
+			facts := 0
+			restoreFacts := swapFacts(func(proc syscall.Handle, openOK bool) (string, IntegrityRelation, UIAccess) {
+				facts++
+				if !openOK || proc != handle {
+					t.Fatalf("facts handle = %v, openOK = %v", proc, openOK)
+				}
+				return "notepad.exe", IntegrityEqual, UIAccessEnabled
+			})
+			defer restoreFacts()
+
+			report, err := ProbeTarget(&Window{HWND: hwnd})
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("probe error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErr != nil && report != nil {
+				t.Fatalf("partial report on error: %+v", report)
+			}
+			if tc.wantErr == nil && report == nil {
+				t.Fatal("probe returned no report")
+			}
+			if tc.wantErr == nil && report.Features.TargetClass != tc.wantClass {
+				t.Fatalf("class = %q, want %q", report.Features.TargetClass, tc.wantClass)
+			}
+			if facts != tc.wantFacts {
+				t.Fatalf("facts calls = %d, want %d", facts, tc.wantFacts)
+			}
+			if closes != 1 {
+				t.Fatalf("closes = %d, want 1", closes)
+			}
+			if calls != len(tc.snaps) {
+				t.Fatalf("identity calls = %d, want %d", calls, len(tc.snaps))
+			}
+		})
+	}
+}
+
+func TestProbeTargetEndResolution(t *testing.T) {
+	const hwnd = uintptr(31)
+	known := idSnap{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Edit"}}
+	withoutID := idSnap{valid: true, idOK: true, pid: 4, tid: 5}
+	unknownClass := idSnap{valid: true, idOK: true, pid: 4, tid: 5}
+	emptyKnown := idSnap{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: ""}}
+	endButton := idSnap{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Button"}}
+
+	cases := []struct {
+		name      string
+		start     idSnap
+		end       idSnap
+		wantErr   error
+		wantClass string
+	}{
+		{"gone at end", known, idSnap{}, ErrWindowGone, ""},
+		{"identity unreadable at end", known, idSnap{valid: true}, ErrWindowGone, ""},
+		{"pid changed at end", known, idSnap{valid: true, idOK: true, pid: 9, tid: 5, class: known.class}, ErrTargetChanged, ""},
+		{"tid changed at end", known, idSnap{valid: true, idOK: true, pid: 4, tid: 9, class: known.class}, ErrTargetChanged, ""},
+		{"class changed at end", known, endButton, ErrTargetChanged, ""},
+		{"empty known class changed at end", emptyKnown, endButton, ErrTargetChanged, ""},
+		{"end class unread uses start", known, withoutID, nil, "Edit"},
+		{"start unknown end class readable", unknownClass, known, nil, "Edit"},
+		{"both class unknown", unknownClass, unknownClass, nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			restoreID := swapIdentity(func(got uintptr) idSnap {
+				if got != hwnd {
+					t.Fatalf("identity read used hwnd %d", got)
+				}
+				calls++
+				if calls == 3 {
+					return tc.end
+				}
+				return tc.start
+			})
+			defer restoreID()
+			handle := syscall.Handle(0x99)
+			restoreOpen := swapOpenProcess(func(uint32) (syscall.Handle, bool) { return handle, true })
+			defer restoreOpen()
+			closes := 0
+			restoreClose := swapCloseProcess(func(got syscall.Handle) {
+				closes++
+				if got != handle {
+					t.Fatalf("closed handle %v", got)
+				}
+			})
+			defer restoreClose()
+			facts := 0
+			restoreFacts := swapFacts(func(proc syscall.Handle, openOK bool) (string, IntegrityRelation, UIAccess) {
+				facts++
+				return "notepad.exe", IntegrityEqual, UIAccessEnabled
+			})
+			defer restoreFacts()
+
+			report, err := ProbeTarget(&Window{HWND: hwnd})
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("probe error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErr != nil && report != nil {
+				t.Fatalf("partial report on error: %+v", report)
+			}
+			if tc.wantErr == nil {
+				if report == nil {
+					t.Fatal("probe returned no report")
+				}
+				if report.Features.TargetClass != tc.wantClass {
+					t.Fatalf("class = %q, want %q", report.Features.TargetClass, tc.wantClass)
+				}
+				if report.Features.ProcessName != "notepad.exe" {
+					t.Fatalf("name = %q", report.Features.ProcessName)
+				}
+			}
+			if facts != 1 {
+				t.Fatalf("facts calls = %d, want 1", facts)
+			}
+			if closes != 1 {
+				t.Fatalf("closes = %d, want 1", closes)
+			}
+			if calls != 3 {
+				t.Fatalf("identity calls = %d, want 3", calls)
+			}
+		})
+	}
+}
+
+func TestProbeTargetOpenFailureDegradesWithoutReopen(t *testing.T) {
+	const hwnd = uintptr(41)
+	stable := idSnap{valid: true, idOK: true, pid: 4, tid: 5, class: classSnap{known: true, value: "Edit"}}
+	reads := 0
+	restoreID := swapIdentity(func(got uintptr) idSnap {
+		if got != hwnd {
+			t.Fatalf("identity read used hwnd %d", got)
+		}
+		reads++
+		return stable
+	})
+	defer restoreID()
+	opens := 0
+	restoreOpen := swapOpenProcess(func(pid uint32) (syscall.Handle, bool) {
+		opens++
+		if pid != stable.pid {
+			t.Fatalf("opened pid %d", pid)
+		}
+		return 0, false
+	})
+	defer restoreOpen()
+	closes := 0
+	restoreClose := swapCloseProcess(func(syscall.Handle) { closes++ })
+	defer restoreClose()
+	inits := 0
+	restoreInit := swapInit(func() error {
+		inits++
+		return errors.New("probe must not init")
+	})
+	defer restoreInit()
+	facts := 0
+	restoreFacts := swapFacts(func(proc syscall.Handle, openOK bool) (string, IntegrityRelation, UIAccess) {
+		facts++
+		if proc != 0 || openOK {
+			t.Fatalf("facts handle = %v, openOK = %v; want degraded", proc, openOK)
+		}
+		return "", IntegrityUnknown, UIAccessEnabled
+	})
+	defer restoreFacts()
+
+	report, err := ProbeTarget(&Window{HWND: hwnd})
+	if err != nil || report == nil {
+		t.Fatalf("probe = %v, %v", report, err)
+	}
+	if report.Features.ProcessName != "" || report.Features.IntegrityRelation != IntegrityUnknown {
+		t.Fatalf("features = %+v", report.Features)
+	}
+	if report.Features.CallerUIAccess != UIAccessEnabled {
+		t.Fatalf("UIAccess = %q, want enabled", report.Features.CallerUIAccess)
+	}
+	want := []ProbeWarning{WarnIntegrityUnknown}
+	if !reflect.DeepEqual(report.Warnings, want) {
+		t.Fatalf("warnings = %#v", report.Warnings)
+	}
+	if opens != 1 || closes != 0 || facts != 1 || reads != 2 {
+		t.Fatalf("opens/closes/facts/reads = %d/%d/%d/%d, want 1/0/1/2", opens, closes, facts, reads)
+	}
+	if inits != 0 {
+		t.Fatalf("open failure called HID init %d times", inits)
+	}
+}
+
+func TestReadProcessFactsDegradesIndependently(t *testing.T) {
+	t.Run("open failure reads neither name nor token", func(t *testing.T) {
+		nameReads, tokenOpens := 0, 0
+		restoreName := swapTargetName(func(syscall.Handle) string { nameReads++; return "x" })
+		defer restoreName()
+		restoreToken := swapTargetToken(func(uintptr) (syscall.Handle, bool) { tokenOpens++; return 1, true })
+		defer restoreToken()
+
+		name, rid, ok := readProcessFacts(123, false)
+		if name != "" || rid != 0 || ok {
+			t.Fatalf("facts = %q/%d/%v, want empty/0/false", name, rid, ok)
+		}
+		if nameReads != 0 || tokenOpens != 0 {
+			t.Fatalf("name/token reads = %d/%d, want 0/0", nameReads, tokenOpens)
+		}
+	})
+
+	t.Run("token failure retains the name", func(t *testing.T) {
+		restoreName := swapTargetName(func(syscall.Handle) string { return "notepad.exe" })
+		defer restoreName()
+		restoreToken := swapTargetToken(func(uintptr) (syscall.Handle, bool) { return 0, false })
+		defer restoreToken()
+		closed := 0
+		restoreClose := swapTargetTokenClose(func(syscall.Handle) { closed++ })
+		defer restoreClose()
+
+		name, rid, ok := readProcessFacts(123, true)
+		if name != "notepad.exe" || rid != 0 || ok {
+			t.Fatalf("facts = %q/%d/%v", name, rid, ok)
+		}
+		if closed != 0 {
+			t.Fatalf("closed %d unopened token handles", closed)
+		}
+	})
+
+	t.Run("name failure retains token facts", func(t *testing.T) {
+		token := syscall.Handle(55)
+		restoreName := swapTargetName(func(syscall.Handle) string { return "" })
+		defer restoreName()
+		restoreToken := swapTargetToken(func(uintptr) (syscall.Handle, bool) { return token, true })
+		defer restoreToken()
+		restoreRID := swapTargetIntegrity(func(got syscall.Handle) (uint32, bool) {
+			if got != token {
+				t.Fatalf("integrity used handle %v", got)
+			}
+			return 0x3000, true
+		})
+		defer restoreRID()
+		closed := 0
+		restoreClose := swapTargetTokenClose(func(got syscall.Handle) {
+			closed++
+			if got != token {
+				t.Fatalf("closed token %v", got)
+			}
+		})
+		defer restoreClose()
+
+		name, rid, ok := readProcessFacts(123, true)
+		if name != "" || rid != 0x3000 || !ok {
+			t.Fatalf("facts = %q/%#x/%v", name, rid, ok)
+		}
+		if closed != 1 {
+			t.Fatalf("token closes = %d, want 1", closed)
+		}
+	})
+
+	t.Run("integrity failure retains the name and closes the token", func(t *testing.T) {
+		token := syscall.Handle(56)
+		restoreName := swapTargetName(func(syscall.Handle) string { return "notepad.exe" })
+		defer restoreName()
+		restoreToken := swapTargetToken(func(uintptr) (syscall.Handle, bool) { return token, true })
+		defer restoreToken()
+		restoreRID := swapTargetIntegrity(func(syscall.Handle) (uint32, bool) { return 0, false })
+		defer restoreRID()
+		closed := 0
+		restoreClose := swapTargetTokenClose(func(got syscall.Handle) {
+			closed++
+			if got != token {
+				t.Fatalf("closed token %v", got)
+			}
+		})
+		defer restoreClose()
+
+		name, rid, ok := readProcessFacts(123, true)
+		if name != "notepad.exe" || rid != 0 || ok {
+			t.Fatalf("facts = %q/%d/%v", name, rid, ok)
+		}
+		if closed != 1 {
+			t.Fatalf("token closes = %d, want 1", closed)
+		}
+	})
 }
 
 func TestNewInputAndTaskFacade(t *testing.T) {
@@ -418,18 +843,6 @@ func TestWindowInputDirectedScroll(t *testing.T) {
 	}
 }
 
-func TestDesktopFacadeHasNoPasteOrQueries(t *testing.T) {
-	methods := reflect.TypeOf(&DesktopInput{})
-	for _, name := range []string{"PasteByClipboard", "GetCursorPos", "FindByTitle"} {
-		if _, ok := methods.MethodByName(name); ok {
-			t.Fatalf("DesktopInput has %s", name)
-		}
-	}
-	if _, ok := reflect.TypeOf(&WindowInput{}).MethodByName("Text"); ok {
-		t.Fatal("WindowInput has Text")
-	}
-}
-
 func assertNoSuggestionFields(t *testing.T) {
 	t.Helper()
 	rt := reflect.TypeOf(TargetProbe{})
@@ -452,10 +865,46 @@ func swapIdentity(fn func(uintptr) idSnap) func() {
 	return func() { readIdentity = prev }
 }
 
-func swapFacts(fn func(uint32) (string, IntegrityRelation, UIAccess)) func() {
+func swapFacts(fn func(syscall.Handle, bool) (string, IntegrityRelation, UIAccess)) func() {
 	prev := collectFacts
 	collectFacts = fn
 	return func() { collectFacts = prev }
+}
+
+func swapOpenProcess(fn func(uint32) (syscall.Handle, bool)) func() {
+	prev := openTargetProcess
+	openTargetProcess = fn
+	return func() { openTargetProcess = prev }
+}
+
+func swapCloseProcess(fn func(syscall.Handle)) func() {
+	prev := closeTargetProcess
+	closeTargetProcess = fn
+	return func() { closeTargetProcess = prev }
+}
+
+func swapTargetName(fn func(syscall.Handle) string) func() {
+	prev := readTargetProcessName
+	readTargetProcessName = fn
+	return func() { readTargetProcessName = prev }
+}
+
+func swapTargetToken(fn func(uintptr) (syscall.Handle, bool)) func() {
+	prev := openTargetToken
+	openTargetToken = fn
+	return func() { openTargetToken = prev }
+}
+
+func swapTargetIntegrity(fn func(syscall.Handle) (uint32, bool)) func() {
+	prev := readTargetIntegrityRID
+	readTargetIntegrityRID = fn
+	return func() { readTargetIntegrityRID = prev }
+}
+
+func swapTargetTokenClose(fn func(syscall.Handle)) func() {
+	prev := closeTargetProcessToken
+	closeTargetProcessToken = fn
+	return func() { closeTargetProcessToken = prev }
 }
 
 func createStaticWindow(visible bool) uintptr {

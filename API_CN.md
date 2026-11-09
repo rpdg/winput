@@ -30,6 +30,7 @@
 *   [func Press](#func-press)
 *   [func PressHotkey](#func-presshotkey)
 *   [func PasteByClipboard](#func-pastebyclipboard)
+*   [func (*DesktopInput) PasteByClipboard](#func-desktopinput-pastebyclipboard)
 *   [func Type](#func-type)
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
@@ -328,6 +329,17 @@ PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口。它不接�
 
 剪贴板会被临时替换，结束后只放回 `CF_UNICODETEXT`。若系统当时没有 Unicode 格式（包括剪贴板上只有图片，或只有可被系统转换的 `CF_TEXT`），恢复的是空 Unicode 缓冲，原有的非文本格式不会回来。新文本中单独的 `\n` 会先被规范成 `\r\n` 再写入；恢复的文本按读到的内容原样写回。空文本在打开剪贴板、发送任何按键之前以 `ErrEmptyPasteText` 失败。PasteByClipboard 不是 `Type` 的替代品；拒绝粘贴的控件（例如密码框）不会因此成功。
 
+### func (*DesktopInput) PasteByClipboard
+
+```go
+func (d *DesktopInput) PasteByClipboard(text string) error
+```
+PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口，并使用该执行器在 `NewInput` 时固定的后端；调用时不会重新选择后端，之后调用 `SetBackend` 也不影响它。目标窗口仍是调用发生时处于前台的窗口，不接收 `HWND`。剪贴板是进程级共享资源，其它程序以及包级函数都会看到同一份内容。
+
+nil 或零值 `DesktopInput` 会在文本校验、后端解析和任何剪贴板访问之前返回 `ErrInputInvalid`。合法门面上的空串返回 `ErrEmptyPasteText`，不获取输入锁、不打开剪贴板；纯空白文本合法。
+
+固定后端路径不会额外执行包装层可用性检查，也不会在解析后端时初始化 HID；构造阶段的 HID 初始化仍只发生在 `NewInput(BackendHID)`，底层运行期原有行为不变。因此运行期后端错误可能发生在剪贴板替换之后，此时仍会尝试恢复。剪贴板格式、恢复、`inputMutex`、前台窗口和消费时序的限制与包级 `PasteByClipboard` 相同：只恢复 `CF_UNICODETEXT`，返回 nil 不证明目标已消费文本，返回非 nil 也不证明没有发送按键。该方法不提供前台窗口隔离或跨进程剪贴板独占。
+
 
 ### func CaptureVirtualDesktop
 
@@ -543,5 +555,5 @@ ClientInfo 以屏幕坐标返回客户区矩形：客户区原点 (0, 0) 的屏�
 
 `ProbeHID` 返回 `initialized`、`dll_unavailable`、`driver_unavailable`、`devices_unavailable` 或 `unknown`。初始化失败仍然返回状态，且不修改全局后端。`SetBackend` 与 `NewInput(BackendHID)` 保持今天的公开错误。
 
-`NewInput` 只接受 `BackendMessage` 或 `BackendHID`。其它整型在初始化 HID 之前返回 `ErrInvalidBackend`。`ForWindow` 与 `Desktop` 把窗口操作和屏幕操作分开。执行器不读取全局后端。`PasteByClipboard`、光标查询、窗口查找、文本读取和 DPI 仍走原有函数。
+`NewInput` 只接受 `BackendMessage` 或 `BackendHID`。其它整型在初始化 HID 之前返回 `ErrInvalidBackend`。`ForWindow` 与 `Desktop` 把窗口操作和屏幕操作分开。执行器不读取全局后端。包级 `PasteByClipboard` 仍是全局后端兼容入口；`DesktopInput.PasteByClipboard` 是固定后端形式。光标查询、窗口查找、文本读取和 DPI 仍走原有函数。
 

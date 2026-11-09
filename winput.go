@@ -249,7 +249,12 @@ func checkBackend() error {
 // acquireBackend returns fixed when it is non-nil. That path does not read
 // the global backend and does not initialize HID. A nil fixed uses the global
 // backend, initializing HID when that backend is BackendHID.
-func acquireBackend(fixed *Backend) (Backend, error) {
+//
+// Tests replace acquireBackend to observe which fixed backend each facade
+// method resolves. The production implementation stays acquireBackendImpl.
+var acquireBackend = acquireBackendImpl
+
+func acquireBackendImpl(fixed *Backend) (Backend, error) {
 	if fixed != nil {
 		return *fixed, nil
 	}
@@ -1530,7 +1535,9 @@ func PressHotkey(keys ...Key) (err error) {
 // pressHotkeyLocked is the body of global PressHotkey run while inputMutex is
 // held. It must never call a public input function that would lock inputMutex
 // again, including Press, PressHotkey, Type and PressFor. PasteByClipboard
-// uses it so the clipboard swap and the Ctrl+V stay inside the same lock.
+// instead resolves its backend once and calls pressHotkeyWith directly, so the
+// clipboard swap and Ctrl+V stay inside the same lock without rereading global
+// state.
 func pressHotkeyLocked(keys ...Key) (err error) {
 	if err := checkBackend(); err != nil {
 		return err

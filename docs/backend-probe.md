@@ -6,7 +6,7 @@
 - 本稿取代提交 `330821a` 所载的完整推荐引擎方案：那一版的技术约束（UIPI 措辞、目标 HWND 与后代控件的区分、`UseBackend` 不可行、`Backend` 零值冲突等）在恢复推荐功能时仍须遵守，见 §12
 - 术语：`ProbeTarget`、`ProbeHID`、`IntegrityRelation`、`CallerUIAccess`、`Input` 以本稿 §4、§5 定义为准
 
-> 本轮状态：**设计修订待评审，尚未实施**。基线为 `9ff95cbb0a28572dbaa8048362e36609153fe72c`。本轮将目标进程句柄贯穿采集升级为正式要求，并新增 `DesktopInput.PasteByClipboard`；不是声称现有代码已实现。旧实现符合原契约。当前仅修订本设计；须经用户确认设计并另获编码许可后实施，不授权改代码、测试、提交或推送。现状差异见 §2，实施关口见 §10。
+> 本轮状态：**已实施（本地工作区，未提交）**。基线为 `9ff95cbb0a28572dbaa8048362e36609153fe72c`。本轮将目标进程句柄贯穿采集升级为正式要求，并新增 `DesktopInput.PasteByClipboard`；设计与实现均以本稿为准。旧实现符合原契约。实施结果与未执行项见 §10，验收表见 §4.6 / §5.3。
 
 ## 1. 背景与一句话目标
 
@@ -37,8 +37,8 @@ Windows 没有可靠的静态接口，可以证明任意 HWND 会消费某种输
 | `Window.PressHotkey` + Message | 含修饰键时可能切前台 | Message 不等于全部操作都能后台完成 |
 | 任务级、不可变的后端执行器 | 已有 `Input` / `WindowInput` / `DesktopInput` | 本轮仅扩充桌面粘贴与对应验收（§5），不依赖探针 |
 | 环境事实诊断（完整性、类名、HID 状态） | 已有分开的 `ProbeTarget` / `ProbeHID` | 本轮升级目标进程句柄生命周期（§4.1），不新增总入口 |
-| 目标进程句柄 | 现行 `readProcessToken(pid)` 内打开、读取后关闭；`readWindowIdentity` 仅显式拒绝零 TID | 待实施：句柄贯穿最终核对，PID / TID 均非零，增加打开后核对 |
-| 剪贴板粘贴 | 仅有包级 `PasteByClipboard`，使用全局后端 | 待实施：新增固定后端的桌面门面方法，保留包级兼容与格式限制 |
+| 目标进程句柄 | 当前实现由 `ProbeTarget` 在起始快照后打开一次，名称与 Token 经同一句柄读取，打开后与结束各核对一次身份；PID / TID 均须非零 | 已实施：句柄贯穿最终核对，增加打开后核对，失败按 unknown 降级 |
+| 剪贴板粘贴 | 包级 `PasteByClipboard` 使用全局后端；`DesktopInput.PasteByClipboard` 使用固定后端，共享同一私有 helper | 已实施：保留包级兼容与既有格式限制 |
 | 由静态规则产出 `SuggestedBackend` | 无 | **本阶段不做**；待真实样本证明收益后再议（§9） |
 | MCP 观察类诊断工具 | 无 | **按需**，不作为默认工具链的必经步（§4.7） |
 
@@ -46,7 +46,7 @@ Windows 没有可靠的静态接口，可以证明任意 HWND 会消费某种输
 
 | | 内容 |
 |---|---|
-| **现在做（设计）** | ① `ProbeTarget`：完整性关系、调用方 UIAccess、目标 HWND 自身类名、进程名，以及由此导出的风险提示；不调用 `hid.Init`（§4.1）；② `ProbeHID`：五个 HID 状态；允许预热本进程驱动，不修改全局后端（§4.2）；③ 任务级 `Input` 的桌面粘贴扩展、完整方法表及资源边界（§5）。本轮仅修订设计；评审确认并另获编码许可后实施，见 §10 |
+| **现在做（已实施）** | ① `ProbeTarget`：完整性关系、调用方 UIAccess、目标 HWND 自身类名、进程名，以及由此导出的风险提示；不调用 `hid.Init`（§4.1）；② `ProbeHID`：五个 HID 状态；允许预热本进程驱动，不修改全局后端（§4.2）；③ 任务级 `Input` 的桌面粘贴扩展、完整方法表及资源边界（§5）。实施与未执行项见 §10 |
 | **以后做** | 用 5～10 个真实应用、以业务结果（而非 API 返回成功）验证之后，再考虑恢复 `SuggestedBackend` 裁决引擎；后代窗口类名作为可选结构信息（不参与父窗口后端判断）；DirectInput 模块枚举；MCP 上的目标探针与 HID 探针（有真实使用需求时，默认仍只返回事实）；MCP 输入工具可选 `backend` 并内部改用任务级 `Input`（与核心库 `NewInput` 分阶段，见 §5.2、§10）；有限深度 UIA、特征缓存、Sampling；将 `ErrDirectedScrollUnsupported` 的 MCP 映射改为 `operation_not_supported`，并同步 `docs/mcp-tools.md`、`mapLibraryError` 与对应测试 |
 | **永不做** | 核心库网络或模型；HWND 进入 MCP 契约；反作弊模块名单；用完整性高低断言「全部输入消息确定被阻断」；把 `CallerUIAccess == enabled` 当成自动绕过 UIPI；为探查修改目标消息过滤器（如 `ChangeWindowMessageFilterEx`）；用 `SendMessageTimeout` 成功或像素差证明输入已被消费；默认点击/按键探针；未测量的覆盖率或准确率承诺；`UseBackend(fn)` 临时改全局后端；输入工具内部自动探测；名为 `auto` 的后端值；为让 MCP 工具链看起来完整而先做一个未经样本验证的推荐器；会调用 `hid.Init` 的总入口 `ProbeBackend(w)` |
 
@@ -292,7 +292,7 @@ if err := desktop.MoveMouseTo(500, 300); err != nil {
 }
 ```
 
-方法集合闭合如下；`PasteByClipboard` 为本轮待实施新增，且仅属于 `DesktopInput`。
+方法集合闭合如下；`PasteByClipboard` 为本轮新增，且仅属于 `DesktopInput`。
 
 | 序号 | WindowInput（12 项） | DesktopInput（18 项） |
 |---|---|---|
@@ -327,7 +327,7 @@ func PasteByClipboard(text string) error
 - `WindowInput.Scroll`：Message 为定向窗口滚动；HID 仍返回 `ErrDirectedScrollUnsupported`，不改道为 `ScrollWheel`。
 - `DesktopInput.ScrollWheel`：Message 为现行全局滚轮实现（`mouse_event`）；HID 为系统级滚轮输入。
 
-### 5.1 约束（保留既有契约，纳入本轮待评审扩展）
+### 5.1 约束（保留既有契约，纳入本轮扩展）
 
 - 不采用 `UseBackend(fn)`。公开输入方法自行获取不可重入的 `inputMutex`；在持锁回调中再调 `Window.Click` 等必然死锁。`SetBackend` 只锁 `backendMutex`，持有输入锁也不能隔离全局后端。
 - `NewInput` 只接受 `BackendMessage` 与 `BackendHID`。`BackendMessage` 的值是 0，它合法，而且不初始化 HID。其它整型，包括负数，在调用初始化入口之前返回 `ErrInvalidBackend`（`invalid input backend`）：不留下实例，不加载 DLL，不冻结库路径。不得解释成 Message，不得复用 `ErrBackendUnavailable`，也不得返回无法用 `errors.Is` 识别的普通错误。现行 `SetBackend` 对非 HID 整型会直接写入 `currentBackend`，非法值会静默走 Message；收紧 `SetBackend` 不在本轮范围（实现见 `winput.go`）。
@@ -381,7 +381,7 @@ func PasteByClipboard(text string) error
 
 以后接入 MCP 时，不一定需要服务器端任务上下文；可以在各输入工具调用上携带相同的可选 `backend` 参数，内部再使用任务级 `Input`。那是后续设计，不在本稿实施范围内。
 
-### 5.3 验收（设计确认并另获实施许可后执行）
+### 5.3 验收（实施后核对）
 
 | 项目 | 通过标准 |
 |---|---|
@@ -394,7 +394,7 @@ func PasteByClipboard(text string) error
 | Paste 接收者优先级 | nil / 零值加空串仍 ErrInputInvalid；先 ready 后文本/后端解引用，不取锁、不动剪贴板 |
 | Paste 文本 | 合法门面或包级入口空串 ErrEmptyPasteText，不取锁、不打开剪贴板、不发键；空白合法 |
 | 完整方法集合 | Window 12 项、Desktop 18 项与 §5 一致；Desktop 有 Paste、Window 无 Paste，查询仍禁入 |
-| 现有方法集合负向测试 | 获准编码后更新当前 `probe_test.go` 的 `TestDesktopFacadeHasNoPasteOrQueries`（其他版本可能名 `TestInputFacadeMethodSet`）：不再禁止 Desktop Paste，保留查询禁入并补 Window Paste 禁入 |
+| 现有方法集合负向测试 | 已更新为完整 12/18 集合断言：Desktop 有 Paste、Window 无 Paste，查询仍禁入 |
 | 全方法双向隔离 | 固定 HID + 全局 Message 仍走 HID；固定 Message + 全局 HID 仍走 Message；12/18 每方法均有调用链及覆盖记录，可表测或使用 seam，无须每项真实桌面输入 |
 | 包装层初始化边界 | 固定 Message 操作不走全局 HID 初始化；固定 HID 构造后操作不新增 winput 包装层初始化检查；计数区分构造、SetBackend 设置、底层原运行期行为 |
 | 包级兼容与 cb | 包级签名及全局默认选择不变；解析 cb 后发键用同一 cb；不测试未承诺的并发原子顺序，不混淆 acquireBackend(nil) 的两次读取 |
@@ -405,9 +405,9 @@ func PasteByClipboard(text string) error
 | errors.Join 兼容 | 注入 Message 发送 ErrSendInputFailed 与恢复 ErrClipboardFailed，errors.Is 分别成立；其他 HID 运行期错误按原类型保留，不泛化该发送哨兵 |
 | 单次临界区 | swap/key/restore 顺序正确且受同一 inputMutex 保护，无递归锁；不独占整个任务或桌面 |
 | 既有输入语义 | SetBackend 不污染已有 Input，两对象后端互不干扰；HID 定向 Scroll 仍 ErrDirectedScrollUnsupported；Message 修饰键热键前台语义不变 |
-| GoDoc 与 API 文档 | 获准实施后同步 API.md / API_CN.md 与 GoDoc，说明 global/fixed、ready 优先级、Unicode-only/格式转换、前台/消费时序和失败恢复 |
+| GoDoc 与 API 文档 | 已同步 API.md / API_CN.md 与 GoDoc，说明 global/fixed、ready 优先级、Unicode-only/格式转换、前台/消费时序和失败恢复 |
 
-优先利用现有 seam 或窄接口做确定性测试，保留已有 ProbeTarget 不初始化 HID 的测试。不新增 HID 锁、初始化缓存或重复同义测试来替代实际构造失败验收。Windows 专属完整测试、race、vet、真实剪贴板与 Interception 冒烟须在受控 Windows 环境另行验证；无法执行的项目须说明，不得以文档修订声称测试通过。
+优先利用现有 seam 或窄接口做确定性测试，保留已有 ProbeTarget 不初始化 HID 的测试。本轮未新增 HID 锁、初始化缓存或重复同义测试来替代实际构造失败验收。Windows 专属完整测试、race、vet、真实剪贴板与 Interception 冒烟须在受控 Windows 环境另行验证；当前环境的结果与未执行项见 §10。
 
 ## 6. 分层与铁律
 
@@ -450,13 +450,13 @@ func PasteByClipboard(text string) error
 
 ## 10. 实施顺序
 
-本轮仅修订本设计并交正式评审。旧实现符合原契约；§4.1 持句柄要求与 §5 桌面粘贴是本轮升级，不表示代码已完成。**用户确认设计并另行明确允许编码之前，不修改代码、测试或其他 API 文档，不提交推送、不派编码。**
+本轮实施已完成（本地工作区，未提交）。§4.1 持句柄要求与 §5 桌面粘贴已落地；旧实现符合原契约。实施结果与未执行项见下。
 
-获准实施后按可独立评审的范围推进：
+按可独立评审的范围推进：
 
-1. **目标进程句柄**：同句柄名称/Token、打开后与结束身份核对、独立降级和清理；不改 HID 或粘贴实现。
-2. **桌面粘贴与输入覆盖**：新增固定后端方法、复用包级兼容 helper、错误恢复与资源边界；补 NewInput(HID) 直接测试和完整 12/18 调用链覆盖；同步 GoDoc、API.md、API_CN.md，不重构 HID 初始化机制。
-3. **验证回报**：运行环境允许的单元测试、race、vet；在受控 Windows 环境验证专属路径及必要冒烟。明确未运行项目，不以静态审阅代替通过结论。
+1. **目标进程句柄**：同句柄名称/Token、打开后与结束身份核对、独立降级和清理；不改 HID 或粘贴实现。已完成。
+2. **桌面粘贴与输入覆盖**：新增固定后端方法、复用包级兼容 helper、错误恢复与资源边界；补 NewInput(HID) 直接测试和完整 12/18 调用链覆盖；同步 GoDoc、API.md、API_CN.md，不重构 HID 初始化机制。已完成。
+3. **验证回报**：运行环境允许的单元测试、race、vet；在受控 Windows 环境验证专属路径及必要冒烟。明确未运行项目，不以静态审阅代替通过结论。`go test ./...` 已通过；`go test -race ./...` 在本机启动时以 `0xc0000139` 失败，未能执行测试体；`go vet ./...` 报告既有 unsafe.Pointer 告警（`uia/uia.go`、`probe.go` Token 完整性转换），本次未新增 unsafe 代码。真实剪贴板与 Interception 驱动冒烟未执行。
 
 诊断与任务输入仍是独立能力，不要求为了架构完整重新交付已有 ProbeHID / NewInput，也不要求同时推进后续功能。ProbeTarget 仍不初始化 HID；ProbeHID 仍使用 §4.3 的同一入口，不修改全局后端。
 
@@ -464,7 +464,7 @@ func PasteByClipboard(text string) error
 
 ## 11. 变更说明
 
-- 本轮修订（待正式评审，尚未实施）：将目标进程句柄贯穿采集与最终核对升级为正式要求，补完整中间身份/类名和 PID0/TID0 规则、失败降级与清理验收（§4.1 / §4.5 / §4.6）；将 PasteByClipboard 纳入 DesktopInput，保留包级 global、新门面 fixed，补 ready 优先级、初始化职责、cb 并发边界、Unicode-only 格式/资源限制、异常恢复及完整 12/18 验收（§5 / §7 / §8）。现有底层 HID 同步与运行期行为不变；新增构造失败直接测试要求，不新增锁或 Once，不改 MCP / SetBackend。
+- 本轮修订（已实施，本地工作区未提交）：将目标进程句柄贯穿采集与最终核对升级为正式要求，补完整中间身份/类名和 PID0/TID0 规则、失败降级与清理验收（§4.1 / §4.5 / §4.6）；将 PasteByClipboard 纳入 DesktopInput，保留包级 global、新门面 fixed，补 ready 优先级、初始化职责、cb 并发边界、Unicode-only 格式/资源限制、异常恢复及完整 12/18 验收（§5 / §7 / §8）。现有底层 HID 同步与运行期行为不变；新增构造失败直接测试要求，不新增锁或 Once，不改 MCP / SetBackend。
 - 本轮引用修正：移除无法验证的 ADR、术语及原则文件引用，改用本稿章节和存在源码；历史决定保留，下列旧 Paste 排除决定标为已被替代。
 - 此前评审：`NewInput` 对非法 `Backend` 返回 `ErrInvalidBackend`，且发生在 HID 初始化之前（§5.1）。`BackendMessage` 合法。`SetBackend` 仍不收紧。当时决定“PasteByClipboard 留在全局后端上，不进入 DesktopInput”——**已被本轮修订替代（superseded）**：包级兼容保留，DesktopInput 新增固定后端方法；该历史句不是当前排除规则。
 - 上一轮：HID 状态用哨兵和 `errors.Is` 识别。`hid.ErrSymbolsMissing` 与 `hid.ErrDevicesUnavailable` 为新哨兵，`hid.ErrLibraryNotFound` 别名已有的库错误。哨兵从 `hid` 导出，`winput` 不重新公开（§4.2）。`ErrDLLLoadFailed` 的 `errors.Is` 结果保持不变，旧英文文案不再作为契约。
