@@ -44,9 +44,15 @@ func main() {
 	}
 
 	fmt.Println("👉 Typing via Hardware Simulation...")
-	target.Click(100, 100) // Click to focus caret
+	if err := target.Click(100, 100); err != nil { // Click to focus caret
+		log.Printf("⚠️  Click failed: %v", err)
+	}
+
 	// HID Type sends only while this window's top-level ancestor is foreground.
 	if err := target.Type("HID Input Test"); err != nil {
+		if errors.Is(err, winput.ErrTargetNotForeground) {
+			log.Fatal("❌ Window lost foreground focus. HID keyboard input requires the target window to be active.")
+		}
 		log.Fatal(err)
 	}
 

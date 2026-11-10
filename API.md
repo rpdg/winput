@@ -6,61 +6,94 @@ Package `winput` provides a high-level interface for Windows background input au
 
 *   [Variables](#variables)
 *   [Constants](#constants)
-*   [func EnablePerMonitorDPI](#func-enablepermonitordpi)
-*   [func GetCursorPos](#func-getcursorpos)
-*   [func SetBackend](#func-setbackend)
-*   [func SetHIDLibraryPath](#func-sethidlibrarypath)
-*   [func ProbeTarget](#func-probetarget)
-*   [func ProbeHID](#func-probehid)
-*   [func NewInput](#func-newinput)
-*   [func MoveMouseTo](#func-movemouseto)
-*   [func ClickMouseAt](#func-clickmouseat)
-*   [func MouseDown](#func-mousedown)
-*   [func MouseUp](#func-mouseup)
-*   [func ClickMouse](#func-clickmouse)
-*   [func MoveMouseBy](#func-movemouseby)
-*   [func MoveMouseToExact](#func-movemousetoexact)
-*   [func ScrollWheel](#func-scrollwheel)
-*   [func PressFor](#func-pressfor)
-*   [func KeyDown](#func-keydown)
-*   [func KeyUp](#func-keyup)
-*   [func Press](#func-press)
-*   [func PressHotkey](#func-presshotkey)
-*   [func PasteByClipboard](#func-pastebyclipboard)
-*   [func (*DesktopInput) PasteByClipboard](#func-desktopinput-pastebyclipboard)
-*   [func Type](#func-type)
-*   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
-*   [func CaptureRegion](#func-captureregion)
-*   [func CaptureRegionWithOptions](#func-captureregionwithoptions)
-*   [type CaptureOptions](#type-captureoptions)
-*   [type Backend](#type-backend)
-*   [type MouseButton](#type-mousebutton)
-*   [type Key](#type-key)
+    *   [Backend Constants](#backend-constants)
+    *   [MouseButton Constants](#mousebutton-constants)
+    *   [Key Constants](#key-constants)
+    *   [Probe Constants](#probe-constants)
+*   [Functions](#functions)
+    *   [func EnablePerMonitorDPI](#func-enablepermonitordpi)
+    *   [func GetCursorPos](#func-getcursorpos)
+    *   [func SetBackend](#func-setbackend)
+    *   [func SetHIDLibraryPath](#func-sethidlibrarypath)
+    *   [func MoveMouseTo](#func-movemouseto)
+    *   [func ClickMouseAt](#func-clickmouseat)
+    *   [func ClickRightMouseAt](#func-clickrightmouseat)
+    *   [func ClickMiddleMouseAt](#func-clickmiddlemouseat)
+    *   [func DoubleClickMouseAt](#func-doubleclickmouseat)
+    *   [func MouseDown](#func-mousedown)
+    *   [func MouseUp](#func-mouseup)
+    *   [func ClickMouse](#func-clickmouse)
+    *   [func MoveMouseBy](#func-movemouseby)
+    *   [func MoveMouseToExact](#func-movemousetoexact)
+    *   [func ScrollWheel](#func-scrollwheel)
+    *   [func PressFor](#func-pressfor)
+    *   [func KeyDown](#func-keydown)
+    *   [func KeyUp](#func-keyup)
+    *   [func Press](#func-press)
+    *   [func PressHotkey](#func-presshotkey)
+    *   [func Type](#func-type)
     *   [func KeyFromRune](#func-keyfromrune)
-*   [type Window](#type-window)
+    *   [func PasteByClipboard](#func-pastebyclipboard)
+    *   [func ProbeTarget](#func-probetarget)
+    *   [func ProbeHID](#func-probehid)
+    *   [func NewInput](#func-newinput)
+    *   [func FindByTitle](#func-findbytitle)
     *   [func FindByClass](#func-findbyclass)
     *   [func FindByPID](#func-findbypid)
     *   [func FindByProcessName](#func-findbyprocessname)
-    *   [func FindByTitle](#func-findbytitle)
-    *   [func (*Window) Click](#func-window-click)
-    *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
-    *   [func (*Window) ClickRight](#func-window-clickright)
-    *   [func (*Window) ClientRect](#func-window-clientrect)
-    *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
-    *   [func (*Window) ClientInfo](#func-window-clientinfo)
-    *   [func (*Window) DPI](#func-window-dpi)
-    *   [func (*Window) DoubleClick](#func-window-doubleclick)
-    *   [func (*Window) KeyDown](#func-window-keydown)
-    *   [func (*Window) KeyUp](#func-window-keyup)
-    *   [func (*Window) Move](#func-window-move)
-    *   [func (*Window) MoveRel](#func-window-moverel)
-    *   [func (*Window) Press](#func-window-press)
-    *   [func (*Window) PressHotkey](#func-window-presshotkey)
-    *   [func (*Window) ScreenToClient](#func-window-screentoclient)
-    *   [func (*Window) Scroll](#func-window-scroll)
-    *   [func (*Window) Text](#func-window-text)
-    *   [func (*Window) Type](#func-window-type)
-    *   [func (*Window) Value](#func-window-value)
+*   [Types](#types)
+    *   [type Backend](#type-backend)
+    *   [type MouseButton](#type-mousebutton)
+    *   [type Key](#type-key)
+    *   [type Window](#type-window)
+        *   [func (*Window) FindChildByClass](#func-window-findchildbyclass)
+        *   [func (*Window) IsValid](#func-window-isvalid)
+        *   [func (*Window) IsVisible](#func-window-isvisible)
+        *   [func (*Window) Move](#func-window-move)
+        *   [func (*Window) MoveRel](#func-window-moverel)
+        *   [func (*Window) Click](#func-window-click)
+        *   [func (*Window) ClickRight](#func-window-clickright)
+        *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
+        *   [func (*Window) DoubleClick](#func-window-doubleclick)
+        *   [func (*Window) Scroll](#func-window-scroll)
+        *   [func (*Window) Text](#func-window-text)
+        *   [func (*Window) Value](#func-window-value)
+        *   [func (*Window) KeyDown](#func-window-keydown)
+        *   [func (*Window) KeyUp](#func-window-keyup)
+        *   [func (*Window) Press](#func-window-press)
+        *   [func (*Window) PressHotkey](#func-window-presshotkey)
+        *   [func (*Window) Type](#func-window-type)
+        *   [func (*Window) DPI](#func-window-dpi)
+        *   [func (*Window) ClientRect](#func-window-clientrect)
+        *   [func (*Window) ClientInfo](#func-window-clientinfo)
+        *   [func (*Window) ScreenToClient](#func-window-screentoclient)
+        *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
+    *   [type Input](#type-input)
+        *   [func (*Input) ForWindow](#func-input-forwindow)
+        *   [func (*Input) Desktop](#func-input-desktop)
+    *   [type WindowInput](#type-windowinput)
+        *   [WindowInput Methods](#windowinput-methods)
+    *   [type DesktopInput](#type-desktopinput)
+        *   [DesktopInput Methods](#desktopinput-methods)
+        *   [func (*DesktopInput) PasteByClipboard](#func-desktopinput-pastebyclipboard)
+    *   [type TargetProbe](#type-targetprobe)
+    *   [type TargetFeatures](#type-targetfeatures)
+    *   [type IntegrityRelation](#type-integrityrelation)
+    *   [type UIAccess](#type-uiaccess)
+    *   [type HIDStatus](#type-hidstatus)
+    *   [type ProbeWarning](#type-probewarning)
+*   [Screen Package (`github.com/rpdg/winput/screen`)](#screen-package-githubcomrpdgwinputscreen)
+    *   [type Point](#type-point)
+    *   [type Rect](#type-rect)
+    *   [type Monitor](#type-monitor)
+    *   [type CaptureOptions](#type-captureoptions)
+    *   [func VirtualBounds](#func-virtualbounds)
+    *   [func Monitors](#func-monitors)
+    *   [func ImageToVirtual](#func-imagetovirtual)
+    *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
+    *   [func CaptureVirtualDesktopWithOptions](#func-capturevirtualdesktopwithoptions)
+    *   [func CaptureRegion](#func-captureregion)
+    *   [func CaptureRegionWithOptions](#func-captureregionwithoptions)
 
 ---
 
@@ -71,8 +104,25 @@ var (
     // ErrWindowNotFound implies the target window could not be located by Title, Class, or PID.
     ErrWindowNotFound = errors.New("window not found")
 
+    // ErrInvalidLookupString means a title or class contains an embedded NUL.
+    // It is also wrapped with ErrWindowNotFound. errors.Is matches both.
+    ErrInvalidLookupString = window.ErrInvalidLookupString
+
     // ErrWindowGone implies the window handle is no longer valid.
     ErrWindowGone = errors.New("window is gone or invalid")
+
+    // ErrTargetChanged means the window handle was still valid, but its
+    // process, thread, or a class name already read at the start did not match
+    // at the end of a probe.
+    ErrTargetChanged = errors.New("target window changed during probe")
+
+    // ErrInputInvalid means an executor or facade was not produced by a
+    // successful NewInput, ForWindow, or Desktop call.
+    ErrInputInvalid = errors.New("input executor is invalid")
+
+    // ErrInvalidBackend means NewInput was given a value other than
+    // BackendMessage or BackendHID. BackendMessage itself is legal.
+    ErrInvalidBackend = errors.New("invalid input backend")
 
     // ErrWindowNotVisible implies the window is hidden or minimized.
     ErrWindowNotVisible = errors.New("window is not visible")
@@ -127,6 +177,10 @@ var (
     // ErrInvalidMouseButton means the MouseButton value is not one of the exported identities.
     ErrInvalidMouseButton = errors.New("invalid mouse button")
 
+    // ErrInvalidMouseCoordinate means a mouse message coordinate does not fit
+    // in the signed 16-bit halves of lParam. The message is not sent.
+    ErrInvalidMouseCoordinate = mouse.ErrInvalidMouseCoordinate
+
     // ErrInvalidScrollDelta aliases mouse.ErrInvalidScrollDelta
     // ("scroll delta out of int16 range"). Window.Scroll on BackendMessage
     // returns it. hid.ErrInvalidScrollDelta is a different sentinel.
@@ -156,29 +210,7 @@ var (
 )
 ```
 
-## Screen Package (`github.com/rpdg/winput/screen`)
-
-### func ImageToVirtual
-
-```go
-func ImageToVirtual(imageX, imageY int32) (int32, int32)
-```
-ImageToVirtual converts coordinates from a "Full Virtual Desktop Screenshot" (OpenCV match) to actual Windows Virtual Desktop coordinates usable by `MoveMouseTo`.
-Requires the image to be a capture of the **entire** virtual desktop (origin 0,0 of the image corresponds to the top-left of the virtual canvas).
-
-### func VirtualBounds
-
-```go
-func VirtualBounds() Rect
-```
-VirtualBounds returns the bounding rectangle of the entire virtual desktop.
-
-### func Monitors
-
-```go
-func Monitors() ([]Monitor, error)
-```
-Monitors returns a list of all active monitors and their geometries.
+---
 
 ## Constants
 
@@ -191,6 +223,16 @@ const (
 
     // BackendHID uses the Interception driver to simulate hardware input.
     BackendHID
+)
+```
+
+### MouseButton Constants
+
+```go
+const (
+    MouseLeft MouseButton = iota + 1
+    MouseRight
+    MouseMiddle
 )
 ```
 
@@ -217,6 +259,43 @@ const (
     KeyInsert, KeyDelete                        Key = ...
 )
 ```
+
+### Probe Constants
+
+```go
+// IntegrityRelation represents the caller's view of the target process integrity.
+const (
+    IntegrityUnknown      IntegrityRelation = "unknown"
+    IntegrityTargetHigher IntegrityRelation = "target_higher"
+    IntegrityEqual        IntegrityRelation = "equal"
+    IntegrityTargetLower  IntegrityRelation = "target_lower"
+)
+
+// UIAccess represents the caller token's UIAccess flag.
+const (
+    UIAccessUnknown  UIAccess = "unknown"
+    UIAccessEnabled  UIAccess = "enabled"
+    UIAccessDisabled UIAccess = "disabled"
+)
+
+// HIDStatus represents the result of initializing this process's HID backend.
+const (
+    HIDUnknown            HIDStatus = "unknown"
+    HIDInitialized        HIDStatus = "initialized"
+    HIDDLLUnavailable     HIDStatus = "dll_unavailable"
+    HIDDriverUnavailable  HIDStatus = "driver_unavailable"
+    HIDDevicesUnavailable HIDStatus = "devices_unavailable"
+)
+
+// ProbeWarning represents risk flags derived from probe facts.
+const (
+    WarnUIPILikelyBlocked ProbeWarning = "uipi_likely_blocked"
+    WarnIntegrityUnknown  ProbeWarning = "integrity_unknown"
+    WarnUIAccessUnknown   ProbeWarning = "uiaccess_unknown"
+)
+```
+
+---
 
 ## Functions
 
@@ -246,7 +325,7 @@ SetBackend sets the input simulation backend. If `BackendHID` is selected, it at
 ```go
 func SetHIDLibraryPath(path string)
 ```
-SetHIDLibraryPath sets the custom path for `interception.dll`.
+SetHIDLibraryPath sets the custom path for `interception.dll`. It must be called before the first successful `ProbeHID`, `NewInput(BackendHID)`, or `SetBackend(BackendHID)`.
 
 ### func MoveMouseTo
 
@@ -276,68 +355,61 @@ func ClickMiddleMouseAt(x, y int32) error
 ```
 ClickMiddleMouseAt moves the mouse to the specified screen coordinates and performs a middle click.
 
-### func MouseDown
-
-```go
-func MouseDown(button MouseButton) error
-```
-
-MouseDown presses the specified button at the current cursor position without moving. Invalid button identities return `ErrInvalidMouseButton`. The input mutex covers this call only; a down/move/up sequence across separate calls is not atomic.
-
-### func MouseUp
-
-```go
-func MouseUp(button MouseButton) error
-```
-
-MouseUp releases the specified button at the current cursor position without moving. Invalid button identities return `ErrInvalidMouseButton`. The input mutex covers this call only; a down/move/up sequence across separate calls is not atomic.
-
-### func ClickMouse
-
-```go
-func ClickMouse() error
-```
-
-ClickMouse performs a left click at the current cursor position without moving. Button flags use the same mapping as `MouseDown` and `MouseUp`. Under `BackendMessage` it uses `mouse_event`, which has no return value, so button-event delivery failures are not observable. Under `BackendHID` a failed release is retried once, and both failures keep the first error.
-
-### func MoveMouseBy
-
-```go
-func MoveMouseBy(dx, dy int32) error
-```
-
-MoveMouseBy moves the cursor by a delta. Under `BackendHID` this is one relative stroke. Under `BackendMessage` it reads the cursor, adds the delta using `int64`, and calls `SetCursorPos`; success means the system accepted the resulting coordinate.
-
-### func MoveMouseToExact
-
-```go
-func MoveMouseToExact(x, y int32) error
-```
-
-MoveMouseToExact performs one absolute move. It rejects points outside the virtual desktop with `ErrOutsideVirtualDesktop`. The HID path sends one absolute stroke over the virtual desktop, waits 12ms, and verifies the process-space cursor within one pixel; failure returns `ErrMoveNotConverged`. The one-pixel check is a reading in the process coordinate space, not a physical-pixel proof (RISK-001). The message path calls `SetCursorPos`, where success means the system accepted the call; it does not use that normalization and does not wait.
-
-### func ScrollWheel
-
-```go
-func ScrollWheel(steps int) error
-```
-
-ScrollWheel scrolls by whole wheel steps. Positive steps scroll forward, negative steps backward. Zero and values outside `[-273, 273]` return `ErrInvalidScrollSteps` before multiplication. The message backend uses `mouse_event`; the HID backend sends one wheel stroke. Neither moves the cursor.
-
-### func PressFor
-
-```go
-func PressFor(key Key, duration time.Duration) error
-```
-
-PressFor holds a global key for the requested duration. Durations below 10ms return `ErrInvalidPressDuration`. The message backend uses scan-code `SendInput`; the HID backend sends a hardware key stroke. A failed key-up is retried once.
-
 ### func DoubleClickMouseAt
 
 ```go
 func DoubleClickMouseAt(x, y int32) error
 ```
 DoubleClickMouseAt moves the mouse to the specified screen coordinates and performs a left double-click.
+
+### func MouseDown
+
+```go
+func MouseDown(button MouseButton) error
+```
+MouseDown presses the specified button at the current cursor position without moving. Invalid button identities return `ErrInvalidMouseButton`.
+
+### func MouseUp
+
+```go
+func MouseUp(button MouseButton) error
+```
+MouseUp releases the specified button at the current cursor position without moving. Invalid button identities return `ErrInvalidMouseButton`.
+
+### func ClickMouse
+
+```go
+func ClickMouse() error
+```
+ClickMouse performs a left click at the current cursor position without moving.
+
+### func MoveMouseBy
+
+```go
+func MoveMouseBy(dx, dy int32) error
+```
+MoveMouseBy moves the cursor by a delta. Under `BackendHID` this is one relative stroke. Under `BackendMessage` it reads the cursor, adds the delta using `int64`, and calls `SetCursorPos`.
+
+### func MoveMouseToExact
+
+```go
+func MoveMouseToExact(x, y int32) error
+```
+MoveMouseToExact performs one absolute move. It rejects points outside the virtual desktop with `ErrOutsideVirtualDesktop`. Under HID it waits 12ms and verifies convergence within 1 pixel tolerance.
+
+### func ScrollWheel
+
+```go
+func ScrollWheel(steps int) error
+```
+ScrollWheel scrolls by whole wheel steps. Positive steps scroll forward, negative backward. Zero and values outside `[-273, 273]` return `ErrInvalidScrollSteps`.
+
+### func PressFor
+
+```go
+func PressFor(key Key, duration time.Duration) error
+```
+PressFor holds a global key for the requested duration. Durations below 10ms return `ErrInvalidPressDuration`.
 
 ### func KeyDown
 
@@ -358,11 +430,7 @@ KeyUp simulates a global key up event.
 ```go
 func Press(k Key, interval ...time.Duration) error
 ```
-Press simulates a global key press (down then up). The optional `interval` is
-the hold time (delay between a successful key-down and the release) and is
-honored on both backends; without it the hold is 30ms. `Press(key, 0)` does
-not sleep between down and up. A negative interval, or more than one interval,
-returns `ErrInvalidInterval` before any key is pressed.
+Press simulates a global key press (down then up). The optional `interval` is the hold time (delay between a successful key-down and release, default 30ms).
 
 ### func PressHotkey
 
@@ -376,180 +444,131 @@ PressHotkey simulates a key combination (e.g., Ctrl+C). It presses keys in order
 ```go
 func Type(text string, interval ...time.Duration) error
 ```
-Type simulates global text input by simulating keystrokes for each character.
-The optional `interval` is the character gap on both backends. On the message
-backend the gap is slept between runes (30ms by default); the last rune is not
-followed by an extra sleep. On HID the fixed per-character hold is unchanged
-and an explicit interval is slept between character releases; without an
-argument no extra gap is added after each release. A negative interval, or more
-than one interval, returns `ErrInvalidInterval` before any character is sent.
+Type simulates global text input by simulating keystrokes for each character. The optional `interval` is the character gap on both backends.
+
+### func KeyFromRune
+
+```go
+func KeyFromRune(r rune) (Key, bool)
+```
+KeyFromRune attempts to map a unicode character (rune) to a Scan Code `Key`. Returns `(Key, true)` on success, or `(0, false)` if unsupported.
 
 ### func PasteByClipboard
 
 ```go
 func PasteByClipboard(text string) error
 ```
-PasteByClipboard pastes text into the current foreground window using Ctrl+V.
-It takes no HWND: the keystrokes go to whatever window is in the foreground
-when the call runs.
+PasteByClipboard pastes text into the current foreground window using Ctrl+V, following the global backend from `SetBackend`. It temporarily replaces the clipboard and restores `CF_UNICODETEXT` afterwards.
 
-A nil return does **not** mean the foreground program has received the new
-text. It only means the Ctrl+V events were queued and the previous Unicode
-clipboard text was restored without error. `SendInput` returns once the events
-are queued and does not wait for the foreground to process the paste, so there
-is no synchronization point proving the foreground read the clipboard before
-it was restored. A non-nil return does not prove the keys were not inserted
-either: the key can have succeeded while the restore failed. In that case
-`errors.Is` matches `ErrClipboardFailed` but not `ErrSendInputFailed`; the same
-error matches both only when the key and the restore both failed. To know
-whether a control accepted the text, observe that control separately.
-
-The clipboard is temporarily replaced and only `CF_UNICODETEXT` is put back.
-The system can expose `CF_TEXT` as `CF_UNICODETEXT`; when it does, the
-synthesized Unicode text is read and restored as `CF_UNICODETEXT`. If no
-readable Unicode text is available (for example, a clipboard that only held an
-image, or only a format the system could not convert to `CF_UNICODETEXT`), a
-bare empty Unicode buffer is restored. In either case the original `CF_TEXT`
-and other non-text formats do not return. New text has a lone
-`\n` normalized to `\r\n` before it is written; restored text is written
-byte-for-byte as it was read. Empty text fails with `ErrEmptyPasteText` before
-the clipboard is opened and before any key is sent. PasteByClipboard is not a
-replacement for `Type`; controls that reject paste (for example password
-fields) will not succeed.
-
-### func (*DesktopInput) PasteByClipboard
+### func ProbeTarget
 
 ```go
-func (d *DesktopInput) PasteByClipboard(text string) error
+func ProbeTarget(w *Window) (*TargetProbe, error)
 ```
-PasteByClipboard pastes text into the current foreground window with Ctrl+V,
-using the executor's fixed backend. The backend is chosen at `NewInput`, not at
-paste time; a later `SetBackend` does not change it. The target is still
-whatever window is foreground when the call runs, and no HWND is accepted. The
-clipboard is shared with other processes in the current window station; the
-package-level function uses the same clipboard.
+ProbeTarget reports environmental facts about the target window without modifying global backend state or sending input. Reports process file name, target class, integrity relation, caller UIAccess, and derived UIPI warnings.
 
-A nil or zero `DesktopInput` returns `ErrInputInvalid` before text validation,
-backend resolution, or any clipboard access. Empty text on a valid facade
-returns `ErrEmptyPasteText` without taking the input lock or opening the
-clipboard. Whitespace-only text is legal.
-
-The fixed-backend path does not run an extra wrapper-level availability check
-or initialize HID while resolving the backend; HID initialization during
-construction remains at `NewInput(BackendHID)`, and lower-level runtime
-behavior is unchanged. A runtime backend error can therefore occur after the
-clipboard swap, in which case restore is still attempted. The clipboard format,
-restore, `inputMutex`, foreground, and consumption limits are the same as the
-package-level `PasteByClipboard`: only `CF_UNICODETEXT` is restored, a nil
-return does not prove the target consumed the text, and a non-nil return does
-not prove no key was sent. The method does not provide foreground-window
-isolation or cross-process clipboard exclusivity.
-
-### func CaptureVirtualDesktop
+### func ProbeHID
 
 ```go
-func CaptureVirtualDesktop() (*image.RGBA, error)
-func CaptureVirtualDesktopWithOptions(opts CaptureOptions) (*image.RGBA, error)
+func ProbeHID() HIDStatus
 ```
+ProbeHID reports whether this process can initialize the HID backend without changing the global backend. Returns `HIDInitialized`, `HIDDLLUnavailable`, `HIDDriverUnavailable`, `HIDDevicesUnavailable`, or `HIDUnknown`.
 
-CaptureVirtualDesktop (in package `screen`) captures the entire virtual desktop (all monitors) with one GDI `BitBlt`. The returned `*image.RGBA` has origin `(0, 0)` at the top-left of the virtual desktop. Pass that image to `ImageToVirtual`.
-
-One capture locks the calling goroutine to a single OS thread for the DPI check, the virtual-screen read, the GDI calls, pixel conversion, and GDI release. The calling thread must be per-monitor DPI aware (V1 or V2). Call `EnablePerMonitorDPI` at process startup. If that thread was later switched to another DPI awareness context, capture fails until the context is restored. When the thread DPI APIs are unavailable, the check falls back to the process.
-
-A service process or Session 0, a locked workstation, the secure desktop (UAC), and a minimized RDP session are not supported. Capture may return an error, or it may return an all-black image and a nil error. The library does not detect a black image.
-
-`GdiFlush` reports the calling thread's whole GDI batch. A failed flush fails the capture. If the pixels were copied and a later GDI release fails, the image is still returned together with the cleanup error.
-
-### func CaptureRegion
+### func NewInput
 
 ```go
-func CaptureRegion(x, y, w, h int32) (*image.RGBA, error)
+func NewInput(backend Backend) (*Input, error)
 ```
+NewInput creates an input executor bound to a fixed backend chosen at construction. A later `SetBackend` does not change it. Rejects any value other than `BackendMessage` and `BackendHID` with `ErrInvalidBackend`.
 
-CaptureRegion captures the intersection of the requested rectangle with the virtual desktop. It does not capture the whole desktop and then crop. `x` and `y` are virtual-desktop coordinates and may be negative. `w` and `h` are the requested size in pixels; either value `<= 0` is an error.
-
-When the request extends outside the virtual desktop, the result is the intersection. The image `Rect` starts at `(0, 0)`, and that pixel is the top-left of the intersection, not of the virtual desktop. Do not pass this image to `ImageToVirtual`.
-
-`CaptureRegion` is `CaptureRegionWithOptions` with default options. DPI, unsupported environments, and cleanup errors are the same as `CaptureVirtualDesktop`.
-
-### func CaptureRegionWithOptions
-
-```go
-func CaptureRegionWithOptions(x, y, w, h int32, opts CaptureOptions) (*image.RGBA, error)
-```
-
-CaptureRegionWithOptions is `CaptureRegion` with an explicit `CaptureOptions`.
-
-### type CaptureOptions
-
-```go
-type CaptureOptions struct {
-    PreserveAlpha bool
-    MaxMemoryMB   int
-}
-```
-
-`MaxMemoryMB` is the peak memory budget of one capture, counting the GDI DIB and the Go image together (`2 × width × height × 4`). The unit is mebibytes (`1024 × 1024`). Zero and negative values select the default, 1000. That default allows the same number of pixels as the previous single-buffer default of 500. An explicit positive value allows half as many pixels as the same number did when the field counted one buffer.
-
-`PreserveAlpha` is deprecated and ignored. `BitBlt` does not provide a meaningful alpha channel, and `image.RGBA` is alpha-premultiplied. Every captured pixel is written with alpha 255.
-
-### Capture changes
-
-`MaxMemoryMB` now means the peak budget above, and its default is 1000. Callers that pass an explicit limit can capture half as many pixels as before. `PreserveAlpha` no longer changes the image; alpha is always 255. When the capture succeeds and releasing a GDI object fails, the function returns the image and the cleanup error together.
-
-## Types
-
-### type MouseButton
-
-```go
-type MouseButton uint8
-```
-
-MouseButton identifies a mouse button. The exported identities are `MouseLeft`, `MouseRight`, and `MouseMiddle`. Driver-specific values are mapped internally.
-
-### type Window
-
-#### func FindByTitle
+### func FindByTitle
 
 ```go
 func FindByTitle(title string) (*Window, error)
 ```
 FindByTitle searches for a top-level window matching the exact title.
 
-#### func FindByClass
+### func FindByClass
 
 ```go
 func FindByClass(class string) (*Window, error)
 ```
 FindByClass searches for a top-level window matching the class name.
 
-#### func FindByPID
+### func FindByPID
 
 ```go
 func FindByPID(pid uint32) ([]*Window, error)
 ```
 FindByPID returns all top-level windows belonging to the specified Process ID.
 
-#### func FindByProcessName
+### func FindByProcessName
 
 ```go
 func FindByProcessName(name string) ([]*Window, error)
 ```
-FindByProcessName returns every top-level window of every process whose executable name matches. A process with no top-level window is skipped. Snapshot order is preserved.
+FindByProcessName returns every top-level window belonging to any process whose executable name matches.
+
+---
+
+## Types
+
+### type Backend
+
+```go
+type Backend int
+```
+Backend represents the input simulation backend (`BackendMessage` or `BackendHID`).
+
+### type MouseButton
+
+```go
+type MouseButton uint8
+```
+MouseButton identifies a mouse button (`MouseLeft`, `MouseRight`, `MouseMiddle`).
+
+### type Key
+
+```go
+type Key = keyboard.Key
+```
+Key represents a composite keyboard scan code (Set 1).
+
+### type Window
+
+```go
+type Window struct {
+    HWND uintptr
+}
+```
 
 #### func (*Window) FindChildByClass
 
 ```go
 func (w *Window) FindChildByClass(class string) (*Window, error)
 ```
-FindChildByClass searches for a child window with the specified class name (e.g. "Edit" inside Notepad).
+FindChildByClass searches for a direct child window with the specified class name (e.g., "Edit" inside Notepad).
+
+#### func (*Window) IsValid
+
+```go
+func (w *Window) IsValid() bool
+```
+IsValid checks whether the window handle is a valid existing window.
+
+#### func (*Window) IsVisible
+
+```go
+func (w *Window) IsVisible() bool
+```
+IsVisible checks whether the window is visible and not minimized.
 
 #### func (*Window) Move
 
 ```go
 func (w *Window) Move(x, y int32) error
 ```
-Move moves the mouse cursor to the specified coordinates relative to the window's client area.
+Move moves the mouse cursor to coordinates relative to the window's client area.
 
 #### func (*Window) MoveRel
 
@@ -591,79 +610,56 @@ DoubleClick performs a left mouse button double-click.
 ```go
 func (w *Window) Scroll(x, y int32, delta int32) error
 ```
-Scroll performs a vertical mouse wheel scroll at the specified client coordinates.
-
-Under `BackendMessage` it posts `WM_MOUSEWHEEL` to this window. `delta == 0` is a no-op. Any other delta must fit in `int16`, or the call returns `ErrInvalidScrollDelta` (an alias of `mouse.ErrInvalidScrollDelta`). Under `BackendHID`, `delta` is not validated and the method always returns `ErrDirectedScrollUnsupported`, because a hardware wheel event cannot be addressed to a specific window. Use `ScrollWheel` for hardware-level scrolling.
+Scroll performs a vertical mouse wheel scroll at the specified client coordinates. Under `BackendMessage` it posts `WM_MOUSEWHEEL`. Under `BackendHID` it returns `ErrDirectedScrollUnsupported`.
 
 #### func (*Window) Text
 
 ```go
 func (w *Window) Text() (string, error)
 ```
-Text returns the current text of the target window/control using standard Win32 text retrieval. It is primarily intended for controls such as `Edit` and `RichEdit`.
-
-#### func (*Window) KeyDown
-
-```go
-func (w *Window) KeyDown(key Key) error
-```
-KeyDown sends a key down event to the window. Under `BackendHID` the window's top-level ancestor must already be the foreground window, or the call returns `ErrTargetNotForeground` and sends nothing. A child hwnd is judged by that ancestor. Package-level `KeyDown` is global and does not use this rule.
-
-#### func (*Window) KeyUp
-
-```go
-func (w *Window) KeyUp(key Key) error
-```
-KeyUp sends a key up event to the window. Under `BackendHID` the release is still sent when the window is not foreground, so a key that is already down can be lifted.
-
-#### func (*Window) Press
-
-```go
-func (w *Window) Press(key Key, interval ...time.Duration) error
-```
-Press simulates a full keystroke (KeyDown followed by KeyUp). The optional
-`interval` is the hold time (delay between a successful key-down and the
-release) on both backends; without it the hold is 30ms. `Press(key, 0)` does
-not sleep between down and up. A negative interval, or more than one interval,
-returns `ErrInvalidInterval` before any key is pressed. Under `BackendHID` the
-key-down is sent only when the window's top-level ancestor is the foreground
-window; otherwise the call returns `ErrTargetNotForeground` and does not press
-the key.
-
-#### func (*Window) PressHotkey
-
-```go
-func (w *Window) PressHotkey(keys ...Key) error
-```
-PressHotkey presses a combination of keys in order and releases them in reverse order.
-When used on a window with `BackendMessage`, combinations that include modifier keys
-such as `Ctrl`, `Alt`, or `Shift` are sent via foreground keyboard events instead of
-pure `PostMessage`, because many applications do not recognize modifier state reliably
-through window messages alone. The foreground identity is the top-level ancestor, so a child hwnd is accepted once that ancestor is foreground. The chord still reaches whichever control has the keyboard focus. Under `BackendHID` each key-down is sent only while that ancestor is the foreground window; otherwise the call returns `ErrTargetNotForeground` and releases keys this call already pressed.
-
-#### func (*Window) Type
-
-```go
-func (w *Window) Type(text string, interval ...time.Duration) error
-```
-Types a string, automatically handling Shift modifiers. The optional `interval`
-is the character gap: on the message backend it is slept between runes (30ms
-by default, via `keyboard.TypeWithInterval`) and not after the last rune; on
-HID the fixed per-character hold is unchanged and an explicit interval is
-slept between character releases. A negative interval, or more than one
-interval, returns `ErrInvalidInterval` before any character is sent. Under
-`BackendHID` each character's key-down, including Shift when needed, is sent
-only while the window's top-level ancestor is the foreground window. A failed
-check returns `ErrTargetNotForeground` and does not type the rest. The check
-does not prove which child has the caret, and the foreground can change before
-the driver delivers a stroke.
+Text returns the current text of the target window/control using standard Win32 text retrieval (`WM_GETTEXT`).
 
 #### func (*Window) Value
 
 ```go
 func (w *Window) Value() (string, error)
 ```
-Value returns the current best-effort textual value of the target window/control. It first tries the Win32 text path used by `Text()`, then falls back to Windows UI Automation for modern controls when needed.
+Value returns the current best-effort textual value of the target window/control. It first tries `Text()`, then falls back to Windows UI Automation.
+
+#### func (*Window) KeyDown
+
+```go
+func (w *Window) KeyDown(key Key) error
+```
+KeyDown sends a key down event to the window. Under `BackendHID`, the window's top-level ancestor must be foreground, otherwise returns `ErrTargetNotForeground`.
+
+#### func (*Window) KeyUp
+
+```go
+func (w *Window) KeyUp(key Key) error
+```
+KeyUp sends a key up event to the window. Under `BackendHID`, releases are still sent even if not foreground.
+
+#### func (*Window) Press
+
+```go
+func (w *Window) Press(key Key, interval ...time.Duration) error
+```
+Press simulates a full keystroke (KeyDown followed by KeyUp). Optional `interval` specifies hold time.
+
+#### func (*Window) PressHotkey
+
+```go
+func (w *Window) PressHotkey(keys ...Key) error
+```
+PressHotkey presses keys in order and releases in reverse order. Modifier combinations under `BackendMessage` temporarily use foreground events for reliability.
+
+#### func (*Window) Type
+
+```go
+func (w *Window) Type(text string, interval ...time.Duration) error
+```
+Type types text into the window, handling Shift modifiers. Optional `interval` sets character gap.
 
 #### func (*Window) DPI
 
@@ -679,6 +675,13 @@ func (w *Window) ClientRect() (width, height int32, err error)
 ```
 ClientRect returns the width and height of the window's client area.
 
+#### func (*Window) ClientInfo
+
+```go
+func (w *Window) ClientInfo() (x, y, width, height int32, err error)
+```
+ClientInfo returns the client-area rectangle in screen coordinates `(x, y, width, height)`.
+
 #### func (*Window) ScreenToClient
 
 ```go
@@ -693,34 +696,235 @@ func (w *Window) ClientToScreen(x, y int32) (sx, sy int32, err error)
 ```
 ClientToScreen converts window-client-relative coordinates to screen-relative coordinates.
 
-#### func (*Window) ClientInfo
+---
+
+### type Input
 
 ```go
-func (w *Window) ClientInfo() (x, y, width, height int32, err error)
+type Input struct {
+    // Unexported fields
+}
 ```
-ClientInfo returns the client-area rectangle as screen coordinates: the screen
-position of the client-origin (0, 0) plus the client width and height. It
-excludes the title bar and borders.
+Input is an input executor bound to one fixed backend chosen at construction time via `NewInput`.
 
-The order is fixed: `ClientToScreen(0, 0)` first, then `ClientRect`. If either
-call fails, all four integers are zero and the error is returned; a failed
-first call does not reach the second one. A minimized window follows the
-existing `"window is minimized"` error.
+#### func (*Input) ForWindow
 
-The coordinates use the DPI awareness the calling thread already has. To align
-`ClientInfo` with `screen.CaptureRegion`, that same thread must have the DPI
-awareness used for the screenshot; `ClientInfo` does not call
-`EnablePerMonitorDPI`. The four values come from two independent Win32 calls
-and are not an atomic snapshot.
+```go
+func (i *Input) ForWindow(w *Window) (*WindowInput, error)
+```
+ForWindow binds a window `w` to this executor, returning a `*WindowInput` facade.
 
-Use `EnablePerMonitorDPI` only at process startup; DPI awareness cannot be
-changed reliably later.
+#### func (*Input) Desktop
 
-## Probes and task-level input
+```go
+func (i *Input) Desktop() (*DesktopInput, error)
+```
+Desktop returns the screen-coordinate and windowless `*DesktopInput` facade for this executor.
 
-`ProbeTarget` reports facts about one window: process file name, that window's own class, the caller's view of integrity (`target_higher`, `equal`, `target_lower`, `unknown`), and caller UIAccess (`enabled`, `disabled`, `unknown`). Warnings are only `uipi_likely_blocked`, `integrity_unknown`, and `uiaccess_unknown`. It does not recommend a backend, initialize HID, or change `SetBackend`.
+---
 
-`ProbeHID` returns `initialized`, `dll_unavailable`, `driver_unavailable`, `devices_unavailable`, or `unknown`. A failed initialization still returns a status. It does not change the global backend. `SetBackend`, `checkBackend`, and `NewInput(BackendHID)` keep today's public errors.
+### type WindowInput
 
-`NewInput` binds `BackendMessage` or `BackendHID`. Any other integer returns `ErrInvalidBackend` before HID initialization. `ForWindow` and `Desktop` split window operations from screen operations. The executor does not read the global backend. The package-level `PasteByClipboard` remains the global-backend compatibility entry; `DesktopInput.PasteByClipboard` is the fixed-backend form. Cursor queries, window search, text reads, and DPI stay on the existing functions.
+```go
+type WindowInput struct {
+    // Unexported fields
+}
+```
+WindowInput is the window-targeted facade of an `Input`. It provides window-client operations bound to the fixed backend.
 
+#### WindowInput Methods
+
+```go
+func (in *WindowInput) Move(x, y int32) error
+func (in *WindowInput) MoveRel(dx, dy int32) error
+func (in *WindowInput) Click(x, y int32) error
+func (in *WindowInput) ClickRight(x, y int32) error
+func (in *WindowInput) ClickMiddle(x, y int32) error
+func (in *WindowInput) DoubleClick(x, y int32) error
+func (in *WindowInput) Scroll(x, y, delta int32) error
+func (in *WindowInput) KeyDown(key Key) error
+func (in *WindowInput) KeyUp(key Key) error
+func (in *WindowInput) Press(key Key, interval ...time.Duration) error
+func (in *WindowInput) PressHotkey(keys ...Key) error
+func (in *WindowInput) Type(text string, interval ...time.Duration) error
+```
+
+---
+
+### type DesktopInput
+
+```go
+type DesktopInput struct {
+    // Unexported fields
+}
+```
+DesktopInput is the screen-coordinate and windowless facade of an `Input`. It provides virtual-desktop operations bound to the fixed backend.
+
+#### DesktopInput Methods
+
+```go
+func (d *DesktopInput) MoveMouseTo(x, y int32) error
+func (d *DesktopInput) ClickMouseAt(x, y int32) error
+func (d *DesktopInput) DoubleClickMouseAt(x, y int32) error
+func (d *DesktopInput) ClickRightMouseAt(x, y int32) error
+func (d *DesktopInput) ClickMiddleMouseAt(x, y int32) error
+func (d *DesktopInput) MouseDown(button MouseButton) error
+func (d *DesktopInput) MouseUp(button MouseButton) error
+func (d *DesktopInput) ClickMouse() error
+func (d *DesktopInput) MoveMouseBy(dx, dy int32) error
+func (d *DesktopInput) MoveMouseToExact(x, y int32) error
+func (d *DesktopInput) ScrollWheel(steps int) error
+func (d *DesktopInput) PressFor(key Key, duration time.Duration) error
+func (d *DesktopInput) KeyDown(key Key) error
+func (d *DesktopInput) KeyUp(key Key) error
+func (d *DesktopInput) Press(key Key, interval ...time.Duration) error
+func (d *DesktopInput) PressHotkey(keys ...Key) error
+func (d *DesktopInput) Type(text string, interval ...time.Duration) error
+```
+
+#### func (*DesktopInput) PasteByClipboard
+
+```go
+func (d *DesktopInput) PasteByClipboard(text string) error
+```
+PasteByClipboard pastes text into the foreground window using Ctrl+V with the executor's fixed backend.
+
+---
+
+### type TargetProbe
+
+```go
+type TargetProbe struct {
+    Features TargetFeatures
+    Warnings []ProbeWarning
+}
+```
+
+### type TargetFeatures
+
+```go
+type TargetFeatures struct {
+    ProcessName       string
+    TargetClass       string
+    IntegrityRelation IntegrityRelation
+    CallerUIAccess    UIAccess
+}
+```
+
+### type IntegrityRelation
+
+```go
+type IntegrityRelation string
+```
+
+### type UIAccess
+
+```go
+type UIAccess string
+```
+
+### type HIDStatus
+
+```go
+type HIDStatus string
+```
+
+### type ProbeWarning
+
+```go
+type ProbeWarning string
+```
+
+---
+
+## Screen Package (`github.com/rpdg/winput/screen`)
+
+### type Point
+
+```go
+type Point struct {
+    X int32
+    Y int32
+}
+```
+
+### type Rect
+
+```go
+type Rect struct {
+    Left   int32
+    Top    int32
+    Right  int32
+    Bottom int32
+}
+```
+
+### type Monitor
+
+```go
+type Monitor struct {
+    Handle     uintptr
+    Bounds     Rect
+    WorkArea   Rect // Excludes taskbar
+    Primary    bool
+    DeviceName string
+}
+```
+
+### type CaptureOptions
+
+```go
+type CaptureOptions struct {
+    PreserveAlpha bool // Deprecated: ignored, alpha is always 255
+    MaxMemoryMB   int  // Peak budget in MiB (DIB + Go image). Default: 1000
+}
+```
+
+### func VirtualBounds
+
+```go
+func VirtualBounds() Rect
+```
+VirtualBounds returns the bounding rectangle of the entire virtual desktop.
+
+### func Monitors
+
+```go
+func Monitors() ([]Monitor, error)
+```
+Monitors returns a list of all active monitors and their geometries.
+
+### func ImageToVirtual
+
+```go
+func ImageToVirtual(imageX, imageY int32) (int32, int32)
+```
+ImageToVirtual converts coordinates from a full virtual desktop screenshot to actual Windows Virtual Desktop coordinates usable by `MoveMouseTo` and `ClickMouseAt`.
+
+### func CaptureVirtualDesktop
+
+```go
+func CaptureVirtualDesktop() (*image.RGBA, error)
+```
+CaptureVirtualDesktop captures the entire virtual desktop (all monitors) using GDI `BitBlt`.
+
+### func CaptureVirtualDesktopWithOptions
+
+```go
+func CaptureVirtualDesktopWithOptions(opts CaptureOptions) (*image.RGBA, error)
+```
+CaptureVirtualDesktopWithOptions captures the entire virtual desktop with explicit options.
+
+### func CaptureRegion
+
+```go
+func CaptureRegion(x, y, w, h int32) (*image.RGBA, error)
+```
+CaptureRegion captures the intersection of the requested rectangle with the virtual desktop.
+
+### func CaptureRegionWithOptions
+
+```go
+func CaptureRegionWithOptions(x, y, w, h int32, opts CaptureOptions) (*image.RGBA, error)
+```
+CaptureRegionWithOptions captures a specified region with explicit memory options.

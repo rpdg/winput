@@ -23,7 +23,10 @@ func main() {
 	bounds := screen.VirtualBounds()
 	fmt.Printf("🖥️  Virtual Desktop: [%d, %d, %d, %d]\n", bounds.Left, bounds.Top, bounds.Right, bounds.Bottom)
 
-	monitors, _ := screen.Monitors()
+	monitors, err := screen.Monitors()
+	if err != nil {
+		log.Printf("⚠️  Could not query monitors: %v", err)
+	}
 	for i, m := range monitors {
 		fmt.Printf("   Monitor %d: %+v (Primary: %v)\n", i, m.Bounds, m.Primary)
 	}
@@ -36,8 +39,7 @@ func main() {
 	}
 	fmt.Printf("✅ Captured %dx%d image (Standard *image.RGBA)\n", img.Bounds().Dx(), img.Bounds().Dy())
 
-	// --- Save the image to a file ---
-	// You need to import "os" and "image/png" for this to work
+	// Save captured image to a file
 	f, err := os.Create("capture.png")
 	if err != nil {
 		log.Printf("❌ Failed to create capture.png: %v", err)
@@ -49,22 +51,26 @@ func main() {
 			fmt.Println("✅ Image saved to capture.png")
 		}
 	}
-	// ---------------------------------
 
-	// 4. Global Input Demo
-	if len(monitors) > 0 {
-		// Move to center of primary monitor
-		center := monitors[0].Bounds
-		cx := (center.Left + center.Right) / 2
-		cy := (center.Top + center.Bottom) / 2
+	// 4. Vision Coordinate Mapping (ImageToVirtual)
+	// Converts OpenCV / template-match image coordinates from a full virtual desktop capture
+	// to Windows Virtual Desktop coordinates (supporting multi-monitors and negative offsets).
+	imgCenterX := int32(img.Bounds().Dx() / 2)
+	imgCenterY := int32(img.Bounds().Dy() / 2)
+	vx, vy := screen.ImageToVirtual(imgCenterX, imgCenterY)
+	fmt.Printf("👉 Mapped image center (%d, %d) -> Virtual Desktop (%d, %d)\n", imgCenterX, imgCenterY, vx, vy)
 
-		fmt.Printf("👉 Moving mouse to center of primary monitor (%d, %d)...\n", cx, cy)
-		winput.MoveMouseTo(cx, cy)
+	// 5. Global Input Demo
+	fmt.Printf("👉 Moving mouse to virtual desktop center (%d, %d)...\n", vx, vy)
+	if err := winput.MoveMouseTo(vx, vy); err != nil {
+		log.Printf("⚠️  MoveMouseTo failed: %v", err)
 	}
 
-	// Simulate typing "globally" (goes to active window)
+	// Simulate typing "globally" (goes to the active foreground window)
 	fmt.Println("👉 Typing globally...")
-	winput.Type("Global Input Simulation")
+	if err := winput.Type("Global Input Simulation"); err != nil {
+		log.Printf("⚠️  Type failed: %v", err)
+	}
 
 	fmt.Println("=== Done ===")
 }

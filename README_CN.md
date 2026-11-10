@@ -75,15 +75,20 @@ func main() {
 	// 3. 将图片坐标转换为虚拟桌面绝对坐标
 	targetX, targetY := screen.ImageToVirtual(int32(matchX), int32(matchY))
 
-	// 4. 移动并点击
-	winput.MoveMouseTo(targetX, targetY)
-	winput.ClickMouseAt(targetX, targetY)
+	// 4. 点击目标（ClickMouseAt 内部自动先移动光标再执行点击）
+	if err := winput.ClickMouseAt(targetX, targetY); err != nil {
+		log.Printf("点击失败: %v", err)
+	}
 }
 ```
 
 
 
 ## API 参考手册
+
+完整的 Go 包文档与 API 契约详见：
+- [API 参考手册 (中文版)](API_CN.md)
+- [API Reference (English)](API.md)
 
 ## MCP Server
 
@@ -216,6 +221,12 @@ go run cmd/example/global_vision/main.go
 go run cmd/example/advanced_hid/main.go
 ```
 
+### 4. 任务级执行器与环境探针 (状态隔离)
+演示 `NewInput`、`ForWindow`、`Desktop`、`ProbeTarget` 与 `ProbeHID`。
+```bash
+go run cmd/example/task_executor/main.go
+```
+
 
 
 ## 快速开始 (代码片段)
@@ -224,8 +235,11 @@ go run cmd/example/advanced_hid/main.go
 package main
 
 import (
+	"fmt"
 	"log"
+
 	"github.com/rpdg/winput"
+	"github.com/rpdg/winput/screen"
 )
 
 func main() {
@@ -235,9 +249,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// 经典记事本的核心输入区域为 "Edit" 类子窗口；
+	// Windows 11 现代记事本采用 WinUI 3，若未找到直接使用主窗口
 	edit, err := w.FindChildByClass("Edit")
 	if err != nil {
-		log.Fatal(err)
+		edit = w
 	}
 
 	// 2. 点击 (左键)
@@ -246,22 +262,29 @@ func main() {
 	}
 
 	// 3. 输入文本
-	edit.Type("Hello World")
-	edit.Press(winput.KeyEnter)
+	if err := edit.Type("Hello World"); err != nil {
+		log.Fatal(err)
+	}
+	if err := edit.Press(winput.KeyEnter); err != nil {
+		log.Fatal(err)
+	}
 
-	// 4. 读取标准文本控件内容
-	value, err := edit.Text()
+	// 4. 读取文本 (Value 支持现代 UI Automation 自动回退)
+	value, err := edit.Value()
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("当前文本:", value)
 
 	// 5. 全局输入 (不针对特定窗口)
-	winput.Type("Hello Electron!")
-	winput.Press(winput.KeyEnter)
+	if err := winput.Type("Hello Electron!"); err != nil {
+		log.Fatal(err)
+	}
+	if err := winput.Press(winput.KeyEnter); err != nil {
+		log.Fatal(err)
+	}
 
 	// 6. 使用 winput/screen (查询屏幕边界)
-	// import "github.com/rpdg/winput/screen"
 	bounds := screen.VirtualBounds()
 	fmt.Printf("桌面边界: %d, %d\n", bounds.Right, bounds.Bottom)
 }
@@ -276,6 +299,10 @@ func main() {
 | 错误变量 | 描述 | 处理建议 |
 | :--- | :--- | :--- |
 | `ErrWindowNotFound` | 无法通过 Title/Class/PID 找到窗口。 | 检查应用是否运行，或尝试改用 `FindByClass`。 |
+| `ErrWindowGone` | 窗口句柄失效或目标窗口已关闭。 | 重新执行窗口查找逻辑。 |
+| `ErrWindowNotVisible` | 窗口不可见或处于最小化状态。 | 将目标窗口还原/解除最小化后再发送输入。 |
+| `ErrTargetNotForeground` | HID 模式下的窗口键盘操作要求顶层祖先窗口处于前台。 | 发送按键前先激活目标前台窗口。 |
+| `ErrDirectedScrollUnsupported` | 在 `BackendHID` 下调用了 `Window.Scroll`。 | 硬件滚轮不支持定向窗口，请改用全局 `ScrollWheel`。 |
 | `ErrDriverNotInstalled` | Interception 驱动上下文打不开（仅 HID）。 | 提示用户安装驱动，或继续使用 Message 后端。 |
 | `ErrDLLLoadFailed` | 库找不到、库里缺少符号，或鼠标和键盘设备都没有。 | 检查 `SetHIDLibraryPath`、DLL 和驱动设备。这不是 `ErrDriverNotInstalled`。 |
 | `ErrTargetChanged` | `ProbeTarget` 期间窗口还在，但进程、线程，或开始时已经读到的类名变了。 | 重新探针。不会返回半份结果。 |

@@ -70,11 +70,12 @@
 //	 // - basic_message: Background automation for standard apps
 //	 // - global_vision: Electron/Game automation using screen coordinates
 //	 // - advanced_hid: Hardware level simulation
+//	 // - task_executor: Task-level fixed-backend executor and environment probes
 //
 //		// 1. Find the window
 //		w, err := winput.FindByTitle("Untitled - Notepad")
 //		if err != nil {
-//		    log.Fatal(winput.ErrWindowNotFound)
+//		    log.Fatal(err)
 //		}
 //
 //		// 2. Setup DPI awareness (optional but recommended)

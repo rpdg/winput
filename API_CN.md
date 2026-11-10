@@ -6,64 +6,94 @@
 
 *   [变量](#变量)
 *   [常量](#常量)
-*   [func EnablePerMonitorDPI](#func-enablepermonitordpi)
-*   [func GetCursorPos](#func-getcursorpos)
-*   [func SetBackend](#func-setbackend)
-*   [func SetHIDLibraryPath](#func-sethidlibrarypath)
-*   [func ProbeTarget](#func-probetarget)
-*   [func ProbeHID](#func-probehid)
-*   [func NewInput](#func-newinput)
-*   [func MoveMouseTo](#func-movemouseto)
-*   [func ClickMouseAt](#func-clickmouseat)
-*   [func MouseDown](#func-mousedown)
-*   [func MouseUp](#func-mouseup)
-*   [func ClickMouse](#func-clickmouse)
-*   [func MoveMouseBy](#func-movemouseby)
-*   [func MoveMouseToExact](#func-movemousetoexact)
-*   [func ScrollWheel](#func-scrollwheel)
-*   [func PressFor](#func-pressfor)
-*   [func ClickRightMouseAt](#func-clickrightmouseat)
-*   [func ClickMiddleMouseAt](#func-clickmiddlemouseat)
-*   [func DoubleClickMouseAt](#func-doubleclickmouseat)
-*   [func KeyDown](#func-keydown)
-*   [func KeyUp](#func-keyup)
-*   [func Press](#func-press)
-*   [func PressHotkey](#func-presshotkey)
-*   [func PasteByClipboard](#func-pastebyclipboard)
-*   [func (*DesktopInput) PasteByClipboard](#func-desktopinput-pastebyclipboard)
-*   [func Type](#func-type)
-*   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
-*   [func CaptureRegion](#func-captureregion)
-*   [func CaptureRegionWithOptions](#func-captureregionwithoptions)
-*   [type CaptureOptions](#type-captureoptions)
-*   [type Backend](#type-backend)
-*   [type MouseButton](#type-mousebutton)
-*   [type Key](#type-key)
+    *   [后端常量 (Backend Constants)](#后端常量-backend-constants)
+    *   [鼠标按键常量 (MouseButton Constants)](#鼠标按键常量-mousebutton-constants)
+    *   [按键常量 (Key Constants)](#按键常量-key-constants)
+    *   [探针常量 (Probe Constants)](#探针常量-probe-constants)
+*   [函数](#函数)
+    *   [func EnablePerMonitorDPI](#func-enablepermonitordpi)
+    *   [func GetCursorPos](#func-getcursorpos)
+    *   [func SetBackend](#func-setbackend)
+    *   [func SetHIDLibraryPath](#func-sethidlibrarypath)
+    *   [func MoveMouseTo](#func-movemouseto)
+    *   [func ClickMouseAt](#func-clickmouseat)
+    *   [func ClickRightMouseAt](#func-clickrightmouseat)
+    *   [func ClickMiddleMouseAt](#func-clickmiddlemouseat)
+    *   [func DoubleClickMouseAt](#func-doubleclickmouseat)
+    *   [func MouseDown](#func-mousedown)
+    *   [func MouseUp](#func-mouseup)
+    *   [func ClickMouse](#func-clickmouse)
+    *   [func MoveMouseBy](#func-movemouseby)
+    *   [func MoveMouseToExact](#func-movemousetoexact)
+    *   [func ScrollWheel](#func-scrollwheel)
+    *   [func PressFor](#func-pressfor)
+    *   [func KeyDown](#func-keydown)
+    *   [func KeyUp](#func-keyup)
+    *   [func Press](#func-press)
+    *   [func PressHotkey](#func-presshotkey)
+    *   [func Type](#func-type)
     *   [func KeyFromRune](#func-keyfromrune)
-*   [type Window](#type-window)
+    *   [func PasteByClipboard](#func-pastebyclipboard)
+    *   [func ProbeTarget](#func-probetarget)
+    *   [func ProbeHID](#func-probehid)
+    *   [func NewInput](#func-newinput)
+    *   [func FindByTitle](#func-findbytitle)
     *   [func FindByClass](#func-findbyclass)
     *   [func FindByPID](#func-findbypid)
     *   [func FindByProcessName](#func-findbyprocessname)
-    *   [func FindByTitle](#func-findbytitle)
-    *   [func (*Window) Click](#func-window-click)
-    *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
-    *   [func (*Window) ClickRight](#func-window-clickright)
-    *   [func (*Window) ClientRect](#func-window-clientrect)
-    *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
-    *   [func (*Window) ClientInfo](#func-window-clientinfo)
-    *   [func (*Window) DPI](#func-window-dpi)
-    *   [func (*Window) DoubleClick](#func-window-doubleclick)
-    *   [func (*Window) KeyDown](#func-window-keydown)
-    *   [func (*Window) KeyUp](#func-window-keyup)
-    *   [func (*Window) Move](#func-window-move)
-    *   [func (*Window) MoveRel](#func-window-moverel)
-    *   [func (*Window) Press](#func-window-press)
-    *   [func (*Window) PressHotkey](#func-window-presshotkey)
-    *   [func (*Window) ScreenToClient](#func-window-screentoclient)
-    *   [func (*Window) Scroll](#func-window-scroll)
-    *   [func (*Window) Text](#func-window-text)
-    *   [func (*Window) Type](#func-window-type)
-    *   [func (*Window) Value](#func-window-value)
+*   [类型](#类型)
+    *   [type Backend](#type-backend)
+    *   [type MouseButton](#type-mousebutton)
+    *   [type Key](#type-key)
+    *   [type Window](#type-window)
+        *   [func (*Window) FindChildByClass](#func-window-findchildbyclass)
+        *   [func (*Window) IsValid](#func-window-isvalid)
+        *   [func (*Window) IsVisible](#func-window-isvisible)
+        *   [func (*Window) Move](#func-window-move)
+        *   [func (*Window) MoveRel](#func-window-moverel)
+        *   [func (*Window) Click](#func-window-click)
+        *   [func (*Window) ClickRight](#func-window-clickright)
+        *   [func (*Window) ClickMiddle](#func-window-clickmiddle)
+        *   [func (*Window) DoubleClick](#func-window-doubleclick)
+        *   [func (*Window) Scroll](#func-window-scroll)
+        *   [func (*Window) Text](#func-window-text)
+        *   [func (*Window) Value](#func-window-value)
+        *   [func (*Window) KeyDown](#func-window-keydown)
+        *   [func (*Window) KeyUp](#func-window-keyup)
+        *   [func (*Window) Press](#func-window-press)
+        *   [func (*Window) PressHotkey](#func-window-presshotkey)
+        *   [func (*Window) Type](#func-window-type)
+        *   [func (*Window) DPI](#func-window-dpi)
+        *   [func (*Window) ClientRect](#func-window-clientrect)
+        *   [func (*Window) ClientInfo](#func-window-clientinfo)
+        *   [func (*Window) ScreenToClient](#func-window-screentoclient)
+        *   [func (*Window) ClientToScreen](#func-window-clienttoscreen)
+    *   [type Input](#type-input)
+        *   [func (*Input) ForWindow](#func-input-forwindow)
+        *   [func (*Input) Desktop](#func-input-desktop)
+    *   [type WindowInput](#type-windowinput)
+        *   [WindowInput 方法列表](#windowinput-方法列表)
+    *   [type DesktopInput](#type-desktopinput)
+        *   [DesktopInput 方法列表](#desktopinput-方法列表)
+        *   [func (*DesktopInput) PasteByClipboard](#func-desktopinput-pastebyclipboard)
+    *   [type TargetProbe](#type-targetprobe)
+    *   [type TargetFeatures](#type-targetfeatures)
+    *   [type IntegrityRelation](#type-integrityrelation)
+    *   [type UIAccess](#type-uiaccess)
+    *   [type HIDStatus](#type-hidstatus)
+    *   [type ProbeWarning](#type-probewarning)
+*   [Screen 包 (`github.com/rpdg/winput/screen`)](#screen-包-githubcomrpdgwinputscreen)
+    *   [type Point](#type-point)
+    *   [type Rect](#type-rect)
+    *   [type Monitor](#type-monitor)
+    *   [type CaptureOptions](#type-captureoptions)
+    *   [func VirtualBounds](#func-virtualbounds)
+    *   [func Monitors](#func-monitors)
+    *   [func ImageToVirtual](#func-imagetovirtual)
+    *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
+    *   [func CaptureVirtualDesktopWithOptions](#func-capturevirtualdesktopwithoptions)
+    *   [func CaptureRegion](#func-captureregion)
+    *   [func CaptureRegionWithOptions](#func-captureregionwithoptions)
 
 ---
 
@@ -71,62 +101,98 @@
 
 ```go
 var (
-    ErrWindowNotFound     = errors.New("window not found")     // 未找到窗口
-    ErrWindowGone         = errors.New("window is gone or invalid") // 窗口句柄失效
-    ErrWindowNotVisible   = errors.New("window is not visible")// 窗口不可见或最小化
-    // 别名 keyboard.ErrUnsupportedKey，文本是 "unsupported key or character"，不是独立哨兵。
-    ErrUnsupportedKey     = keyboard.ErrUnsupportedKey
-    ErrBackendUnavailable = errors.New("input backend unavailable") // 后端不可用
-    ErrDriverNotInstalled = errors.New("interception driver not installed or accessible") // 驱动未安装 (仅 HID)
-    ErrDLLLoadFailed      = errors.New("failed to load interception library") // DLL 加载失败 (仅 HID)
-    ErrPermissionDenied   = errors.New("permission denied")    // 权限不足
-    ErrPostMessageFailed  = window.ErrPostMessageFailed        // PostMessageW 调用失败
-    ErrReadTextFailed     = window.ErrReadTextFailed           // 读取文本失败
-    ErrMoveNotConverged   = hid.ErrMoveNotConverged            // HID 移动未收敛
-    ErrOutsideVirtualDesktop = hid.ErrOutsideVirtualDesktop    // 目标在虚拟桌面外
-    ErrSendInputFailed    = errors.New("SendInput inserted no events") // SendInput 一条都没写入
-    ErrSendInputPartial   = errors.New("SendInput partially inserted and was repaired") // 只写入按下，补抬起成功
-    ErrSendInputStuck     = errors.New("SendInput partially inserted and could not be repaired") // 只写入按下，补抬起失败
-    ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling") // HID 不能把滚轮定向到窗口
-    // 窗口键盘在 HID 上发现顶层祖先不是前台时返回它，并且不发送这次按下。
+    // ErrWindowNotFound 表示通过 Title、Class 或 PID 无法定位目标窗口。
+    ErrWindowNotFound = errors.New("window not found")
+
+    // ErrInvalidLookupString 表示窗口标题或类名包含嵌入的 NUL 字符。
+    // 它同时被 ErrWindowNotFound 包裹，errors.Is 对两者均匹配。
+    ErrInvalidLookupString = window.ErrInvalidLookupString
+
+    // ErrWindowGone 表示窗口句柄失效或已销毁。
+    ErrWindowGone = errors.New("window is gone or invalid")
+
+    // ErrTargetChanged 表示探针期间窗口句柄有效，但其进程、线程或起始类名发生了改变。
+    ErrTargetChanged = errors.New("target window changed during probe")
+
+    // ErrInputInvalid 表示执行器或 Facade 并非由 NewInput、ForWindow 或 Desktop 产生。
+    ErrInputInvalid = errors.New("input executor is invalid")
+
+    // ErrInvalidBackend 表示向 NewInput 传入了 BackendMessage 和 BackendHID 以外的非法值。
+    ErrInvalidBackend = errors.New("invalid input backend")
+
+    // ErrWindowNotVisible 表示窗口不可见或处于最小化状态。
+    ErrWindowNotVisible = errors.New("window is not visible")
+
+    // ErrUnsupportedKey 是 keyboard.ErrUnsupportedKey 的别名，文本为 "unsupported key or character"。
+    ErrUnsupportedKey = keyboard.ErrUnsupportedKey
+
+    // ErrBackendUnavailable 表示选定的输入后端初始化失败。
+    ErrBackendUnavailable = errors.New("input backend unavailable")
+
+    // ErrDriverNotInstalled 专属于 BackendHID，表示 Interception 驱动未安装或无法打开设备。
+    ErrDriverNotInstalled = errors.New("interception driver not installed or accessible")
+
+    // ErrDLLLoadFailed 表示无法加载 interception.dll 或缺少导出符号。
+    ErrDLLLoadFailed = errors.New("failed to load interception library")
+
+    // ErrPermissionDenied 表示由于系统权限限制（如 UIPI）导致操作被拒绝。
+    ErrPermissionDenied = errors.New("permission denied")
+
+    // ErrPostMessageFailed 是 window.ErrPostMessageFailed 的别名，表示 PostMessageW 返回 0。
+    ErrPostMessageFailed = window.ErrPostMessageFailed
+
+    // ErrReadTextFailed 是 window.ErrReadTextFailed 的别名，表示读取窗口文本失败。
+    ErrReadTextFailed = window.ErrReadTextFailed
+
+    // ErrMoveNotConverged 是 hid.ErrMoveNotConverged 的别名，表示 HID 移动在容差内未收敛。
+    ErrMoveNotConverged = hid.ErrMoveNotConverged
+
+    // ErrOutsideVirtualDesktop 是 hid.ErrOutsideVirtualDesktop 的别名，表示坐标落在虚拟桌面之外。
+    ErrOutsideVirtualDesktop = hid.ErrOutsideVirtualDesktop
+
+    // ErrSendInputFailed 表示 SendInput 写入了 0 个事件。
+    ErrSendInputFailed = errors.New("SendInput inserted no events")
+
+    // ErrSendInputPartial 表示 SendInput 仅写入了按下事件，且补偿抬起成功。
+    ErrSendInputPartial = errors.New("SendInput partially inserted and was repaired")
+
+    // ErrSendInputStuck 表示 SendInput 仅写入了按下事件，且补偿抬起失败。
+    ErrSendInputStuck = errors.New("SendInput partially inserted and could not be repaired")
+
+    // ErrDirectedScrollUnsupported 表示 HID 后端不支持向特定窗口投递定向滚轮事件。
+    ErrDirectedScrollUnsupported = errors.New("HID backend does not support directed scrolling")
+
+    // ErrTargetNotForeground 表示在 BackendHID 下，目标窗口的顶层祖先不是当前前台窗口。
     ErrTargetNotForeground = errors.New("target window is not the foreground window")
-    ErrInvalidMouseButton = errors.New("invalid mouse button") // 按钮身份非法
-    // 别名 mouse.ErrInvalidScrollDelta。消息路径的 Window.Scroll 返回它。hid.ErrInvalidScrollDelta 是另一个哨兵。
-    ErrInvalidScrollDelta = mouse.ErrInvalidScrollDelta        // 滚轮增量超出 int16
-    ErrInvalidScrollSteps = errors.New("scroll steps must be non-zero and within [-273, 273]") // ScrollWheel 步数非法
-    ErrInvalidPressDuration = errors.New("press duration must be at least 10ms") // PressFor 时长短于 10ms
-    // 别名 keyboard.ErrInvalidInterval（"interval must be a single non-negative duration"）。
-    // Press / Type 的可选间隔为负数或参数多于一个时返回它。它与 ErrInvalidPressDuration 有意区分：间隔 0 是合法的。
-    ErrInvalidInterval     = keyboard.ErrInvalidInterval
+
+    // ErrInvalidMouseButton 表示 MouseButton 数值非法。
+    ErrInvalidMouseButton = errors.New("invalid mouse button")
+
+    // ErrInvalidMouseCoordinate 表示鼠标消息坐标超出 signed 16-bit 范围。
+    ErrInvalidMouseCoordinate = mouse.ErrInvalidMouseCoordinate
+
+    // ErrInvalidScrollDelta 是 mouse.ErrInvalidScrollDelta 的别名，表示滚轮增量超出 int16 范围。
+    ErrInvalidScrollDelta = mouse.ErrInvalidScrollDelta
+
+    // ErrInvalidScrollSteps 表示 ScrollWheel 步数为 0 或超出 [-273, 273] 范围。
+    ErrInvalidScrollSteps = errors.New("scroll steps must be non-zero and within [-273, 273]")
+
+    // ErrInvalidPressDuration 表示 PressFor 给定时长小于 10ms。
+    ErrInvalidPressDuration = errors.New("press duration must be at least 10ms")
+
+    // ErrInvalidInterval 是 keyboard.ErrInvalidInterval 的别名。
+    // Press / Type 的可选间隔为负数或传入多于一个参数时返回它（间隔为 0 是合法的）。
+    ErrInvalidInterval = keyboard.ErrInvalidInterval
+
     // ErrEmptyPasteText 表示用空字符串调用 PasteByClipboard。剪贴板不会被打开，也不会发送按键。
-    ErrEmptyPasteText      = errors.New("paste text is empty")
-    // 别名 window.ErrClipboardFailed。表示剪贴板打开、读取、写入或恢复失败。错误文本从不包含剪贴板内容。
-    ErrClipboardFailed     = window.ErrClipboardFailed
+    ErrEmptyPasteText = errors.New("paste text is empty")
+
+    // ErrClipboardFailed 是 window.ErrClipboardFailed 的别名，表示剪贴板打开、读写或恢复失败。
+    ErrClipboardFailed = window.ErrClipboardFailed
 )
 ```
 
-## Screen 包 (`github.com/rpdg/winput/screen`)
-
-### func ImageToVirtual
-
-```go
-func ImageToVirtual(imageX, imageY int32) (int32, int32)
-```
-ImageToVirtual 将“完整虚拟桌面截图”中的坐标（OpenCV 匹配点）转换为 `MoveMouseTo` 可用的实际 Windows 虚拟桌面坐标。
-
-### func VirtualBounds
-
-```go
-func VirtualBounds() Rect
-```
-VirtualBounds 返回整个虚拟桌面的边界矩形。
-
-### func Monitors
-
-```go
-func Monitors() ([]Monitor, error)
-```
-Monitors 返回所有活动显示器及其几何信息的列表。
+---
 
 ## 常量
 
@@ -139,6 +205,16 @@ const (
 
     // BackendHID 使用 Interception 驱动程序模拟硬件输入。
     BackendHID
+)
+```
+
+### 鼠标按键常量 (MouseButton Constants)
+
+```go
+const (
+    MouseLeft MouseButton = iota + 1
+    MouseRight
+    MouseMiddle
 )
 ```
 
@@ -166,6 +242,43 @@ const (
 )
 ```
 
+### 探针常量 (Probe Constants)
+
+```go
+// IntegrityRelation 表示从调用方视角的进程完整性级别关系。
+const (
+    IntegrityUnknown      IntegrityRelation = "unknown"
+    IntegrityTargetHigher IntegrityRelation = "target_higher"
+    IntegrityEqual        IntegrityRelation = "equal"
+    IntegrityTargetLower  IntegrityRelation = "target_lower"
+)
+
+// UIAccess 表示调用方令牌的 UIAccess 标志。
+const (
+    UIAccessUnknown  UIAccess = "unknown"
+    UIAccessEnabled  UIAccess = "enabled"
+    UIAccessDisabled UIAccess = "disabled"
+)
+
+// HIDStatus 表示本进程 HID 后端的初始化结果。
+const (
+    HIDUnknown            HIDStatus = "unknown"
+    HIDInitialized        HIDStatus = "initialized"
+    HIDDLLUnavailable     HIDStatus = "dll_unavailable"
+    HIDDriverUnavailable  HIDStatus = "driver_unavailable"
+    HIDDevicesUnavailable HIDStatus = "devices_unavailable"
+)
+
+// ProbeWarning 表示由探针事实导出的输入风险提示。
+const (
+    WarnUIPILikelyBlocked ProbeWarning = "uipi_likely_blocked"
+    WarnIntegrityUnknown  ProbeWarning = "integrity_unknown"
+    WarnUIAccessUnknown   ProbeWarning = "uiaccess_unknown"
+)
+```
+
+---
+
 ## 函数
 
 ### func EnablePerMonitorDPI
@@ -187,14 +300,14 @@ GetCursorPos 返回鼠标光标当前的绝对屏幕坐标。
 ```go
 func SetBackend(b Backend) error
 ```
-SetBackend 设置输入模拟后端。如果选择 `BackendHID`，它会立即尝试初始化驱动，如果失败（如驱动未安装）则返回错误。
+SetBackend 设置全局输入模拟后端。如果选择 `BackendHID`，会立即尝试初始化驱动，若失败则返回错误。
 
 ### func SetHIDLibraryPath
 
 ```go
 func SetHIDLibraryPath(path string)
 ```
-SetHIDLibraryPath 设置 `interception.dll` 的自定义加载路径。
+SetHIDLibraryPath 设置 `interception.dll` 的自定义加载路径。必须在首次成功的 `ProbeHID`、`NewInput(BackendHID)` 或 `SetBackend(BackendHID)` 之前调用。
 
 ### func MoveMouseTo
 
@@ -224,68 +337,61 @@ func ClickMiddleMouseAt(x, y int32) error
 ```
 ClickMiddleMouseAt 将鼠标移动到指定屏幕坐标并执行中键点击。
 
-### func MouseDown
-
-```go
-func MouseDown(button MouseButton) error
-```
-
-MouseDown 在当前光标位置按下指定按钮，不移动光标。非法按钮返回 `ErrInvalidMouseButton`。输入互斥锁只覆盖这一次调用；按下、移动、抬起分成多次调用时不是原子操作。
-
-### func MouseUp
-
-```go
-func MouseUp(button MouseButton) error
-```
-
-MouseUp 在当前光标位置抬起指定按钮，不移动光标。非法按钮返回 `ErrInvalidMouseButton`。输入互斥锁只覆盖这一次调用；按下、移动、抬起分成多次调用时不是原子操作。
-
-### func ClickMouse
-
-```go
-func ClickMouse() error
-```
-
-ClickMouse 在当前光标位置执行左键单击，不移动光标。按钮标志与 `MouseDown` / `MouseUp` 共用同一映射。`BackendMessage` 下使用 `mouse_event`，该调用没有返回值，因此按钮事件的投递失败不可观测。`BackendHID` 下抬起失败会再试一次，两次都失败时保留第一次的错误。
-
-### func MoveMouseBy
-
-```go
-func MoveMouseBy(dx, dy int32) error
-```
-
-MoveMouseBy 按增量移动光标。`BackendHID` 发送一条相对笔画。`BackendMessage` 读取当前光标，用 `int64` 相加后调用 `SetCursorPos`；成功表示系统接受了新坐标。
-
-### func MoveMouseToExact
-
-```go
-func MoveMouseToExact(x, y int32) error
-```
-
-MoveMouseToExact 执行一次绝对移动。虚拟桌面外的点返回 `ErrOutsideVirtualDesktop`。HID 路径发送一条虚拟桌面绝对笔画，等待 12ms，并按本进程坐标复核 1 像素；失败返回 `ErrMoveNotConverged`。这个 1 像素是本进程坐标空间里的读数，不是物理像素证明（RISK-001）。消息路径调用 `SetCursorPos`，成功表示系统接受了调用；它不使用这套归一化，也不等待。
-
-### func ScrollWheel
-
-```go
-func ScrollWheel(steps int) error
-```
-
-ScrollWheel 按整格滚动。正数向前，负数向后。`0` 和 `[-273, 273]` 之外的值在乘法之前返回 `ErrInvalidScrollSteps`。消息后端使用 `mouse_event`，HID 后端发送一条滚轮笔画。两者都不移动光标。
-
-### func PressFor
-
-```go
-func PressFor(key Key, duration time.Duration) error
-```
-
-PressFor 全局按住指定键，时长短于 10ms 返回 `ErrInvalidPressDuration`。消息后端使用扫描码 `SendInput`，HID 后端发送硬件按键。抬起失败会再试一次。
-
 ### func DoubleClickMouseAt
 
 ```go
 func DoubleClickMouseAt(x, y int32) error
 ```
 DoubleClickMouseAt 将鼠标移动到指定屏幕坐标并执行左键双击。
+
+### func MouseDown
+
+```go
+func MouseDown(button MouseButton) error
+```
+MouseDown 在当前光标位置按下指定按钮，不移动光标。非法按钮返回 `ErrInvalidMouseButton`。
+
+### func MouseUp
+
+```go
+func MouseUp(button MouseButton) error
+```
+MouseUp 在当前光标位置抬起指定按钮，不移动光标。非法按钮返回 `ErrInvalidMouseButton`。
+
+### func ClickMouse
+
+```go
+func ClickMouse() error
+```
+ClickMouse 在当前光标位置执行左键单击，不移动光标。
+
+### func MoveMouseBy
+
+```go
+func MoveMouseBy(dx, dy int32) error
+```
+MoveMouseBy 按增量移动光标。`BackendHID` 发送相对笔画；`BackendMessage` 读取当前光标后调用 `SetCursorPos`。
+
+### func MoveMouseToExact
+
+```go
+func MoveMouseToExact(x, y int32) error
+```
+MoveMouseToExact 执行一次绝对移动。超出虚拟桌面的坐标返回 `ErrOutsideVirtualDesktop`。HID 路径会验证 1 像素容差内的收敛状态。
+
+### func ScrollWheel
+
+```go
+func ScrollWheel(steps int) error
+```
+ScrollWheel 按整格滚动滚轮。正数向前，负数向后。步数为 0 或超出 `[-273, 273]` 返回 `ErrInvalidScrollSteps`。
+
+### func PressFor
+
+```go
+func PressFor(key Key, duration time.Duration) error
+```
+PressFor 全局按住指定键，时长短于 10ms 返回 `ErrInvalidPressDuration`。
 
 ### func KeyDown
 
@@ -306,143 +412,138 @@ KeyUp 模拟全局按键抬起事件。
 ```go
 func Press(k Key, interval ...time.Duration) error
 ```
-Press 模拟一次全局按键（按下后抬起）。可选的 `interval` 是按住时间（按下成功后到抬起之间的延迟），两条后端都生效；不传时按住 30ms。`Press(key, 0)` 在按下与抬起之间不睡眠。间隔为负数或参数多于一个时，在任何按键之前返回 `ErrInvalidInterval`。
+Press 模拟全局按键（按下后抬起）。可选 `interval` 指定按下保持时间（默认 30ms）。
 
 ### func PressHotkey
 
 ```go
 func PressHotkey(keys ...Key) error
 ```
-PressHotkey 模拟组合键（如 Ctrl+C）。它按顺序按下所有键，保持 50ms，然后按相反顺序释放。
+PressHotkey 模拟组合键（如 Ctrl+C）。按顺序按下各键，保持 50ms 后按倒序释放。
 
 ### func Type
 
 ```go
 func Type(text string, interval ...time.Duration) error
 ```
-Type 模拟全局文本输入（通过模拟按键序列）。可选的 `interval` 在两条后端都是字符间隙。消息后端在连续 rune 之间睡眠该间隙（默认 30ms），最后一个 rune 之后不再多睡。HID 每个字符的固定按住不变，只有传入显式间隔时才会在字符松开后再睡一段；不传参数则不增加额外间隙。间隔为负数或参数多于一个时，在任何字符发送之前返回 `ErrInvalidInterval`。
+Type 模拟全局文本输入。可选 `interval` 为字符间隙。
+
+### func KeyFromRune
+
+```go
+func KeyFromRune(r rune) (Key, bool)
+```
+KeyFromRune 尝试将 unicode 字符（rune）映射为扫描码 `Key`。映射成功返回 `(Key, true)`，不支持返回 `(0, false)`。
 
 ### func PasteByClipboard
 
 ```go
 func PasteByClipboard(text string) error
 ```
-PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口。它不接收 `HWND`：按键进入调用发生时已经是前台的窗口。
+PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口，跟随 `SetBackend` 的全局后端。临时替换剪贴板，并在发送组合键后恢复 `CF_UNICODETEXT`。
 
-返回 nil **并不表示**前台程序已经收到新文本。nil 只表示 Ctrl+V 事件已经入队，并且先前剪贴板上的 Unicode 文本已经恢复且没有错误。`SendInput` 在事件入队时返回，并不等待前台处理粘贴，因此在恢复之前不存在「前台已经读完剪贴板」的同步点。返回非 nil 也不表示按键没有插入：按键可能已经成功而恢复失败，此时 `errors.Is` 只能认出 `ErrClipboardFailed`，不会匹配 `ErrSendInputFailed`；只有按键与恢复均失败时，同一个错误才会同时匹配两个哨兵。要确认控件是否收下文字，必须另行观察那个控件。
-
-剪贴板会被临时替换，结束后只放回 `CF_UNICODETEXT`。系统可以把 `CF_TEXT` 作为 `CF_UNICODETEXT` 提供；此时读到的合成 Unicode 文本会以 `CF_UNICODETEXT` 恢复。若没有可读的 Unicode 文本（例如剪贴板上只有图片，或只有系统无法转换成 `CF_UNICODETEXT` 的格式），恢复的是空 Unicode 缓冲。两种情况下，原有的 `CF_TEXT` 及其它非文本格式都不会回来。新文本中单独的 `\n` 会先被规范成 `\r\n` 再写入；恢复的文本按读到的内容原样写回。空文本在打开剪贴板、发送任何按键之前以 `ErrEmptyPasteText` 失败。PasteByClipboard 不是 `Type` 的替代品；拒绝粘贴的控件（例如密码框）不会因此成功。
-
-### func (*DesktopInput) PasteByClipboard
+### func ProbeTarget
 
 ```go
-func (d *DesktopInput) PasteByClipboard(text string) error
+func ProbeTarget(w *Window) (*TargetProbe, error)
 ```
-PasteByClipboard 通过 Ctrl+V 把文本粘贴到当前前台窗口，并使用该执行器在 `NewInput` 时固定的后端；调用时不会重新选择后端，之后调用 `SetBackend` 也不影响它。目标窗口仍是调用发生时处于前台的窗口，不接收 `HWND`。剪贴板属于当前窗口站，同一窗口站内的其它进程共享同一份内容；包级函数也使用这份剪贴板。
+ProbeTarget 报告目标窗口的环境事实，不修改全局后端，不发送输入消息。报告进程文件名、类名、完整性关系、调用方 UIAccess 及导出的 UIPI 风险警告。
 
-nil 或零值 `DesktopInput` 会在文本校验、后端解析和任何剪贴板访问之前返回 `ErrInputInvalid`。合法门面上的空串返回 `ErrEmptyPasteText`，不获取输入锁、不打开剪贴板；纯空白文本合法。
-
-固定后端路径不会额外执行包装层可用性检查，也不会在解析后端时初始化 HID；构造阶段的 HID 初始化仍只发生在 `NewInput(BackendHID)`，底层运行期原有行为不变。因此运行期后端错误可能发生在剪贴板替换之后，此时仍会尝试恢复。剪贴板格式、恢复、`inputMutex`、前台窗口和消费时序的限制与包级 `PasteByClipboard` 相同：只恢复 `CF_UNICODETEXT`，返回 nil 不证明目标已消费文本，返回非 nil 也不证明没有发送按键。该方法不提供前台窗口隔离或跨进程剪贴板独占。
-
-
-### func CaptureVirtualDesktop
+### func ProbeHID
 
 ```go
-func CaptureVirtualDesktop() (*image.RGBA, error)
-func CaptureVirtualDesktopWithOptions(opts CaptureOptions) (*image.RGBA, error)
+func ProbeHID() HIDStatus
 ```
+ProbeHID 报告本进程能否初始化 HID 后端，不修改全局后端。返回 `HIDInitialized`, `HIDDLLUnavailable`, `HIDDriverUnavailable`, `HIDDevicesUnavailable`, 或 `HIDUnknown`。
 
-CaptureVirtualDesktop（在 `screen` 包中）用一次 GDI `BitBlt` 捕获整个虚拟桌面（所有显示器）。返回的 `*image.RGBA` 原点 `(0, 0)` 是虚拟桌面的左上角。把这张图交给 `ImageToVirtual`。
-
-一次截图把调用 goroutine 锁定在同一个 OS 线程上，范围包括 DPI 检查、读取虚拟屏、全部 GDI 调用、像素转换和 GDI 释放。调用线程必须是 Per-Monitor DPI 感知（V1 或 V2）。请在进程启动时调用 `EnablePerMonitorDPI`。如果该线程之后被改成别的 DPI 感知上下文，截图会失败，直到上下文恢复。线程 DPI 接口不存在时，回退到进程级检查。
-
-服务进程或 Session 0、锁屏、安全桌面（UAC）以及最小化的 RDP 会话不受支持。可能返回错误，也可能返回一张全黑图且错误为 nil。库不检测黑图。
-
-`GdiFlush` 报告的是调用线程的整个 GDI 批次。刷新失败则本次截图失败。像素已经复制、随后的 GDI 释放失败时，仍返回图像，并带上清理错误。
-
-### func CaptureRegion
+### func NewInput
 
 ```go
-func CaptureRegion(x, y, w, h int32) (*image.RGBA, error)
+func NewInput(backend Backend) (*Input, error)
 ```
+NewInput 创建绑定到指定后端的任务级输入执行器。其绑定的后端不可变，之后的 `SetBackend` 不影响该执行器。只接受 `BackendMessage` 与 `BackendHID`。
 
-CaptureRegion 只截取请求矩形与虚拟桌面的交集，不再先截整张虚拟桌面再裁剪。`x`、`y` 是虚拟桌面坐标，可以为负。`w`、`h` 是请求的像素尺寸，任一值 `<= 0` 时返回错误。
-
-请求超出虚拟桌面时，返回交集。图像 `Rect` 从 `(0, 0)` 开始，这个像素是交集的左上角，不是虚拟桌面的左上角。不要把这张图交给 `ImageToVirtual`。
-
-`CaptureRegion` 等价于使用默认 `CaptureOptions` 的 `CaptureRegionWithOptions`。DPI、不受支持的环境和清理错误与 `CaptureVirtualDesktop` 相同。
-
-### func CaptureRegionWithOptions
-
-```go
-func CaptureRegionWithOptions(x, y, w, h int32, opts CaptureOptions) (*image.RGBA, error)
-```
-
-CaptureRegionWithOptions 是带显式 `CaptureOptions` 的 `CaptureRegion`。
-
-### type CaptureOptions
-
-```go
-type CaptureOptions struct {
-    PreserveAlpha bool
-    MaxMemoryMB   int
-}
-```
-
-`MaxMemoryMB` 是一次截图的峰值内存上限，同时计入 GDI DIB 和 Go 图像（`2 × 宽 × 高 × 4`）。单位是 MiB（`1024 × 1024`）。零和负值使用默认值 1000。这个默认值能截取的像素数与原先“只算一份缓冲、默认 500”相同。显式传入正数时，能截取的像素数是原先同一数字的一半。
-
-`PreserveAlpha` 已弃用，不再生效。`BitBlt` 不能提供有意义的 alpha，而 `image.RGBA` 是预乘 alpha。每个像素的 alpha 都写成 255。
-
-### 截图变更
-
-`MaxMemoryMB` 改为上面的峰值语义，默认值改为 1000。显式传入上限的调用方，可截像素数减半。`PreserveAlpha` 不再影响图像，alpha 恒为 255。截图成功但释放 GDI 对象失败时，同时返回图像和清理错误。
-
-## 类型
-
-### type MouseButton
-
-```go
-type MouseButton uint8
-```
-
-MouseButton 表示鼠标按钮身份。公开值为 `MouseLeft`、`MouseRight`、`MouseMiddle`；驱动相关数值由库内部映射。
-
-### type Window
-
-#### func FindByTitle
+### func FindByTitle
 
 ```go
 func FindByTitle(title string) (*Window, error)
 ```
 FindByTitle 搜索精确匹配标题的顶级窗口。
 
-#### func FindByClass
+### func FindByClass
 
 ```go
 func FindByClass(class string) (*Window, error)
 ```
 FindByClass 搜索匹配类名的顶级窗口。
 
-#### func FindByPID
+### func FindByPID
 
 ```go
 func FindByPID(pid uint32) ([]*Window, error)
 ```
 FindByPID 返回属于指定进程 ID 的所有顶级窗口。
 
-#### func FindByProcessName
+### func FindByProcessName
 
 ```go
 func FindByProcessName(name string) ([]*Window, error)
 ```
-FindByProcessName 返回每一个同名可执行文件进程的全部顶级窗口。没有顶级窗口的进程会被跳过。顺序与进程快照一致。
+FindByProcessName 返回属于同名可执行文件进程的全部顶级窗口。
+
+---
+
+## 类型
+
+### type Backend
+
+```go
+type Backend int
+```
+Backend 表示输入模拟后端类型（`BackendMessage` 或 `BackendHID`）。
+
+### type MouseButton
+
+```go
+type MouseButton uint8
+```
+MouseButton 表示鼠标按键（`MouseLeft`、`MouseRight`、`MouseMiddle`）。
+
+### type Key
+
+```go
+type Key = keyboard.Key
+```
+Key 表示键盘 Set 1 扫描码复合值。
+
+### type Window
+
+```go
+type Window struct {
+    HWND uintptr
+}
+```
 
 #### func (*Window) FindChildByClass
 
 ```go
 func (w *Window) FindChildByClass(class string) (*Window, error)
 ```
-FindChildByClass 搜索具有指定类名的子窗口（例如 Notepad 内部的 "Edit" 控件）。
+FindChildByClass 搜索具有指定类名的直接子窗口（例如记事本内的 "Edit" 控件）。
+
+#### func (*Window) IsValid
+
+```go
+func (w *Window) IsValid() bool
+```
+IsValid 检查窗口句柄当前是否仍然有效。
+
+#### func (*Window) IsVisible
+
+```go
+func (w *Window) IsVisible() bool
+```
+IsVisible 检查窗口是否可见且未处于最小化状态。
 
 #### func (*Window) Move
 
@@ -491,61 +592,56 @@ DoubleClick 执行鼠标左键双击。
 ```go
 func (w *Window) Scroll(x, y int32, delta int32) error
 ```
-Scroll 在指定客户区坐标执行鼠标滚轮滚动。
-
-`BackendMessage` 会把 `WM_MOUSEWHEEL` 投递给目标窗口。`delta == 0` 是空操作，其余增量必须落在 `int16` 内，否则返回 `ErrInvalidScrollDelta`（`mouse.ErrInvalidScrollDelta` 的别名）。`BackendHID` 不校验 `delta`，始终返回 `ErrDirectedScrollUnsupported`，因为硬件滚轮事件无法定向到某个窗口。需要硬件级整格滚动时使用 `ScrollWheel`。
+Scroll 在指定客户区坐标执行鼠标滚轮滚动。`BackendMessage` 下投递 `WM_MOUSEWHEEL`；`BackendHID` 下返回 `ErrDirectedScrollUnsupported`。
 
 #### func (*Window) Text
 
 ```go
 func (w *Window) Text() (string, error)
 ```
-Text 使用标准 Win32 文本读取路径获取目标窗口/控件的当前文本。主要适用于 `Edit`、`RichEdit` 等标准 Win32 文本控件。
-
-#### func (*Window) KeyDown
-
-```go
-func (w *Window) KeyDown(key Key) error
-```
-KeyDown 向窗口发送按键按下事件。`BackendHID` 要求该窗口的顶层祖先已经是前台窗口，否则返回 `ErrTargetNotForeground` 并且不发送。子窗口按这个祖先判断，不按子句柄本身判断。包级 `KeyDown` 是全局输入，不使用这条规则。
-
-#### func (*Window) KeyUp
-
-```go
-func (w *Window) KeyUp(key Key) error
-```
-KeyUp 向窗口发送按键抬起事件。`BackendHID` 在窗口不在前台时仍然发送抬起，以便松开已经按下的键。
-
-#### func (*Window) Press
-
-```go
-func (w *Window) Press(key Key, interval ...time.Duration) error
-```
-Press 模拟一次完整的按键过程。可选的 `interval` 在两条后端都是按住时间（按下成功后到抬起之间的延迟）；不传时按住 30ms。`Press(key, 0)` 不睡眠。间隔为负数或参数多于一个时，在任何按键之前返回 `ErrInvalidInterval`。`BackendHID` 只在该窗口的顶层祖先已是前台时发送按下，否则返回 `ErrTargetNotForeground` 并且不按下。
-
-#### func (*Window) PressHotkey
-
-```go
-func (w *Window) PressHotkey(keys ...Key) error
-```
-PressHotkey 执行组合键（如 Ctrl+A）。
-当它作用于窗口且使用 `BackendMessage` 时，包含 `Ctrl`、`Alt`、`Shift`
-等修饰键的组合会回退为前台键盘事件发送，而不是纯 `PostMessage`。
-原因是很多应用仅靠窗口消息无法可靠识别修饰键状态。前台身份是顶层祖先，所以子窗口在其顶层祖先已是前台时可以通过。组合键仍进入当前拥有键盘焦点的控件。`BackendHID` 上每一次按下都要求这个祖先是前台，否则返回 `ErrTargetNotForeground`，并松开本次调用已经按下的键。
-
-#### func (*Window) Type
-
-```go
-func (w *Window) Type(text string, interval ...time.Duration) error
-```
-输入字符串，自动处理大写字母和符号的 Shift 切换。可选的 `interval` 是字符间隙：消息后端在连续 rune 之间睡眠该间隙（默认 30ms，内部走 `keyboard.TypeWithInterval`），最后一个 rune 之后不再多睡；HID 每个字符的固定按住不变，只有传入显式间隔时才会在字符松开后再睡一段。间隔为负数或参数多于一个时，在任何字符发送之前返回 `ErrInvalidInterval`。`BackendHID` 在每个字符按下前（包括该字符需要的 Shift）检查顶层祖先是否仍是前台。失败时返回 `ErrTargetNotForeground`，不再输入后续字符。这次检查不证明哪个子控件拥有插入符，前台也可能在驱动送达笔画之前改变。
+Text 使用标准 Win32 `WM_GETTEXT` 路径读取目标控件文本（主要适用于 Edit、RichEdit 等控件）。
 
 #### func (*Window) Value
 
 ```go
 func (w *Window) Value() (string, error)
 ```
-Value 返回目标窗口/控件当前的“最佳努力”文本值。它会先尝试 `Text()` 所使用的 Win32 读取路径，必要时再回退到 Windows UI Automation 读取现代控件。
+Value 获取控件文本的最佳努力值。先尝试 `Text()`，必要时自动回退到 UI Automation。
+
+#### func (*Window) KeyDown
+
+```go
+func (w *Window) KeyDown(key Key) error
+```
+KeyDown 向窗口发送按键按下事件。`BackendHID` 要求顶层祖先窗口必须处于前台，否则返回 `ErrTargetNotForeground`。
+
+#### func (*Window) KeyUp
+
+```go
+func (w *Window) KeyUp(key Key) error
+```
+KeyUp 向窗口发送按键抬起事件。`BackendHID` 在非前台时仍发送抬起，以避免按键卡死。
+
+#### func (*Window) Press
+
+```go
+func (w *Window) Press(key Key, interval ...time.Duration) error
+```
+Press 模拟完整击键过程（按下后抬起）。可选 `interval` 指定按住时间。
+
+#### func (*Window) PressHotkey
+
+```go
+func (w *Window) PressHotkey(keys ...Key) error
+```
+PressHotkey 执行组合键。`BackendMessage` 下包含修饰键时临时使用前台键盘事件以确保可靠识别。
+
+#### func (*Window) Type
+
+```go
+func (w *Window) Type(text string, interval ...time.Duration) error
+```
+Type 向窗口输入文本，自动处理 Shift 切换。
 
 #### func (*Window) DPI
 
@@ -561,6 +657,13 @@ func (w *Window) ClientRect() (width, height int32, err error)
 ```
 ClientRect 返回窗口客户区的宽度和高度。
 
+#### func (*Window) ClientInfo
+
+```go
+func (w *Window) ClientInfo() (x, y, width, height int32, err error)
+```
+ClientInfo 以屏幕坐标返回客户区矩形 `(x, y, width, height)`。
+
 #### func (*Window) ScreenToClient
 
 ```go
@@ -575,24 +678,235 @@ func (w *Window) ClientToScreen(x, y int32) (sx, sy int32, err error)
 ```
 ClientToScreen 将窗口客户区相对坐标转换为屏幕相对坐标。
 
-#### func (*Window) ClientInfo
+---
+
+### type Input
 
 ```go
-func (w *Window) ClientInfo() (x, y, width, height int32, err error)
+type Input struct {
+    // 内部未导出字段
+}
 ```
-ClientInfo 以屏幕坐标返回客户区矩形：客户区原点 (0, 0) 的屏幕坐标，加上客户区的宽和高。不含标题栏和边框。
+Input 是在构造阶段通过 `NewInput` 绑定了固定后端的输入执行器。
 
-调用顺序固定为：先 `ClientToScreen(0, 0)`，再 `ClientRect`。任一次调用失败时，四个整数均为 0 并返回该错误；第一次调用失败后不会到达第二次调用。最小化窗口沿用现有的 `"window is minimized"` 错误。
+#### func (*Input) ForWindow
 
-坐标使用调用线程当前已有的 DPI 感知。要让 `ClientInfo` 与 `screen.CaptureRegion` 对齐，截图必须使用同一调用线程的 DPI 感知；`ClientInfo` 自身不调用 `EnablePerMonitorDPI`。四个返回值来自两次独立的 Win32 调用，不是原子快照。
+```go
+func (i *Input) ForWindow(w *Window) (*WindowInput, error)
+```
+ForWindow 将窗口 `w` 绑定到该执行器，返回 `*WindowInput` 操作面。
 
-`EnablePerMonitorDPI` 只应在进程启动早期调用。DPI 感知一旦设定便不能再可靠地改回。
+#### func (*Input) Desktop
 
-## 探针与任务级输入
+```go
+func (i *Input) Desktop() (*DesktopInput, error)
+```
+Desktop 返回该执行器的屏幕绝对坐标与无窗口 `*DesktopInput` 操作面。
 
-`ProbeTarget` 报告一个窗口的事实：进程文件名、该窗口自身的类名、从调用方看的完整性（`target_higher`、`equal`、`target_lower`、`unknown`），以及调用方 UIAccess（`enabled`、`disabled`、`unknown`）。警告只有 `uipi_likely_blocked`、`integrity_unknown`、`uiaccess_unknown`。它不推荐后端，不初始化 HID，也不修改 `SetBackend`。
+---
 
-`ProbeHID` 返回 `initialized`、`dll_unavailable`、`driver_unavailable`、`devices_unavailable` 或 `unknown`。初始化失败仍然返回状态，且不修改全局后端。`SetBackend` 与 `NewInput(BackendHID)` 保持今天的公开错误。
+### type WindowInput
 
-`NewInput` 只接受 `BackendMessage` 或 `BackendHID`。其它整型在初始化 HID 之前返回 `ErrInvalidBackend`。`ForWindow` 与 `Desktop` 把窗口操作和屏幕操作分开。执行器不读取全局后端。包级 `PasteByClipboard` 仍是全局后端兼容入口；`DesktopInput.PasteByClipboard` 是固定后端形式。光标查询、窗口查找、文本读取和 DPI 仍走原有函数。
+```go
+type WindowInput struct {
+    // 内部未导出字段
+}
+```
+WindowInput 是 `Input` 的窗口专属操作 Facade，所有操作均使用创建时绑定的固定后端。
 
+#### WindowInput 方法列表
+
+```go
+func (in *WindowInput) Move(x, y int32) error
+func (in *WindowInput) MoveRel(dx, dy int32) error
+func (in *WindowInput) Click(x, y int32) error
+func (in *WindowInput) ClickRight(x, y int32) error
+func (in *WindowInput) ClickMiddle(x, y int32) error
+func (in *WindowInput) DoubleClick(x, y int32) error
+func (in *WindowInput) Scroll(x, y, delta int32) error
+func (in *WindowInput) KeyDown(key Key) error
+func (in *WindowInput) KeyUp(key Key) error
+func (in *WindowInput) Press(key Key, interval ...time.Duration) error
+func (in *WindowInput) PressHotkey(keys ...Key) error
+func (in *WindowInput) Type(text string, interval ...time.Duration) error
+```
+
+---
+
+### type DesktopInput
+
+```go
+type DesktopInput struct {
+    // 内部未导出字段
+}
+```
+DesktopInput 是 `Input` 的屏幕坐标与无窗口专属 Facade，所有操作均使用创建时绑定的固定后端。
+
+#### DesktopInput 方法列表
+
+```go
+func (d *DesktopInput) MoveMouseTo(x, y int32) error
+func (d *DesktopInput) ClickMouseAt(x, y int32) error
+func (d *DesktopInput) DoubleClickMouseAt(x, y int32) error
+func (d *DesktopInput) ClickRightMouseAt(x, y int32) error
+func (d *DesktopInput) ClickMiddleMouseAt(x, y int32) error
+func (d *DesktopInput) MouseDown(button MouseButton) error
+func (d *DesktopInput) MouseUp(button MouseButton) error
+func (d *DesktopInput) ClickMouse() error
+func (d *DesktopInput) MoveMouseBy(dx, dy int32) error
+func (d *DesktopInput) MoveMouseToExact(x, y int32) error
+func (d *DesktopInput) ScrollWheel(steps int) error
+func (d *DesktopInput) PressFor(key Key, duration time.Duration) error
+func (d *DesktopInput) KeyDown(key Key) error
+func (d *DesktopInput) KeyUp(key Key) error
+func (d *DesktopInput) Press(key Key, interval ...time.Duration) error
+func (d *DesktopInput) PressHotkey(keys ...Key) error
+func (d *DesktopInput) Type(text string, interval ...time.Duration) error
+```
+
+#### func (*DesktopInput) PasteByClipboard
+
+```go
+func (d *DesktopInput) PasteByClipboard(text string) error
+```
+PasteByClipboard 使用该执行器绑定的固定后端向当前前台窗口发送 Ctrl+V 粘贴文本。
+
+---
+
+### type TargetProbe
+
+```go
+type TargetProbe struct {
+    Features TargetFeatures
+    Warnings []ProbeWarning
+}
+```
+
+### type TargetFeatures
+
+```go
+type TargetFeatures struct {
+    ProcessName       string
+    TargetClass       string
+    IntegrityRelation IntegrityRelation
+    CallerUIAccess    UIAccess
+}
+```
+
+### type IntegrityRelation
+
+```go
+type IntegrityRelation string
+```
+
+### type UIAccess
+
+```go
+type UIAccess string
+```
+
+### type HIDStatus
+
+```go
+type HIDStatus string
+```
+
+### type ProbeWarning
+
+```go
+type ProbeWarning string
+```
+
+---
+
+## Screen 包 (`github.com/rpdg/winput/screen`)
+
+### type Point
+
+```go
+type Point struct {
+    X int32
+    Y int32
+}
+```
+
+### type Rect
+
+```go
+type Rect struct {
+    Left   int32
+    Top    int32
+    Right  int32
+    Bottom int32
+}
+```
+
+### type Monitor
+
+```go
+type Monitor struct {
+    Handle     uintptr
+    Bounds     Rect
+    WorkArea   Rect // 不包含任务栏
+    Primary    bool
+    DeviceName string
+}
+```
+
+### type CaptureOptions
+
+```go
+type CaptureOptions struct {
+    PreserveAlpha bool // 已弃用，恒为 255
+    MaxMemoryMB   int  // 峰值内存预算（MiB，DIB + Go 图像）。默认：1000
+}
+```
+
+### func VirtualBounds
+
+```go
+func VirtualBounds() Rect
+```
+VirtualBounds 返回整个虚拟桌面的边界矩形。
+
+### func Monitors
+
+```go
+func Monitors() ([]Monitor, error)
+```
+Monitors 返回所有活动显示器及其几何信息。
+
+### func ImageToVirtual
+
+```go
+func ImageToVirtual(imageX, imageY int32) (int32, int32)
+```
+ImageToVirtual 将全虚拟桌面截图中的像素坐标转换为 `MoveMouseTo` 可用的虚拟桌面全局坐标。
+
+### func CaptureVirtualDesktop
+
+```go
+func CaptureVirtualDesktop() (*image.RGBA, error)
+```
+CaptureVirtualDesktop 使用 GDI `BitBlt` 截取整个虚拟桌面（包含所有显示器）。
+
+### func CaptureVirtualDesktopWithOptions
+
+```go
+func CaptureVirtualDesktopWithOptions(opts CaptureOptions) (*image.RGBA, error)
+```
+CaptureVirtualDesktopWithOptions 使用指定选项截取整个虚拟桌面。
+
+### func CaptureRegion
+
+```go
+func CaptureRegion(x, y, w, h int32) (*image.RGBA, error)
+```
+CaptureRegion 截取请求矩形与虚拟桌面的交集区域。
+
+### func CaptureRegionWithOptions
+
+```go
+func CaptureRegionWithOptions(x, y, w, h int32, opts CaptureOptions) (*image.RGBA, error)
+```
+CaptureRegionWithOptions 使用指定内存选项截取目标区域。

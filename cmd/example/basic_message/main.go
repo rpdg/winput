@@ -13,7 +13,9 @@ func main() {
 	fmt.Println("This example uses PostMessageW. It does NOT require focus or mouse movement.")
 
 	// 1. Enable DPI Awareness
-	winput.EnablePerMonitorDPI()
+	if err := winput.EnablePerMonitorDPI(); err != nil {
+		log.Printf("⚠️  Could not enable DPI awareness: %v", err)
+	}
 
 	// 2. Find Window
 	// Target: Notepad
@@ -24,8 +26,8 @@ func main() {
 	}
 	fmt.Printf("✅ Found Notepad handle: %x\n", w.HWND)
 
-	// NOTE: For some applications like Notepad, the main window handle
-	// is just a container. Real input must be sent to a child window (the Edit control).
+	// NOTE: For classic Win32 Notepad, real input is sent to the child "Edit" control.
+	// For modern Windows 11 Notepad (WinUI 3), fallback to the main window container.
 	edit, err := w.FindChildByClass("Edit")
 	if err != nil {
 		log.Printf("⚠️  Could not find 'Edit' child window: %v. Using main window instead.", err)
@@ -44,20 +46,25 @@ func main() {
 		log.Fatal(err)
 	}
 
-	value, err := edit.Text()
+	// Read text: Value() provides best-effort retrieval with UI Automation fallback for modern apps.
+	value, err := edit.Value()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("⚠️  Could not read back text: %v", err)
+	} else {
+		fmt.Printf("✅ Read back text: %q\n", value)
 	}
-	fmt.Printf("✅ Read back text: %q\n", value)
 
 	// Press Hotkey (Select All: Ctrl+A)
-	// fmt.Println("👉 Testing Hotkey (Ctrl+A)...")
-	// edit.PressHotkey(winput.KeyCtrl, winput.KeyA)
-	// time.Sleep(500 * time.Millisecond)
+	fmt.Println("👉 Testing Hotkey (Ctrl+A)...")
+	if err := edit.PressHotkey(winput.KeyCtrl, winput.KeyA); err != nil {
+		log.Printf("⚠️  PressHotkey failed: %v", err)
+	}
 
 	// Mouse Click (Right Click context menu inside Edit control)
 	fmt.Println("👉 Testing Right Click...")
-	edit.ClickRight(100, 100)
+	if err := edit.ClickRight(100, 100); err != nil {
+		log.Printf("⚠️  ClickRight failed: %v", err)
+	}
 
 	fmt.Println("=== Done ===")
 }

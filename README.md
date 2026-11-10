@@ -78,13 +78,18 @@ func main() {
 	// 3. Convert image coordinates to virtual desktop coordinates
 	targetX, targetY := screen.ImageToVirtual(int32(matchX), int32(matchY))
 
-	// 4. Move and Click
-	winput.MoveMouseTo(targetX, targetY)
-	winput.ClickMouseAt(targetX, targetY)
+	// 4. Click target (ClickMouseAt automatically moves to coordinates and clicks)
+	if err := winput.ClickMouseAt(targetX, targetY); err != nil {
+		log.Printf("Click failed: %v", err)
+	}
 }
 ```
 
 ## API Reference
+
+Comprehensive package documentation and API specifications:
+- [API Reference (English)](API.md)
+- [API 参考手册 (中文)](API_CN.md)
 
 ## MCP Server
 
@@ -211,14 +216,23 @@ Simulates physical hardware input. Requires driver.
 go run cmd/example/advanced_hid/main.go
 ```
 
+### 4. Task-Level Executor & Probes (Isolated State)
+Demonstrates `NewInput`, `ForWindow`, `Desktop`, `ProbeTarget`, and `ProbeHID`.
+```bash
+go run cmd/example/task_executor/main.go
+```
+
 ## Quick Start (Code Snippet)
 
 ```go
 package main
 
 import (
+	"fmt"
 	"log"
+
 	"github.com/rpdg/winput"
+	"github.com/rpdg/winput/screen"
 )
 
 func main() {
@@ -228,9 +242,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// For standard Win32 Notepad, text is inside the "Edit" child control.
+	// Modern Windows 11 Notepad uses WinUI 3; fallback to the main window if not found.
 	edit, err := w.FindChildByClass("Edit")
 	if err != nil {
-		log.Fatal(err)
+		edit = w
 	}
 
 	// 2. Click (Left Button)
@@ -239,22 +255,29 @@ func main() {
 	}
 
 	// 3. Type text
-	edit.Type("Hello World")
-	edit.Press(winput.KeyEnter)
+	if err := edit.Type("Hello World"); err != nil {
+		log.Fatal(err)
+	}
+	if err := edit.Press(winput.KeyEnter); err != nil {
+		log.Fatal(err)
+	}
 
-	// 4. Read text from a standard child text control
-	value, err := edit.Text()
+	// 4. Read text from control (Value provides UI Automation fallback for modern apps)
+	value, err := edit.Value()
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Current text:", value)
 
 	// 5. Global Input (Target independent)
-	winput.Type("Hello Electron!")
-	winput.Press(winput.KeyEnter)
+	if err := winput.Type("Hello Electron!"); err != nil {
+		log.Fatal(err)
+	}
+	if err := winput.Press(winput.KeyEnter); err != nil {
+		log.Fatal(err)
+	}
 
 	// 6. Using winput/screen (Boundary query)
-	// import "github.com/rpdg/winput/screen"
 	bounds := screen.VirtualBounds()
 	fmt.Printf("Virtual Desktop Bounds: %d, %d\n", bounds.Right, bounds.Bottom)
 }
@@ -267,6 +290,10 @@ winput avoids silent failures. Common errors you should handle:
 | Error Variable | Description | Handling |
 | :--- | :--- | :--- |
 | `ErrWindowNotFound` | Window not found by Title/Class/PID. | Check if the app is running or use `FindByClass` as fallback. |
+| `ErrWindowGone` | Window handle is closed or no longer valid. | Search for the window again. |
+| `ErrWindowNotVisible` | Window is minimized or hidden. | Restore/unminimize window before sending input. |
+| `ErrTargetNotForeground` | Window keyboard input under HID requires its top-level ancestor to be foreground. | Focus the target window before sending keyboard input. |
+| `ErrDirectedScrollUnsupported` | `Window.Scroll` called under `BackendHID`. | Use global `ScrollWheel` for hardware-level scrolling. |
 | `ErrDriverNotInstalled` | The Interception driver context could not be opened (HID only). | Prompt the user to install the driver, or keep the Message backend. |
 | `ErrDLLLoadFailed` | The interception library is missing, its symbols are missing, or no mouse and no keyboard device was found. | Check `SetHIDLibraryPath`, the DLL, and the driver devices. This is not `ErrDriverNotInstalled`. |
 | `ErrTargetChanged` | During `ProbeTarget`, the window still existed, but its process, thread, or a class name already read at the start changed. | Probe again. No partial report is returned. |
@@ -303,8 +330,7 @@ if err := winput.EnablePerMonitorDPI(); err != nil {
 
 // Check window specific DPI (96 is standard 100%)
 dpi, _ := w.DPI()
-fmt.Printf("Target Window DPI: %d (Scale: %.2f%%)
-", dpi, float64(dpi)/96.0*100)
+fmt.Printf("Target Window DPI: %d (Scale: %.2f%%)\n", dpi, float64(dpi)/96.0*100)
 ```
 
 ### 2. HID Backend with Fallback
