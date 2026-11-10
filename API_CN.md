@@ -34,6 +34,8 @@
 *   [func Type](#func-type)
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
+*   [func CaptureRegionWithOptions](#func-captureregionwithoptions)
+*   [type CaptureOptions](#type-captureoptions)
 *   [type Backend](#type-backend)
 *   [type MouseButton](#type-mousebutton)
 *   [type Key](#type-key)
@@ -347,18 +349,53 @@ nil 或零值 `DesktopInput` 会在文本校验、后端解析和任何剪贴板
 
 ```go
 func CaptureVirtualDesktop() (*image.RGBA, error)
+func CaptureVirtualDesktopWithOptions(opts CaptureOptions) (*image.RGBA, error)
 ```
-CaptureVirtualDesktop (在 `screen` 包中) 使用 GDI 捕获整个虚拟桌面（所有显示器）。要求进程已开启 Per-Monitor DPI 感知。返回 `*image.RGBA` 对象。
+
+CaptureVirtualDesktop（在 `screen` 包中）用一次 GDI `BitBlt` 捕获整个虚拟桌面（所有显示器）。返回的 `*image.RGBA` 原点 `(0, 0)` 是虚拟桌面的左上角。把这张图交给 `ImageToVirtual`。
+
+一次截图把调用 goroutine 锁定在同一个 OS 线程上，范围包括 DPI 检查、读取虚拟屏、全部 GDI 调用、像素转换和 GDI 释放。调用线程必须是 Per-Monitor DPI 感知（V1 或 V2）。请在进程启动时调用 `EnablePerMonitorDPI`。如果该线程之后被改成别的 DPI 感知上下文，截图会失败，直到上下文恢复。线程 DPI 接口不存在时，回退到进程级检查。
+
+服务进程或 Session 0、锁屏、安全桌面（UAC）以及最小化的 RDP 会话不受支持。可能返回错误，也可能返回一张全黑图且错误为 nil。库不检测黑图。
+
+`GdiFlush` 报告的是调用线程的整个 GDI 批次。刷新失败则本次截图失败。像素已经复制、随后的 GDI 释放失败时，仍返回图像，并带上清理错误。
 
 ### func CaptureRegion
 
 ```go
 func CaptureRegion(x, y, w, h int32) (*image.RGBA, error)
 ```
-CaptureRegion (在 `screen` 包中) 捕获虚拟桌面的指定区域。
-`x`, `y` 为虚拟桌面坐标（允许负值）。
-`w`, `h` 为像素尺寸。
-内部调用 `CaptureVirtualDesktop`，转换坐标并执行安全裁剪。
+
+CaptureRegion 只截取请求矩形与虚拟桌面的交集，不再先截整张虚拟桌面再裁剪。`x`、`y` 是虚拟桌面坐标，可以为负。`w`、`h` 是请求的像素尺寸，任一值 `<= 0` 时返回错误。
+
+请求超出虚拟桌面时，返回交集。图像 `Rect` 从 `(0, 0)` 开始，这个像素是交集的左上角，不是虚拟桌面的左上角。不要把这张图交给 `ImageToVirtual`。
+
+`CaptureRegion` 等价于使用默认 `CaptureOptions` 的 `CaptureRegionWithOptions`。DPI、不受支持的环境和清理错误与 `CaptureVirtualDesktop` 相同。
+
+### func CaptureRegionWithOptions
+
+```go
+func CaptureRegionWithOptions(x, y, w, h int32, opts CaptureOptions) (*image.RGBA, error)
+```
+
+CaptureRegionWithOptions 是带显式 `CaptureOptions` 的 `CaptureRegion`。
+
+### type CaptureOptions
+
+```go
+type CaptureOptions struct {
+    PreserveAlpha bool
+    MaxMemoryMB   int
+}
+```
+
+`MaxMemoryMB` 是一次截图的峰值内存上限，同时计入 GDI DIB 和 Go 图像（`2 × 宽 × 高 × 4`）。单位是 MiB（`1024 × 1024`）。零和负值使用默认值 1000。这个默认值能截取的像素数与原先“只算一份缓冲、默认 500”相同。显式传入正数时，能截取的像素数是原先同一数字的一半。
+
+`PreserveAlpha` 已弃用，不再生效。`BitBlt` 不能提供有意义的 alpha，而 `image.RGBA` 是预乘 alpha。每个像素的 alpha 都写成 255。
+
+### 截图变更
+
+`MaxMemoryMB` 改为上面的峰值语义，默认值改为 1000。显式传入上限的调用方，可截像素数减半。`PreserveAlpha` 不再影响图像，alpha 恒为 255。截图成功但释放 GDI 对象失败时，同时返回图像和清理错误。
 
 ## 类型
 
@@ -547,7 +584,7 @@ ClientInfo 以屏幕坐标返回客户区矩形：客户区原点 (0, 0) 的屏�
 
 调用顺序固定为：先 `ClientToScreen(0, 0)`，再 `ClientRect`。任一次调用失败时，四个整数均为 0 并返回该错误；第一次调用失败后不会到达第二次调用。最小化窗口沿用现有的 `"window is minimized"` 错误。
 
-坐标使用调用线程当前已有的 DPI 感知。要让 `ClientInfo` 与 `screen.CaptureRegion` 对齐，进程必须与截图使用同一种 DPI 感知；`ClientInfo` 自身不调用 `EnablePerMonitorDPI`。四个返回值来自两次独立的 Win32 调用，不是原子快照。
+坐标使用调用线程当前已有的 DPI 感知。要让 `ClientInfo` 与 `screen.CaptureRegion` 对齐，截图必须使用同一调用线程的 DPI 感知；`ClientInfo` 自身不调用 `EnablePerMonitorDPI`。四个返回值来自两次独立的 Win32 调用，不是原子快照。
 
 `EnablePerMonitorDPI` 只应在进程启动早期调用。DPI 感知一旦设定便不能再可靠地改回。
 

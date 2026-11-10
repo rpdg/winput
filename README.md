@@ -38,7 +38,7 @@ If you want to expose `winput` directly to AI agents, use the MCP adapter instea
 *   **Coordinate Management**:
     *   Unified **Client Coordinate** system for all APIs.
     *   Built-in `ScreenToClient` / `ClientToScreen` conversion.
-    *   `Window.ClientInfo` returns the client-area rectangle in screen coordinates, aligned with `screen.CaptureRegion` when the process DPI awareness matches.
+    *   `Window.ClientInfo` returns the client-area rectangle in screen coordinates, aligned with `screen.CaptureRegion` when the calling thread's DPI awareness matches.
     *   **DPI Awareness**: Helpers for Per-Monitor DPI scaling.
 *   **Safety & Reliability**:
     *   **Thread-Safe**: Global input serialization ensures atomic operations (`inputMutex`).
@@ -60,10 +60,13 @@ import (
 func main() {
 	winput.EnablePerMonitorDPI()
 
-	// 1. Capture the entire virtual desktop (all monitors)
+	// 1. Capture the entire virtual desktop (all monitors).
+	// ImageToVirtual below applies only to this full-desktop image.
 	img, err := screen.CaptureVirtualDesktop()
-	// Or capture a specific region:
-	// img, err := screen.CaptureRegion(0, 0, 1920, 1080)
+	// A region image's (0, 0) is the clipped rectangle, not the virtual
+	// desktop origin. Do not pass that image to ImageToVirtual.
+	// img, err = screen.CaptureRegion(0, 0, 1920, 1080)
+	// img, err = screen.CaptureRegionWithOptions(0, 0, 1920, 1080, screen.CaptureOptions{})
 	if err != nil {
 		panic(err)
 	}

@@ -31,6 +31,8 @@ Package `winput` provides a high-level interface for Windows background input au
 *   [func Type](#func-type)
 *   [func CaptureVirtualDesktop](#func-capturevirtualdesktop)
 *   [func CaptureRegion](#func-captureregion)
+*   [func CaptureRegionWithOptions](#func-captureregionwithoptions)
+*   [type CaptureOptions](#type-captureoptions)
 *   [type Backend](#type-backend)
 *   [type MouseButton](#type-mousebutton)
 *   [type Key](#type-key)
@@ -447,18 +449,53 @@ isolation or cross-process clipboard exclusivity.
 
 ```go
 func CaptureVirtualDesktop() (*image.RGBA, error)
+func CaptureVirtualDesktopWithOptions(opts CaptureOptions) (*image.RGBA, error)
 ```
-CaptureVirtualDesktop (in package `screen`) captures the entire virtual desktop (all monitors) using GDI. It requires the process to be Per-Monitor DPI Aware. Returns an `*image.RGBA`.
+
+CaptureVirtualDesktop (in package `screen`) captures the entire virtual desktop (all monitors) with one GDI `BitBlt`. The returned `*image.RGBA` has origin `(0, 0)` at the top-left of the virtual desktop. Pass that image to `ImageToVirtual`.
+
+One capture locks the calling goroutine to a single OS thread for the DPI check, the virtual-screen read, the GDI calls, pixel conversion, and GDI release. The calling thread must be per-monitor DPI aware (V1 or V2). Call `EnablePerMonitorDPI` at process startup. If that thread was later switched to another DPI awareness context, capture fails until the context is restored. When the thread DPI APIs are unavailable, the check falls back to the process.
+
+A service process or Session 0, a locked workstation, the secure desktop (UAC), and a minimized RDP session are not supported. Capture may return an error, or it may return an all-black image and a nil error. The library does not detect a black image.
+
+`GdiFlush` reports the calling thread's whole GDI batch. A failed flush fails the capture. If the pixels were copied and a later GDI release fails, the image is still returned together with the cleanup error.
 
 ### func CaptureRegion
 
 ```go
 func CaptureRegion(x, y, w, h int32) (*image.RGBA, error)
 ```
-CaptureRegion (in package `screen`) captures a specific region of the virtual desktop.
-`x`, `y` are Virtual Desktop coordinates (allowed to be negative).
-`w`, `h` are pixel dimensions.
-It internally calls `CaptureVirtualDesktop`, converts coordinates, and performs a safe crop.
+
+CaptureRegion captures the intersection of the requested rectangle with the virtual desktop. It does not capture the whole desktop and then crop. `x` and `y` are virtual-desktop coordinates and may be negative. `w` and `h` are the requested size in pixels; either value `<= 0` is an error.
+
+When the request extends outside the virtual desktop, the result is the intersection. The image `Rect` starts at `(0, 0)`, and that pixel is the top-left of the intersection, not of the virtual desktop. Do not pass this image to `ImageToVirtual`.
+
+`CaptureRegion` is `CaptureRegionWithOptions` with default options. DPI, unsupported environments, and cleanup errors are the same as `CaptureVirtualDesktop`.
+
+### func CaptureRegionWithOptions
+
+```go
+func CaptureRegionWithOptions(x, y, w, h int32, opts CaptureOptions) (*image.RGBA, error)
+```
+
+CaptureRegionWithOptions is `CaptureRegion` with an explicit `CaptureOptions`.
+
+### type CaptureOptions
+
+```go
+type CaptureOptions struct {
+    PreserveAlpha bool
+    MaxMemoryMB   int
+}
+```
+
+`MaxMemoryMB` is the peak memory budget of one capture, counting the GDI DIB and the Go image together (`2 × width × height × 4`). The unit is mebibytes (`1024 × 1024`). Zero and negative values select the default, 1000. That default allows the same number of pixels as the previous single-buffer default of 500. An explicit positive value allows half as many pixels as the same number did when the field counted one buffer.
+
+`PreserveAlpha` is deprecated and ignored. `BitBlt` does not provide a meaningful alpha channel, and `image.RGBA` is alpha-premultiplied. Every captured pixel is written with alpha 255.
+
+### Capture changes
+
+`MaxMemoryMB` now means the peak budget above, and its default is 1000. Callers that pass an explicit limit can capture half as many pixels as before. `PreserveAlpha` no longer changes the image; alpha is always 255. When the capture succeeds and releasing a GDI object fails, the function returns the image and the cleanup error together.
 
 ## Types
 
@@ -671,8 +708,8 @@ first call does not reach the second one. A minimized window follows the
 existing `"window is minimized"` error.
 
 The coordinates use the DPI awareness the calling thread already has. To align
-`ClientInfo` with `screen.CaptureRegion`, the process must run with the same
-DPI awareness as the screenshot; `ClientInfo` does not call
+`ClientInfo` with `screen.CaptureRegion`, that same thread must have the DPI
+awareness used for the screenshot; `ClientInfo` does not call
 `EnablePerMonitorDPI`. The four values come from two independent Win32 calls
 and are not an atomic snapshot.
 

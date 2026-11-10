@@ -42,9 +42,11 @@ func VirtualBounds() Rect {
 // Returns (x, y) ready for use with winput.MoveMouseTo / winput.ClickMouseAt.
 //
 // Constraints:
-// 1. The image MUST be a capture of the entire virtual desktop (all monitors).
-// 2. The capture process MUST be Per-Monitor DPI Aware (matching winput).
-// 3. Do NOT modify the returned negative coordinates; they are valid.
+//  1. The image MUST be a capture of the entire virtual desktop (all monitors).
+//     A CaptureRegion image does not qualify: its (0, 0) is the intersection
+//     origin, not the virtual-desktop origin.
+//  2. The calling thread MUST be per-monitor DPI aware, matching capture.
+//  3. Do NOT modify the returned negative coordinates; they are valid.
 func ImageToVirtual(imageX, imageY int32) (int32, int32) {
 	vx, _, _ := window.ProcGetSystemMetrics.Call(smXVirtualScreen)
 	vy, _, _ := window.ProcGetSystemMetrics.Call(smYVirtualScreen)

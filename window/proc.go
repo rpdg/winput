@@ -41,12 +41,17 @@ var (
 	ProcGetSystemMetrics    = user32.NewProc("GetSystemMetrics")
 	ProcGetDoubleClickTime  = user32.NewProc("GetDoubleClickTime")
 
-	// DPI Awareness (Win10 1607+)
-	ProcGetDpiForWindow              = user32.NewProc("GetDpiForWindow")
-	ProcSetProcessDpiAwarenessCtx    = user32.NewProc("SetProcessDpiAwarenessContext")
-	ProcGetProcessDpiAwarenessCtx    = user32.NewProc("GetProcessDpiAwarenessContext")
-	ProcAreDpiAwarenessContextsEqual = user32.NewProc("AreDpiAwarenessContextsEqual")
-	ProcIsProcessDPIAware            = user32.NewProc("IsProcessDPIAware")
+	// DPI awareness. SetProcessDpiAwarenessContext and the thread queries are
+	// Windows 10 1607+. GetDpiAwarenessContextForProcess is Windows 10 1803+;
+	// NULL (Call(0)) means the current process. There is no export named
+	// GetProcessDpiAwarenessContext.
+	ProcGetDpiForWindow                     = user32.NewProc("GetDpiForWindow")
+	ProcSetProcessDpiAwarenessCtx           = user32.NewProc("SetProcessDpiAwarenessContext")
+	ProcGetDpiAwarenessContextForProcess    = user32.NewProc("GetDpiAwarenessContextForProcess")
+	ProcAreDpiAwarenessContextsEqual        = user32.NewProc("AreDpiAwarenessContextsEqual")
+	ProcIsProcessDPIAware                   = user32.NewProc("IsProcessDPIAware")
+	ProcGetThreadDpiAwarenessContext        = user32.NewProc("GetThreadDpiAwarenessContext")
+	ProcGetAwarenessFromDpiAwarenessContext = user32.NewProc("GetAwarenessFromDpiAwarenessContext")
 
 	ProcGetDpiForMonitor       = shcore.NewProc("GetDpiForMonitor")
 	ProcGetProcessDpiAwareness = shcore.NewProc("GetProcessDpiAwareness")
@@ -72,6 +77,7 @@ var (
 	ProcDeleteObject       = gdi32.NewProc("DeleteObject")
 	ProcDeleteDC           = gdi32.NewProc("DeleteDC")
 	ProcBitBlt             = gdi32.NewProc("BitBlt")
+	ProcGdiFlush           = gdi32.NewProc("GdiFlush")
 
 	ProcPostMessageW   = user32.NewProc("PostMessageW")
 	ProcMapVirtualKeyW = user32.NewProc("MapVirtualKeyW")

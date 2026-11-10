@@ -32,7 +32,7 @@
 *   **坐标管理**:
     *   统一使用 **客户端坐标 (Client Coordinate)** 系统。
     *   内置 `ScreenToClient` / `ClientToScreen` 转换。
-    *   `Window.ClientInfo` 以屏幕坐标返回客户区矩形；当进程 DPI 感知一致时，可与 `screen.CaptureRegion` 对齐。
+    *   `Window.ClientInfo` 以屏幕坐标返回客户区矩形；当调用线程的 DPI 感知一致时，可与 `screen.CaptureRegion` 对齐。
     *   **DPI 感知**: 支持 Per-Monitor DPI 缩放处理。
 *   **安全可靠**:
     *   **并发安全 (Thread-Safe)**: 全局输入序列化 (`inputMutex`) 确保操作原子性。
@@ -57,10 +57,13 @@ func main() {
 	// 必须开启 DPI 感知以保证坐标精确
 	winput.EnablePerMonitorDPI()
 
-	// 1. 捕获整个虚拟桌面（包含所有显示器）
+	// 1. 捕获整个虚拟桌面（包含所有显示器）。
+	// 下面的 ImageToVirtual 只适用于这张全屏图。
 	img, err := screen.CaptureVirtualDesktop()
-	// 或者捕获指定区域：
-	// img, err := screen.CaptureRegion(0, 0, 1920, 1080)
+	// 区域图的 (0, 0) 是裁剪矩形的左上角，不是虚拟桌面原点。
+	// 不要把区域图交给 ImageToVirtual。
+	// img, err = screen.CaptureRegion(0, 0, 1920, 1080)
+	// img, err = screen.CaptureRegionWithOptions(0, 0, 1920, 1080, screen.CaptureOptions{})
 	if err != nil {
 		panic(err)
 	}

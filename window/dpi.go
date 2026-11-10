@@ -96,14 +96,21 @@ func GetDPI(hwnd uintptr) (uint32, uint32, error) {
 	return uint32(dpiX), uint32(dpiY), nil
 }
 
-// IsPerMonitorDPIAware checks if the current process is Per-Monitor DPI Aware (V1 or V2).
-// This is critical for ensuring that screen coordinates (GetSystemMetrics, BitBlt) are exact
-// pixels and not virtualized/scaled by the OS.
+// IsPerMonitorDPIAware reports whether the current process is per-monitor
+// DPI aware (V1 or V2). Screen capture checks the thread when those APIs
+// exist, and falls back to this function when they do not.
+//
+// On Windows 10, GetDpiAwarenessContextForProcess(NULL) and
+// GetProcessDpiAwareness follow the calling thread once
+// SetThreadDpiAwarenessContext has changed it. A per-monitor process can
+// therefore look system-aware to this call. Call it from a thread that still
+// has the process default when that distinction matters.
 func IsPerMonitorDPIAware() bool {
-	// 1. Try Modern Win10 API (1607+)
-	if err := ProcGetProcessDpiAwarenessCtx.Find(); err == nil {
+	// Windows 10 1803+: GetDpiAwarenessContextForProcess(NULL) is the current
+	// process. Pass 0 for NULL. V1 and V2 are both per-monitor.
+	if err := ProcGetDpiAwarenessContextForProcess.Find(); err == nil {
 		if err := ProcAreDpiAwarenessContextsEqual.Find(); err == nil {
-			ctx, _, _ := ProcGetProcessDpiAwarenessCtx.Call(0)
+			ctx, _, _ := ProcGetDpiAwarenessContextForProcess.Call(0)
 			if ctx != 0 {
 				// Check for V2
 				r1, _, _ := ProcAreDpiAwarenessContextsEqual.Call(ctx, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)

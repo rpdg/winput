@@ -535,8 +535,8 @@ func TestScreenCapture(t *testing.T) {
 		// Usually desktops are not completely transparent
 		pix := img.At(bounds.Min.X, bounds.Min.Y)
 		_, _, _, a := pix.RGBA()
-		if a == 0 {
-			t.Error("Captured image first pixel is fully transparent (expected opaque 255)")
+		if a != 0xffff {
+			t.Errorf("first pixel alpha = %d, want 65535", a)
 		}
 	})
 
@@ -546,12 +546,18 @@ func TestScreenCapture(t *testing.T) {
 			MaxMemoryMB:   100,
 		}
 
-		// Check if virtual desktop is too large for 100MB
+		// MaxMemoryMB is a peak budget (DIB plus Go image). Three 4K panels
+		// need about 95MB for one buffer and about 190MB at the peak, so a
+		// one-buffer comparison would leave the 100MB limit in place and the
+		// capture would fail.
 		v := screen.VirtualBounds()
-		needed := int64(v.Right-v.Left) * int64(v.Bottom-v.Top) * 4
-		if needed > 100*1024*1024 {
-			t.Logf("Desktop requires %d MB, skipping 100MB limit test", needed/(1024*1024))
-			opts.MaxMemoryMB = 1000 // Increase for test
+		peak := int64(v.Right-v.Left) * int64(v.Bottom-v.Top) * 8
+		if peak > 100*1024*1024 {
+			t.Logf("Desktop peak is %d MB, raising the 100MB limit", (peak+1024*1024-1)/(1024*1024))
+			opts.MaxMemoryMB = 1000
+		}
+		if peak > 1000*1024*1024 {
+			t.Skipf("desktop peak %d bytes exceeds 1000MB", peak)
 		}
 
 		img, err := screen.CaptureVirtualDesktopWithOptions(opts)
@@ -561,6 +567,10 @@ func TestScreenCapture(t *testing.T) {
 
 		if img == nil {
 			t.Fatal("Captured image with options is nil")
+		}
+		_, _, _, a := img.At(img.Bounds().Min.X, img.Bounds().Min.Y).RGBA()
+		if a != 0xffff {
+			t.Errorf("PreserveAlpha true alpha = %d, want 65535", a)
 		}
 	})
 }

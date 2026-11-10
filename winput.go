@@ -1846,9 +1846,9 @@ func (w *Window) ClientRect() (width, height int32, err error) {
 // existing "window is minimized" error from window.ClientToScreen.
 //
 // DPI: the coordinates use the DPI awareness the calling thread already has.
-// Aligning ClientInfo with screen.CaptureRegion requires the process to have
-// the same awareness as the screenshot; this method does not call
-// EnablePerMonitorDPI and does not convert physical pixels.
+// Aligning ClientInfo with screen.CaptureRegion requires that same thread
+// awareness on the screenshot; this method does not call EnablePerMonitorDPI
+// and does not convert physical pixels.
 //
 // The four values are read by two independent Win32 calls and are not an
 // atomic snapshot: another process can move or resize the window between them.
