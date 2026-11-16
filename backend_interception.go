@@ -14,20 +14,28 @@ func (interceptionBackend) MoveTo(x, y int32) error       { return hid.Move(x, y
 func (interceptionBackend) MoveToExact(x, y int32) error  { return hid.MoveExact(x, y) }
 func (interceptionBackend) MoveRelative(x, y int32) error { return hid.MoveRelative(x, y) }
 
-var hidButtonStates = map[MouseButton]struct{ down, up uint16 }{
-	MouseLeft: {1, 2}, MouseRight: {4, 8}, MouseMiddle: {16, 32},
+func hidButtonStates(button MouseButton) (down, up uint16, ok bool) {
+	switch button {
+	case MouseLeft:
+		return 0x001, 0x002, true
+	case MouseRight:
+		return 0x004, 0x008, true
+	case MouseMiddle:
+		return 0x010, 0x020, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func (interceptionBackend) MouseButton(button MouseButton, down bool) error {
-	states, ok := hidButtonStates[button]
+	d, u, ok := hidButtonStates(button)
 	if !ok {
 		return ErrInvalidMouseButton
 	}
-	state := states.up
 	if down {
-		state = states.down
+		return hid.Button(d)
 	}
-	return hid.Button(state)
+	return hid.Button(u)
 }
 
 func (interceptionBackend) ClickAt(button MouseButton, x, y int32) error {

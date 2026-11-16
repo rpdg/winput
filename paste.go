@@ -26,7 +26,7 @@ func validatePasteText(text string) error {
 
 // pasteByClipboard runs the shared paste path. fixed == nil is the package-level
 // compatibility entry and follows the process-wide global backend. A non-nil
-// fixed backend is used as-is: it does not read currentBackend, initialize HID,
+// fixed backend is used as-is: it does not read currentSelection, initialize HID,
 // or run a wrapper-level availability check. The text and backend are resolved
 // before the clipboard is touched; a global resolution failure leaves the
 // clipboard unchanged. A fixed HID runtime failure can still happen after the
@@ -37,7 +37,7 @@ func validatePasteText(text string) error {
 // clipboard lock, desktop lease, or task transaction. Restore is attempted once
 // whenever SwapUnicodeText returned a non-nil function, including when the swap
 // or the key failed. errors.Join preserves errors.Is for each stage.
-func pasteByClipboard(text string, fixed *Backend) error {
+func pasteByClipboard(text string, fixed *backendSelection) error {
 	if err := validatePasteText(text); err != nil {
 		return err
 	}

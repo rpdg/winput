@@ -9,8 +9,8 @@ import (
 // Input is an input executor bound to one backend chosen at construction.
 // The zero value is not an executor. A later SetBackend does not change it.
 type Input struct {
-	backend Backend
-	valid   bool
+	selection backendSelection
+	valid     bool
 }
 
 // WindowInput is the window-targeted facade of an Input.
@@ -34,12 +34,11 @@ func NewInput(backend Backend) (*Input, error) {
 	if backend != BackendMessage && backend != BackendHID {
 		return nil, ErrInvalidBackend
 	}
-	if backend == BackendHID {
-		if err := ensureHID(); err != nil {
-			return nil, err
-		}
+	sel, err := prepareSelection(backend)
+	if err != nil {
+		return nil, err
 	}
-	return &Input{backend: backend, valid: true}, nil
+	return &Input{selection: sel, valid: true}, nil
 }
 
 // ForWindow binds w to this executor. A nil window is accepted here; calls on
@@ -77,12 +76,12 @@ func (d *DesktopInput) ready() error {
 	return nil
 }
 
-func (in *WindowInput) backend() *Backend {
-	return &in.input.backend
+func (in *WindowInput) backend() *backendSelection {
+	return &in.input.selection
 }
 
-func (d *DesktopInput) backend() *Backend {
-	return &d.input.backend
+func (d *DesktopInput) backend() *backendSelection {
+	return &d.input.selection
 }
 
 // Move moves the pointer to client coordinates.
