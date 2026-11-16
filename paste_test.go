@@ -17,7 +17,7 @@ func TestDesktopPasteInvalidReceiverPriority(t *testing.T) {
 	})
 	defer restoreSwap()
 	keys := 0
-	restoreKey := swapPasteHotkey(func(Backend, ...Key) error {
+	restoreKey := swapPasteHotkey(func(backendSelection, ...Key) error {
 		keys++
 		return nil
 	})
@@ -38,7 +38,7 @@ func TestDesktopPasteInvalidReceiverPriority(t *testing.T) {
 }
 
 func TestDesktopPasteValidEmptyTextDoesNotLockOrTouchClipboard(t *testing.T) {
-	in := &Input{backend: BackendMessage, valid: true}
+	in := &Input{selection: testSelection(BackendMessage), valid: true}
 	desk, err := in.Desktop()
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestDesktopPasteValidEmptyTextDoesNotLockOrTouchClipboard(t *testing.T) {
 	})
 	defer restoreSwap()
 	keys := 0
-	restoreKey := swapPasteHotkey(func(Backend, ...Key) error {
+	restoreKey := swapPasteHotkey(func(backendSelection, ...Key) error {
 		keys++
 		return nil
 	})
@@ -105,7 +105,7 @@ func TestPasteByClipboardSequenceUsesFixedBackend(t *testing.T) {
 			})
 			defer restoreInit()
 
-			in := &Input{backend: tc.fixed, valid: true}
+			in := &Input{selection: testSelection(tc.fixed), valid: true}
 			desk, err := in.Desktop()
 			if err != nil {
 				t.Fatal(err)
@@ -121,9 +121,9 @@ func TestPasteByClipboardSequenceUsesFixedBackend(t *testing.T) {
 				}, nil
 			})
 			defer restoreSwap()
-			restoreKey := swapPasteHotkey(func(cb Backend, keys ...Key) error {
+			restoreKey := swapPasteHotkey(func(cb backendSelection, keys ...Key) error {
 				requirePasteLock(t)
-				if cb != tc.fixed {
+				if cb.kind != tc.fixed {
 					t.Fatalf("Ctrl+V backend = %v, want %v", cb, tc.fixed)
 				}
 				if !reflect.DeepEqual(keys, []Key{KeyCtrl, KeyV}) {
@@ -165,9 +165,9 @@ func TestPackagePasteUsesResolvedGlobalBackend(t *testing.T) {
 	defer restoreSwap()
 
 	var got []Backend
-	restoreKey := swapPasteHotkey(func(cb Backend, keys ...Key) error {
+	restoreKey := swapPasteHotkey(func(cb backendSelection, keys ...Key) error {
 		requirePasteLock(t)
-		got = append(got, cb)
+		got = append(got, cb.kind)
 		if !reflect.DeepEqual(keys, []Key{KeyCtrl, KeyV}) {
 			t.Fatalf("hotkey keys = %v", keys)
 		}
@@ -216,7 +216,7 @@ func TestPackagePasteGlobalResolutionFailureLeavesClipboardAlone(t *testing.T) {
 	})
 	defer restoreSwap()
 	keys := 0
-	restoreKey := swapPasteHotkey(func(Backend, ...Key) error {
+	restoreKey := swapPasteHotkey(func(backendSelection, ...Key) error {
 		keys++
 		return nil
 	})
@@ -243,7 +243,7 @@ func TestFixedPasteDoesNotPrecheckGlobalHID(t *testing.T) {
 	})
 	defer restoreInit()
 
-	in := &Input{backend: BackendMessage, valid: true}
+	in := &Input{selection: testSelection(BackendMessage), valid: true}
 	desk, err := in.Desktop()
 	if err != nil {
 		t.Fatal(err)
@@ -255,8 +255,8 @@ func TestFixedPasteDoesNotPrecheckGlobalHID(t *testing.T) {
 	})
 	defer restoreSwap()
 	var keyBackend Backend
-	restoreKey := swapPasteHotkey(func(cb Backend, _ ...Key) error {
-		keyBackend = cb
+	restoreKey := swapPasteHotkey(func(cb backendSelection, _ ...Key) error {
+		keyBackend = cb.kind
 		return nil
 	})
 	defer restoreKey()
@@ -331,7 +331,7 @@ func TestPasteByClipboardErrorRecovery(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			in := &Input{backend: BackendMessage, valid: true}
+			in := &Input{selection: testSelection(BackendMessage), valid: true}
 			desk, err := in.Desktop()
 			if err != nil {
 				t.Fatal(err)
@@ -350,7 +350,7 @@ func TestPasteByClipboardErrorRecovery(t *testing.T) {
 			})
 			defer restoreSwap()
 			keys, restores := 0, 0
-			restoreKey := swapPasteHotkey(func(Backend, ...Key) error {
+			restoreKey := swapPasteHotkey(func(backendSelection, ...Key) error {
 				keys++
 				order = append(order, "key")
 				return tc.keyErr
@@ -385,7 +385,7 @@ func TestFixedHIDRuntimeErrorRetainsTypeAndRestores(t *testing.T) {
 	defer restoreInit()
 
 	runtimeErr := errors.New("HID runtime failure")
-	in := &Input{backend: BackendHID, valid: true}
+	in := &Input{selection: testSelection(BackendHID), valid: true}
 	desk, err := in.Desktop()
 	if err != nil {
 		t.Fatal(err)
@@ -395,7 +395,7 @@ func TestFixedHIDRuntimeErrorRetainsTypeAndRestores(t *testing.T) {
 		return func() error { restored++; return nil }, nil
 	})
 	defer restoreSwap()
-	restoreKey := swapPasteHotkey(func(Backend, ...Key) error { return runtimeErr })
+	restoreKey := swapPasteHotkey(func(backendSelection, ...Key) error { return runtimeErr })
 	defer restoreKey()
 
 	err = desk.PasteByClipboard("hello")
@@ -416,7 +416,7 @@ func swapPasteSwap(fn func(string) (func() error, error)) func() {
 	return func() { swapUnicodeText = prev }
 }
 
-func swapPasteHotkey(fn func(Backend, ...Key) error) func() {
+func swapPasteHotkey(fn func(backendSelection, ...Key) error) func() {
 	prev := pasteHotkey
 	pasteHotkey = fn
 	return func() { pasteHotkey = prev }
@@ -450,6 +450,6 @@ func countRestore(order []string) int {
 
 func setGlobalBackend(b Backend) {
 	backendMutex.Lock()
-	currentBackend = b
+	currentSelection = testSelection(b)
 	backendMutex.Unlock()
 }

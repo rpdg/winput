@@ -42,7 +42,7 @@ func TestNewInputHIDDirect(t *testing.T) {
 				t.Fatalf("NewInput(HID) init calls = %d, want 1", calls)
 			}
 			if tc.wantErr == nil {
-				if err != nil || in == nil || !in.valid || in.backend != BackendHID {
+				if err != nil || in == nil || !in.valid || in.selection.kind != BackendHID {
 					t.Fatalf("NewInput(HID) = %+v, %v", in, err)
 				}
 			} else {
@@ -84,7 +84,7 @@ func TestNewInputHIDDirect(t *testing.T) {
 		if calls != 2 {
 			t.Fatalf("init calls = %d, want 2", calls)
 		}
-		if !first.valid || first.backend != BackendHID || !second.valid || second.backend != BackendHID {
+		if !first.valid || first.selection.kind != BackendHID || !second.valid || second.selection.kind != BackendHID {
 			t.Fatalf("executors = %+v / %+v", first, second)
 		}
 		if got := getBackend(); got != BackendMessage {
@@ -126,7 +126,7 @@ func TestAcquireBackendFixedSkipsGlobal(t *testing.T) {
 	})
 	defer restoreInit()
 
-	fixed := BackendMessage
+	fixed := testSelection(BackendMessage)
 	cb, err := acquireBackend(&fixed)
 	if err != nil || cb != fixed {
 		t.Fatalf("acquireBackend(fixed) = %v, %v", cb, err)
@@ -172,7 +172,7 @@ func TestInputFacadesUseFixedBackend(t *testing.T) {
 			})
 			defer restoreInit()
 
-			in := &Input{backend: fixed, valid: true}
+			in := &Input{selection: testSelection(fixed), valid: true}
 			win, err := in.ForWindow(w)
 			if err != nil {
 				t.Fatal(err)
@@ -183,13 +183,13 @@ func TestInputFacadesUseFixedBackend(t *testing.T) {
 			}
 
 			var seen []Backend
-			restoreBackend := swapAcquireBackend(func(got *Backend) (Backend, error) {
+			restoreBackend := swapAcquireBackend(func(got *backendSelection) (backendSelection, error) {
 				if got == nil {
 					t.Error("facade passed nil fixed backend")
-					return 0, errStopBeforeInput
+					return backendSelection{}, errStopBeforeInput
 				}
-				seen = append(seen, *got)
-				return 0, errStopBeforeInput
+				seen = append(seen, got.kind)
+				return backendSelection{}, errStopBeforeInput
 			})
 			defer restoreBackend()
 
@@ -267,7 +267,7 @@ func TestInputFacadeKeyMethodsUseFixedBackend(t *testing.T) {
 			}
 			setGlobalBackend(global)
 
-			in := &Input{backend: fixed, valid: true}
+			in := &Input{selection: testSelection(fixed), valid: true}
 			win, err := in.ForWindow(w)
 			if err != nil {
 				t.Fatal(err)
@@ -277,12 +277,12 @@ func TestInputFacadeKeyMethodsUseFixedBackend(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			restoreBackend := swapAcquireBackend(func(got *Backend) (Backend, error) {
-				if got == nil || *got != fixed {
+			restoreBackend := swapAcquireBackend(func(got *backendSelection) (backendSelection, error) {
+				if got == nil || got.kind != fixed {
 					t.Errorf("acquireBackend got %v, want %v", got, fixed)
-					return 0, errStopBeforeInput
+					return backendSelection{}, errStopBeforeInput
 				}
-				return fixed, nil
+				return *got, nil
 			})
 			defer restoreBackend()
 
@@ -291,8 +291,8 @@ func TestInputFacadeKeyMethodsUseFixedBackend(t *testing.T) {
 				hwnd    uintptr
 			}
 			var calls []keyCall
-			record := func(cb Backend, hwnd uintptr, _ Key) error {
-				calls = append(calls, keyCall{backend: cb, hwnd: hwnd})
+			record := func(cb backendSelection, hwnd uintptr, _ Key) error {
+				calls = append(calls, keyCall{backend: cb.kind, hwnd: hwnd})
 				return nil
 			}
 			restoreDown := swapKeyDown(record)
@@ -397,20 +397,30 @@ func backendName(b Backend) string {
 	return "fixed_HID"
 }
 
-func swapAcquireBackend(fn func(*Backend) (Backend, error)) func() {
+func swapAcquireBackend(fn func(*backendSelection) (backendSelection, error)) func() {
 	prev := acquireBackend
 	acquireBackend = fn
 	return func() { acquireBackend = prev }
 }
 
-func swapKeyDown(fn func(Backend, uintptr, Key) error) func() {
+func swapKeyDown(fn func(backendSelection, uintptr, Key) error) func() {
 	prev := keyDown
 	keyDown = fn
 	return func() { keyDown = prev }
 }
 
-func swapKeyUp(fn func(Backend, uintptr, Key) error) func() {
+func swapKeyUp(fn func(backendSelection, uintptr, Key) error) func() {
 	prev := keyUp
 	keyUp = fn
 	return func() { keyUp = prev }
+}
+
+// testSelection bypasses initialization only for tests that install their own
+// input seam or stop before sending. Production always uses prepareSelection.
+func testSelection(kind Backend) backendSelection {
+	sel := backendSelection{kind: kind}
+	if kind == BackendHID {
+		sel.device = interceptionBackend{}
+	}
+	return sel
 }

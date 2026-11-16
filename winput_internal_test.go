@@ -341,11 +341,11 @@ func TestKeyDownImplHIDRefusesBackgroundWindow(t *testing.T) {
 	if window.GetForegroundWindow() == root {
 		t.Skip("static window is the foreground window")
 	}
-	err := keyDownImpl(BackendHID, hwnd, KeyA)
+	err := keyDownImpl(testSelection(BackendHID), hwnd, KeyA)
 	if !errors.Is(err, ErrTargetNotForeground) {
 		t.Fatalf("keyDownImpl = %v, want ErrTargetNotForeground", err)
 	}
-	if err := requireHIDTargetForeground(0); err != nil {
+	if err := requireDeviceTargetForeground(0); err != nil {
 		t.Fatalf("global hwnd: %v", err)
 	}
 }

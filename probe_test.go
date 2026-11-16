@@ -705,7 +705,7 @@ func TestNewInputAndTaskFacade(t *testing.T) {
 	defer restore()
 
 	msg, err := NewInput(BackendMessage)
-	if err != nil || msg == nil || !msg.valid || msg.backend != BackendMessage {
+	if err != nil || msg == nil || !msg.valid || msg.selection.kind != BackendMessage {
 		t.Fatalf("message input = %+v, %v", msg, err)
 	}
 	if inits != 0 {
@@ -770,7 +770,7 @@ func TestNewInputAndTaskFacade(t *testing.T) {
 	}
 	// The message executor must ignore the global backend, including HID.
 	backendMutex.Lock()
-	currentBackend = BackendHID
+	currentSelection = testSelection(BackendHID)
 	backendMutex.Unlock()
 	isolated, err := msg.Desktop()
 	if err != nil {
@@ -783,7 +783,7 @@ func TestNewInputAndTaskFacade(t *testing.T) {
 	if inits != 0 {
 		t.Fatal("task input read the global HID backend and initialized")
 	}
-	if msg.backend != BackendMessage {
+	if msg.selection.kind != BackendMessage {
 		t.Fatal("SetBackend changed an existing executor")
 	}
 }
@@ -829,7 +829,7 @@ func TestWindowInputDirectedScroll(t *testing.T) {
 	if err := w.checkReady(); err != nil {
 		t.Fatalf("visible static not ready: %v", err)
 	}
-	executor := &Input{backend: BackendHID, valid: true}
+	executor := &Input{selection: testSelection(BackendHID), valid: true}
 	facade, err := executor.ForWindow(w)
 	if err != nil {
 		t.Fatal(err)

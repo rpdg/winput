@@ -70,10 +70,10 @@ func pasteByClipboard(text string, fixed *backendSelection) error {
 //
 // This package-level function keeps the process-wide global-default backend
 // behavior. The backend is resolved for this call after inputMutex is taken;
-// the resolved value is reused for the Ctrl+V. The global default is not an
-// atomic snapshot against a concurrent SetBackend, and this function does not
-// promise call-level ordering with SetBackend. Use
-// DesktopInput.PasteByClipboard for an executor with a fixed backend.
+// the complete selection is reused for Ctrl+V. SetBackend commits wait for
+// this entire transaction, including restore. Concurrent calls are ordered by
+// lock acquisition, not call start time. Use DesktopInput.PasteByClipboard for
+// an executor with a fixed backend.
 //
 // A nil return does NOT mean the foreground program has received the new
 // text. It only means the Ctrl+V events were queued and the previous Unicode

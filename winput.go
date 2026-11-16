@@ -279,7 +279,7 @@ func getBackend() Backend {
 func moveImpl(cb backendSelection, hwnd uintptr, x, y int32, isRelative bool) error {
 	if cb.device != nil {
 		if isRelative {
-			cx, cy, err := window.GetCursorPos()
+			cx, cy, err := inputCursorPos()
 			if err != nil {
 				return err
 			}
@@ -289,7 +289,7 @@ func moveImpl(cb backendSelection, hwnd uintptr, x, y int32, isRelative bool) er
 			}
 			return cb.device.MoveTo(tx, ty)
 		} else {
-			sx, sy, err := window.ClientToScreen(hwnd, x, y)
+			sx, sy, err := inputClientToScreen(hwnd, x, y)
 			if err != nil {
 				return err
 			}
@@ -298,7 +298,7 @@ func moveImpl(cb backendSelection, hwnd uintptr, x, y int32, isRelative bool) er
 	}
 
 	if isRelative {
-		sx, sy, err := window.GetCursorPos()
+		sx, sy, err := inputCursorPos()
 		if err != nil {
 			return err
 		}
@@ -374,8 +374,8 @@ func requireDeviceTargetForeground(hwnd uintptr) error {
 	if hwnd == 0 {
 		return nil
 	}
-	root := window.AncestorRoot(hwnd)
-	if root == 0 || window.GetForegroundWindow() != root {
+	root := inputAncestorRoot(hwnd)
+	if root == 0 || inputForegroundWindow() != root {
 		return ErrTargetNotForeground
 	}
 	return nil
@@ -386,7 +386,7 @@ func validateKey(cb backendSelection, hwnd uintptr, k Key) error {
 		return ErrUnsupportedKey
 	}
 	if cb.device == nil && hwnd != 0 {
-		if _, ok := keyboard.VirtualKey(k); !ok {
+		if _, ok := inputVirtualKey(k); !ok {
 			return ErrUnsupportedKey
 		}
 	}
@@ -433,6 +433,21 @@ func (s *inputScope) Release() error {
 	return errors.Join(errs...)
 }
 
+// Narrow OS/timing seams keep device Type and foreground-hotkey sequences
+// testable without sending input. Tests restore all replacements.
+var (
+	inputAncestorRoot     = window.AncestorRoot
+	inputForegroundWindow = window.GetForegroundWindow
+	inputSetForeground    = window.ForceSetForegroundWindow
+	inputVirtualKey       = keyboard.VirtualKey
+	inputWindowType       = keyboard.TypeWithInterval
+	inputCursorPos        = window.GetCursorPos
+	inputClientToScreen   = window.ClientToScreen
+	inputVirtualBounds    = screen.VirtualBounds
+	deviceTypeSleep       = time.Sleep
+	foregroundHotkeySleep = time.Sleep
+)
+
 // foregroundScanCode is independent of ordinary device key dispatch.
 var foregroundScanCode = sendScanCode
 
@@ -444,29 +459,29 @@ func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
 	// GetForegroundWindow returns a top-level window. A child from
 	// FindChildByClass must be compared and activated through its root, or
 	// the equality check against the child hwnd always fails.
-	root := window.AncestorRoot(hwnd)
+	root := inputAncestorRoot(hwnd)
 	if root == 0 {
 		return ErrWindowGone
 	}
 
-	prev := window.GetForegroundWindow()
+	prev := inputForegroundWindow()
 	if prev != root {
 		// Once a foreground switch is attempted, every error exit restores prev.
 		defer func() {
 			if prev != 0 && prev != root {
-				if restoreErr := window.ForceSetForegroundWindow(prev); restoreErr != nil {
+				if restoreErr := inputSetForeground(prev); restoreErr != nil {
 					err = errors.Join(err, fmt.Errorf("%w: failed to restore foreground window: %v", ErrPermissionDenied, restoreErr))
 				}
 			}
 		}()
 
-		if err := window.ForceSetForegroundWindow(root); err != nil {
+		if err := inputSetForeground(root); err != nil {
 			return fmt.Errorf("%w: failed to foreground target window for modifier hotkey: %v", ErrPermissionDenied, err)
 		}
-		if window.GetForegroundWindow() != root {
+		if inputForegroundWindow() != root {
 			return fmt.Errorf("%w: target window did not become foreground (ASFW restriction)", ErrPermissionDenied)
 		}
-		time.Sleep(50 * time.Millisecond)
+		foregroundHotkeySleep(50 * time.Millisecond)
 	}
 
 	var scope inputScope
@@ -482,9 +497,9 @@ func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
 		); err != nil {
 			return err
 		}
-		time.Sleep(10 * time.Millisecond)
+		foregroundHotkeySleep(10 * time.Millisecond)
 	}
-	time.Sleep(50 * time.Millisecond)
+	foregroundHotkeySleep(50 * time.Millisecond)
 	return nil
 }
 
@@ -534,7 +549,7 @@ func clickWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	}
 
 	if cb.device != nil {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
@@ -560,7 +575,7 @@ func clickRightWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	}
 
 	if cb.device != nil {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
@@ -586,7 +601,7 @@ func clickMiddleWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	}
 
 	if cb.device != nil {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
@@ -612,7 +627,7 @@ func doubleClickWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	}
 
 	if cb.device != nil {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
@@ -972,7 +987,7 @@ func moveMouseBy(dx, dy int32, fixed *backendSelection) error {
 		return cb.device.MoveRelative(dx, dy)
 	}
 
-	cx, cy, err := window.GetCursorPos()
+	cx, cy, err := inputCursorPos()
 	if err != nil {
 		return err
 	}
@@ -1010,7 +1025,7 @@ func moveMouseToExact(x, y int32, fixed *backendSelection) error {
 		return err
 	}
 
-	bounds := screen.VirtualBounds()
+	bounds := inputVirtualBounds()
 	width := int64(bounds.Right - bounds.Left)
 	height := int64(bounds.Bottom - bounds.Top)
 	if width < 2 || height < 2 {
@@ -1435,13 +1450,13 @@ func typeWindow(w *Window, text string, gap time.Duration, explicit bool, fixed 
 	if cb.device == nil {
 		// Use WM_CHAR for reliability in background; the only sleep on this
 		// path lives inside TypeWithInterval.
-		return keyboard.TypeWithInterval(w.HWND, text, gap)
+		return inputWindowType(w.HWND, text, gap)
 	}
 
 	return typeDevice(cb, text, gap, explicit, w.HWND)
 }
 
-// typeDevice types text with the HID backend. The whole string is validated
+// typeDevice types text with the selected device backend. The whole string is validated
 // before the first key is pressed; each character's Shift state is released
 // before the next character starts.
 //
@@ -1480,7 +1495,7 @@ func typeDevice(cb backendSelection, text string, gap time.Duration, explicit bo
 				); err != nil {
 					return err
 				}
-				time.Sleep(10 * time.Millisecond)
+				deviceTypeSleep(10 * time.Millisecond)
 				if err := requireDeviceTargetForeground(hwnd); err != nil {
 					return err
 				}
@@ -1491,14 +1506,14 @@ func typeDevice(cb backendSelection, text string, gap time.Duration, explicit bo
 			); err != nil {
 				return err
 			}
-			time.Sleep(defaultPressHold)
+			deviceTypeSleep(defaultPressHold)
 			return nil
 		}()
 		if err != nil {
 			return err
 		}
 		if explicit && gap > 0 && i < len(runes)-1 {
-			time.Sleep(gap)
+			deviceTypeSleep(gap)
 		}
 	}
 	return nil
