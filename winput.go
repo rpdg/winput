@@ -200,11 +200,8 @@ var (
 	inputMutex       sync.Mutex
 )
 
-// SetBackend sets the input simulation backend.
-// If BackendHID is selected, it attempts to initialize the Interception driver immediately.
-// Returns an error if the driver or DLL cannot be loaded.
 // callHIDInit is the one HID initialization entry shared by SetBackend,
-// checkBackend, ProbeHID, and NewInput(BackendHID). ProbeTarget must not call it.
+// global snapshot checks, ProbeHID, and NewInput(BackendHID). ProbeTarget must not call it.
 // Failure is not cached; a later call may succeed.
 var callHIDInit = hid.Init
 
@@ -222,13 +219,22 @@ func ensureHID() error {
 	return translateHIDInit(callHIDInit())
 }
 
+// SetBackend prepares the backend without holding either input lock, then
+// waits for the complete current input transaction before committing. The
+// commit can briefly block fixed Input calls too. Unknown kinds are retained
+// and consistently use Message input. Concurrent commits are ordered by lock
+// acquisition, not by when calls started. Even a same-kind call prepares first.
 func SetBackend(b Backend) error {
-	backendMutex.Lock()
-	defer backendMutex.Unlock()
-
 	sel, err := prepareSelection(b)
 	if err != nil {
 		return err
+	}
+	inputMutex.Lock()
+	defer inputMutex.Unlock()
+	backendMutex.Lock()
+	defer backendMutex.Unlock()
+	if currentSelection.kind == sel.kind {
+		return nil
 	}
 	currentSelection = sel
 	return nil
