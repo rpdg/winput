@@ -3,6 +3,7 @@ package winput
 import (
 	"errors"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -148,11 +149,15 @@ func TestAcquireBackendFixedSkipsGlobal(t *testing.T) {
 // covers the later send and release stages; PasteByClipboard has its own
 // lower-level test in paste_test.go.
 func TestInputFacadesUseFixedBackend(t *testing.T) {
+	// Window creation and deferred destruction must run on the same OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	hwnd := createStaticWindow(true)
 	if hwnd == 0 {
 		t.Fatal("CreateWindowEx failed")
 	}
-	defer destroyWindow(hwnd)
+	defer destroyWindow(t, hwnd)
 	w := &Window{HWND: hwnd}
 
 	prev := getBackend()
@@ -249,11 +254,15 @@ func TestInputFacadesUseFixedBackend(t *testing.T) {
 }
 
 func TestInputFacadeKeyMethodsUseFixedBackend(t *testing.T) {
+	// Window creation and deferred destruction must run on the same OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	hwnd := createStaticWindow(true)
 	if hwnd == 0 {
 		t.Fatal("CreateWindowEx failed")
 	}
-	defer destroyWindow(hwnd)
+	defer destroyWindow(t, hwnd)
 	w := &Window{HWND: hwnd}
 
 	prev := getBackend()

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -331,12 +332,16 @@ func TestPR1TypeDevicePreflightAndFailureCleanup(t *testing.T) {
 }
 
 func TestPR1UnknownBackendThreeMessagePaths(t *testing.T) {
+	// Window creation and deferred destruction must run on the same OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	preservePR1Seams(t)
 	hwnd := createStaticWindow(true)
 	if hwnd == 0 {
 		t.Fatal("CreateWindowEx failed")
 	}
-	defer destroyWindow(hwnd)
+	defer destroyWindow(t, hwnd)
 	w := &Window{HWND: hwnd}
 	if err := SetBackend(42); err != nil {
 		t.Fatal(err)
@@ -418,6 +423,10 @@ func TestPR1ForegroundHotkeyCleanupBeforeRestore(t *testing.T) {
 }
 
 func TestPR1MouseDeviceMappings(t *testing.T) {
+	// Window creation and deferred destruction must run on the same OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	preservePR1Seams(t)
 	f := &recordingBackend{}
 	sel := backendSelection{BackendHID, f}
@@ -434,7 +443,7 @@ func TestPR1MouseDeviceMappings(t *testing.T) {
 	if hwnd == 0 {
 		t.Fatal("CreateWindowEx failed")
 	}
-	defer destroyWindow(hwnd)
+	defer destroyWindow(t, hwnd)
 	w := &Window{HWND: hwnd}
 	checks := []func() error{
 		func() error { return moveMouseTo(1, 2, &sel) },

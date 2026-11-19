@@ -3,6 +3,7 @@ package winput
 import (
 	"errors"
 	"os"
+	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -329,11 +330,15 @@ func TestScrollWheelValidation(t *testing.T) {
 }
 
 func TestKeyDownImplHIDRefusesBackgroundWindow(t *testing.T) {
+	// Window creation and deferred destruction must run on the same OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	hwnd := createStaticWindow(true)
 	if hwnd == 0 {
 		t.Fatal("CreateWindowEx failed")
 	}
-	defer destroyWindow(hwnd)
+	defer destroyWindow(t, hwnd)
 	root := window.AncestorRoot(hwnd)
 	if root == 0 {
 		t.Fatal("popup has no ancestor root")
@@ -351,11 +356,15 @@ func TestKeyDownImplHIDRefusesBackgroundWindow(t *testing.T) {
 }
 
 func TestAncestorRootOfChildIsTopLevel(t *testing.T) {
+	// Window creation and deferred destruction must run on the same OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	parent := createStaticWindow(true)
 	if parent == 0 {
 		t.Fatal("CreateWindowEx failed")
 	}
-	defer destroyWindow(parent)
+	defer destroyWindow(t, parent)
 	class, err := syscall.UTF16PtrFromString("Static")
 	if err != nil {
 		t.Fatal(err)
@@ -369,7 +378,7 @@ func TestAncestorRootOfChildIsTopLevel(t *testing.T) {
 	if child == 0 {
 		t.Fatal("CreateWindowEx child failed")
 	}
-	defer destroyWindow(child)
+	defer destroyWindow(t, child)
 	if got := window.AncestorRoot(child); got != parent {
 		t.Fatalf("child root = %#x, want parent %#x", got, parent)
 	}

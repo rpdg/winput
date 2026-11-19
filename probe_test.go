@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -820,11 +821,15 @@ func TestNonHIDSetBackendStaysOnMessagePath(t *testing.T) {
 }
 
 func TestWindowInputDirectedScroll(t *testing.T) {
+	// Window creation and deferred destruction must run on the same OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	hwnd := createStaticWindow(true)
 	if hwnd == 0 {
 		t.Fatal("CreateWindowEx failed")
 	}
-	defer destroyWindow(hwnd)
+	defer destroyWindow(t, hwnd)
 	w := &Window{HWND: hwnd}
 	if err := w.checkReady(); err != nil {
 		t.Fatalf("visible static not ready: %v", err)
@@ -843,7 +848,7 @@ func TestWindowInputDirectedScroll(t *testing.T) {
 	if hidden == 0 {
 		t.Fatal("hidden CreateWindowEx failed")
 	}
-	defer destroyWindow(hidden)
+	defer destroyWindow(t, hidden)
 	hw := &Window{HWND: hidden}
 	if hw.IsValid() && hw.IsVisible() {
 		t.Fatal("hidden window looks ready")
@@ -953,7 +958,10 @@ func createStaticWindow(visible bool) uintptr {
 	return hwnd
 }
 
-func destroyWindow(hwnd uintptr) {
+func destroyWindow(t testing.TB, hwnd uintptr) {
+	t.Helper()
 	proc := syscall.NewLazyDLL("user32.dll").NewProc("DestroyWindow")
-	_, _, _ = proc.Call(hwnd)
+	if r, _, err := proc.Call(hwnd); r == 0 {
+		t.Errorf("DestroyWindow(%#x) failed: %v", hwnd, err)
+	}
 }
