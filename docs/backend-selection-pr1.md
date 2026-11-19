@@ -2,7 +2,7 @@
 
 ## Observable changes
 
-Only two observable changes are intended:
+The intended observable changes are:
 
 1. `SetBackend` prepares HID without holding `inputMutex` or `backendMutex`,
    then commits under `inputMutex` → `backendMutex`. It waits for the complete
@@ -14,12 +14,29 @@ Only two observable changes are intended:
    input, including Window.Type, window VK preflight, and modifier-hotkey
    foreground promotion. SetBackend still accepts/preserves unknown integers;
    NewInput still rejects them (including 2 and negative values).
+3. Foreground modifier-hotkey bugfix for window calls (including fixed window
+   facades): use ordinary `SetForegroundWindow`, without the Force/AttachThreadInput
+   fallback. An initial foreground of 0 is rejected before activation or input.
+   Activation and restoration require queue acknowledgement and foreground
+   confirmation; the target ancestor and foreground are rechecked before each
+   key-down. Observed mismatches prevent further downs; pressed keys are still
+   cleaned up before restoration.
+   Each confirmation has a 500ms budget. Restoration shares its budget between
+   acknowledging the target's pending activation and confirming the previous
+   foreground. These are confirmation budgets, not hard wall-clock limits on
+   native calls, scheduling or externally shared input queues.
+   Restoration remains best effort: a timeout cannot cancel pending activation,
+   and failed target acknowledgement is reported as unconfirmed even if the
+   previous foreground currently matches. External focus changes and input are
+   not atomic; this does not promise absolute restoration or application receipt.
 
 Global input copies one complete kind/device selection while holding the input
 transaction lock, releases the backend read lock, then checks availability and
 uses only that copy. Fixed Input keeps its construction selection and adds no
-runtime wrapper preflight. No public API or error is added. Clipboard restore
-is still synchronous within the transaction, not an application-consumption ACK.
+runtime wrapper preflight. No public API or error sentinel is added; the
+foreground-hotkey failure conditions and messages change as described above.
+Clipboard restore is still synchronous within the transaction, not an
+application-consumption ACK.
 
 ## Preserved behavior and scope
 
@@ -55,4 +72,7 @@ Required follow-up on an isolated Windows test desktop: execute the full suite,
 run race with its own supported toolchain, verify Go 1.22, and perform qualified
 Interception/multimonitor/DPI/foreground/clipboard/input checks. No driver is
 installed and no production desktop input is injected by the Linux validation.
-This PR is pending independent review; it does not authorize merge or later work.
+Windows native and race acceptance for the foreground fix remains open. Historical
+results for `96a1556cd2ed6f1141e4407b5d825fffe7d8b3d9` do not validate these changed
+bytes. Independent source review is not runtime acceptance and does not authorize
+merge or later work.

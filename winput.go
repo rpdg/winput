@@ -3,6 +3,7 @@ package winput
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 	"unicode/utf16"
@@ -438,7 +439,7 @@ func (s *inputScope) Release() error {
 var (
 	inputAncestorRoot     = window.AncestorRoot
 	inputForegroundWindow = window.GetForegroundWindow
-	inputSetForeground    = window.ForceSetForegroundWindow
+	inputSetForeground    = window.SetForegroundWindow
 	inputVirtualKey       = keyboard.VirtualKey
 	inputWindowType       = keyboard.TypeWithInterval
 	inputCursorPos        = window.GetCursorPos
@@ -456,6 +457,11 @@ func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
 		return err
 	}
 
+	// Keep the native caller queue identity stable through acknowledgement and
+	// restoration. This is balanced even when called on an already pinned UI goroutine.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	// GetForegroundWindow returns a top-level window. A child from
 	// FindChildByClass must be compared and activated through its root, or
 	// the equality check against the child hwnd always fails.
@@ -465,21 +471,21 @@ func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
 	}
 
 	prev := inputForegroundWindow()
+	if prev == 0 {
+		return fmt.Errorf("%w: no foreground window to restore after modifier hotkey", ErrPermissionDenied)
+	}
 	if prev != root {
-		// Once a foreground switch is attempted, every error exit restores prev.
+		// Registered before the request: even an error may have side effects.
+		// The later inputScope defer releases all keys before this runs.
 		defer func() {
-			if prev != 0 && prev != root {
-				if restoreErr := inputSetForeground(prev); restoreErr != nil {
-					err = errors.Join(err, fmt.Errorf("%w: failed to restore foreground window: %v", ErrPermissionDenied, restoreErr))
-				}
-			}
+			err = errors.Join(err, restoreHotkeyForeground(root, prev))
 		}()
 
 		if err := inputSetForeground(root); err != nil {
 			return fmt.Errorf("%w: failed to foreground target window for modifier hotkey: %v", ErrPermissionDenied, err)
 		}
-		if inputForegroundWindow() != root {
-			return fmt.Errorf("%w: target window did not become foreground (ASFW restriction)", ErrPermissionDenied)
+		if err := confirmHotkeyForeground(root, foregroundNow().Add(foregroundTransitionTimeout)); err != nil {
+			return fmt.Errorf("%w: target foreground was not confirmed: %v", ErrPermissionDenied, err)
 		}
 		foregroundHotkeySleep(50 * time.Millisecond)
 	}
@@ -492,7 +498,15 @@ func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
 	for _, k := range keys {
 		key := k
 		if err := scope.Press(
-			func() error { return foregroundScanCode(key, false) },
+			func() error {
+				if inputAncestorRoot(hwnd) != root {
+					return ErrWindowGone
+				}
+				if inputForegroundWindow() != root {
+					return fmt.Errorf("%w: target lost foreground before modifier key-down", ErrPermissionDenied)
+				}
+				return foregroundScanCode(key, false)
+			},
 			func() error { return foregroundScanCode(key, true) },
 		); err != nil {
 			return err
@@ -1367,7 +1381,11 @@ func pressWindow(w *Window, key Key, hold time.Duration, fixed *backendSelection
 // not provide reliable modifier state to many target windows. The foreground
 // identity is the top-level ancestor, so a child hwnd is accepted once that
 // ancestor is foreground. The chord still reaches whichever control has the
-// keyboard focus.
+// keyboard focus. Activation and restoration use bounded confirmation waits;
+// a failed confirmation returns ErrPermissionDenied, not an ASFW diagnosis.
+// Restoration is best effort: an unresponsive queue or another application can
+// prevent it, and external foreground changes cannot be made atomic with input.
+// No key-down is sent while an observed foreground mismatch remains.
 //
 // Under BackendHID each key-down is sent only while that same ancestor is
 // the foreground window. Otherwise the call returns ErrTargetNotForeground

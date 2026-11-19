@@ -58,6 +58,7 @@ func preservePR1Seams(t *testing.T) {
 	cursor, client, bounds := inputCursorPos, inputClientToScreen, inputVirtualBounds
 	typeSleep, hotkeySleep, scan := deviceTypeSleep, foregroundHotkeySleep, foregroundScanCode
 	swap, paste := swapUnicodeText, pasteHotkey
+	now, wait, syncForeground := foregroundNow, foregroundWaitSleep, foregroundSync
 	t.Cleanup(func() {
 		backendMutex.Lock()
 		currentSelection = prev
@@ -68,6 +69,7 @@ func preservePR1Seams(t *testing.T) {
 		inputCursorPos, inputClientToScreen, inputVirtualBounds = cursor, client, bounds
 		deviceTypeSleep, foregroundHotkeySleep, foregroundScanCode = typeSleep, hotkeySleep, scan
 		swapUnicodeText, pasteHotkey = swap, paste
+		foregroundNow, foregroundWaitSleep, foregroundSync = now, wait, syncForeground
 	})
 }
 func expectEvents(t *testing.T, got, want []string) {
@@ -377,6 +379,7 @@ func TestPR1UnknownBackendThreeMessagePaths(t *testing.T) {
 		return nil
 	}
 	foregroundHotkeySleep = func(time.Duration) {}
+	foregroundSync = func(uintptr, time.Duration) error { return nil }
 	keyDown = func(backendSelection, uintptr, Key) error {
 		t.Error("modifier hotkey bypassed foreground sender")
 		return nil
@@ -404,6 +407,7 @@ func TestPR1ForegroundHotkeyCleanupBeforeRestore(t *testing.T) {
 		return nil
 	}
 	foregroundHotkeySleep = func(time.Duration) {}
+	foregroundSync = func(uintptr, time.Duration) error { return nil }
 	foregroundScanCode = func(k Key, up bool) error {
 		events = append(events, fmt.Sprintf("scan:%x:%t", uint16(k), up))
 		if k == KeyV {
