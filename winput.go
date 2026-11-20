@@ -3,6 +3,7 @@ package winput
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 	"unicode/utf16"
@@ -195,16 +196,13 @@ const (
 )
 
 var (
-	currentBackend Backend = BackendMessage
-	backendMutex   sync.RWMutex
-	inputMutex     sync.Mutex
+	currentSelection = backendSelection{kind: BackendMessage}
+	backendMutex     sync.RWMutex
+	inputMutex       sync.Mutex
 )
 
-// SetBackend sets the input simulation backend.
-// If BackendHID is selected, it attempts to initialize the Interception driver immediately.
-// Returns an error if the driver or DLL cannot be loaded.
 // callHIDInit is the one HID initialization entry shared by SetBackend,
-// checkBackend, ProbeHID, and NewInput(BackendHID). ProbeTarget must not call it.
+// global snapshot checks, ProbeHID, and NewInput(BackendHID). ProbeTarget must not call it.
 // Failure is not cached; a later call may succeed.
 var callHIDInit = hid.Init
 
@@ -222,20 +220,24 @@ func ensureHID() error {
 	return translateHIDInit(callHIDInit())
 }
 
+// SetBackend prepares the backend without holding either input lock, then
+// waits for the complete current input transaction before committing. The
+// commit can briefly block fixed Input calls too. Unknown kinds are retained
+// and consistently use Message input. Concurrent commits are ordered by lock
+// acquisition, not by when calls started. Even a same-kind call prepares first.
 func SetBackend(b Backend) error {
+	sel, err := prepareSelection(b)
+	if err != nil {
+		return err
+	}
+	inputMutex.Lock()
+	defer inputMutex.Unlock()
 	backendMutex.Lock()
 	defer backendMutex.Unlock()
-
-	if b == BackendHID {
-		// Eager initialization: Fail fast if driver/DLL is missing.
-		// Any integer other than BackendHID is stored as-is and later follows
-		// the message path. That includes values that NewInput rejects.
-		if err := ensureHID(); err != nil {
-			return err
-		}
+	if currentSelection.kind == sel.kind {
+		return nil
 	}
-
-	currentBackend = b
+	currentSelection = sel
 	return nil
 }
 
@@ -244,51 +246,41 @@ func SetHIDLibraryPath(path string) {
 	hid.SetLibraryPath(path)
 }
 
-func checkBackend() error {
-	backendMutex.RLock()
-	cb := currentBackend
-	backendMutex.RUnlock()
-
-	if cb == BackendHID {
-		if err := ensureHID(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// acquireBackend returns fixed when it is non-nil. That path does not read
-// the global backend and does not initialize HID. A nil fixed uses the global
-// backend, initializing HID when that backend is BackendHID.
-//
-// Tests replace acquireBackend to observe which fixed backend each facade
-// method resolves. The production implementation stays acquireBackendImpl.
+// acquireBackend returns a fixed snapshot without runtime preflight. Global
+// callers hold inputMutex, copy the complete selection once, then check it
+// after releasing backendMutex. Never reread the selection after that check.
 var acquireBackend = acquireBackendImpl
 
-func acquireBackendImpl(fixed *Backend) (Backend, error) {
+func acquireBackendImpl(fixed *backendSelection) (backendSelection, error) {
 	if fixed != nil {
 		return *fixed, nil
 	}
-	if err := checkBackend(); err != nil {
-		return 0, err
+	backendMutex.RLock()
+	sel := currentSelection
+	backendMutex.RUnlock()
+	if sel.kind == BackendHID {
+		if err := ensureHID(); err != nil {
+			return backendSelection{}, err
+		}
 	}
-	return getBackend(), nil
+	return sel, nil
 }
 
+// getBackend is a test helper, not an input-dispatch path.
 func getBackend() Backend {
 	backendMutex.RLock()
 	defer backendMutex.RUnlock()
-	return currentBackend
+	return currentSelection.kind
 }
 
 // -----------------------------------------------------------------------------
 // Implementation Helpers (No Lock)
 // -----------------------------------------------------------------------------
 
-func moveImpl(cb Backend, hwnd uintptr, x, y int32, isRelative bool) error {
-	if cb == BackendHID {
+func moveImpl(cb backendSelection, hwnd uintptr, x, y int32, isRelative bool) error {
+	if cb.device != nil {
 		if isRelative {
-			cx, cy, err := window.GetCursorPos()
+			cx, cy, err := inputCursorPos()
 			if err != nil {
 				return err
 			}
@@ -296,18 +288,18 @@ func moveImpl(cb Backend, hwnd uintptr, x, y int32, isRelative bool) error {
 			if !ok {
 				return errRelativeMoveOverflow
 			}
-			return hid.Move(tx, ty)
+			return cb.device.MoveTo(tx, ty)
 		} else {
-			sx, sy, err := window.ClientToScreen(hwnd, x, y)
+			sx, sy, err := inputClientToScreen(hwnd, x, y)
 			if err != nil {
 				return err
 			}
-			return hid.Move(sx, sy)
+			return cb.device.MoveTo(sx, sy)
 		}
 	}
 
 	if isRelative {
-		sx, sy, err := window.GetCursorPos()
+		sx, sy, err := inputCursorPos()
 		if err != nil {
 			return err
 		}
@@ -332,15 +324,15 @@ var (
 	keyUp   = keyUpImpl
 )
 
-func keyDownImpl(cb Backend, hwnd uintptr, k Key) error {
-	if cb == BackendHID {
+func keyDownImpl(cb backendSelection, hwnd uintptr, k Key) error {
+	if cb.device != nil {
 		// hwnd 0 is a global key. A window key-down is hardware input and
 		// lands in whichever top-level window is foreground, so refuse it
 		// until that ancestor is foreground. Key-up does not use this check.
-		if err := requireHIDTargetForeground(hwnd); err != nil {
+		if err := requireDeviceTargetForeground(hwnd); err != nil {
 			return err
 		}
-		return hid.KeyDown(uint16(k))
+		return cb.device.KeyDown(k)
 	}
 	if hwnd == 0 {
 		return sendScanCode(k, false)
@@ -348,9 +340,9 @@ func keyDownImpl(cb Backend, hwnd uintptr, k Key) error {
 	return keyboard.KeyDown(hwnd, k)
 }
 
-func keyUpImpl(cb Backend, hwnd uintptr, k Key) error {
-	if cb == BackendHID {
-		return hid.KeyUp(uint16(k))
+func keyUpImpl(cb backendSelection, hwnd uintptr, k Key) error {
+	if cb.device != nil {
+		return cb.device.KeyUp(k)
 	}
 	if hwnd == 0 {
 		return sendScanCode(k, true)
@@ -376,33 +368,33 @@ func hotkeyNeedsForeground(keys []Key) bool {
 	return false
 }
 
-// requireHIDTargetForeground allows a global call (hwnd 0) and a window
+// requireDeviceTargetForeground allows a global call (hwnd 0) and a window
 // whose top-level ancestor is the foreground window. The comparison is
 // GA_ROOT, not the raw hwnd: GetForegroundWindow never returns a WS_CHILD.
-func requireHIDTargetForeground(hwnd uintptr) error {
+func requireDeviceTargetForeground(hwnd uintptr) error {
 	if hwnd == 0 {
 		return nil
 	}
-	root := window.AncestorRoot(hwnd)
-	if root == 0 || window.GetForegroundWindow() != root {
+	root := inputAncestorRoot(hwnd)
+	if root == 0 || inputForegroundWindow() != root {
 		return ErrTargetNotForeground
 	}
 	return nil
 }
 
-func validateKey(cb Backend, hwnd uintptr, k Key) error {
+func validateKey(cb backendSelection, hwnd uintptr, k Key) error {
 	if _, _, ok := k.Decode(); !ok {
 		return ErrUnsupportedKey
 	}
-	if cb == BackendMessage && hwnd != 0 {
-		if _, ok := keyboard.VirtualKey(k); !ok {
+	if cb.device == nil && hwnd != 0 {
+		if _, ok := inputVirtualKey(k); !ok {
 			return ErrUnsupportedKey
 		}
 	}
 	return nil
 }
 
-func validateKeys(cb Backend, hwnd uintptr, keys []Key) error {
+func validateKeys(cb backendSelection, hwnd uintptr, keys []Key) error {
 	for _, k := range keys {
 		if err := validateKey(cb, hwnd, k); err != nil {
 			return err
@@ -442,37 +434,60 @@ func (s *inputScope) Release() error {
 	return errors.Join(errs...)
 }
 
+// Narrow OS/timing seams keep device Type and foreground-hotkey sequences
+// testable without sending input. Tests restore all replacements.
+var (
+	inputAncestorRoot     = window.AncestorRoot
+	inputForegroundWindow = window.GetForegroundWindow
+	inputSetForeground    = window.SetForegroundWindow
+	inputVirtualKey       = keyboard.VirtualKey
+	inputWindowType       = keyboard.TypeWithInterval
+	inputCursorPos        = window.GetCursorPos
+	inputClientToScreen   = window.ClientToScreen
+	inputVirtualBounds    = screen.VirtualBounds
+	deviceTypeSleep       = time.Sleep
+	foregroundHotkeySleep = time.Sleep
+)
+
+// foregroundScanCode is independent of ordinary device key dispatch.
+var foregroundScanCode = sendScanCode
+
 func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
-	if err := validateKeys(BackendMessage, hwnd, keys); err != nil {
+	if err := validateKeys(backendSelection{kind: BackendMessage}, hwnd, keys); err != nil {
 		return err
 	}
+
+	// Keep the native caller queue identity stable through acknowledgement and
+	// restoration. This is balanced even when called on an already pinned UI goroutine.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	// GetForegroundWindow returns a top-level window. A child from
 	// FindChildByClass must be compared and activated through its root, or
 	// the equality check against the child hwnd always fails.
-	root := window.AncestorRoot(hwnd)
+	root := inputAncestorRoot(hwnd)
 	if root == 0 {
 		return ErrWindowGone
 	}
 
-	prev := window.GetForegroundWindow()
+	prev := inputForegroundWindow()
+	if prev == 0 {
+		return fmt.Errorf("%w: no foreground window to restore after modifier hotkey", ErrPermissionDenied)
+	}
 	if prev != root {
-		// Once a foreground switch is attempted, every error exit restores prev.
+		// Registered before the request: even an error may have side effects.
+		// The later inputScope defer releases all keys before this runs.
 		defer func() {
-			if prev != 0 && prev != root {
-				if restoreErr := window.ForceSetForegroundWindow(prev); restoreErr != nil {
-					err = errors.Join(err, fmt.Errorf("%w: failed to restore foreground window: %v", ErrPermissionDenied, restoreErr))
-				}
-			}
+			err = errors.Join(err, restoreHotkeyForeground(root, prev))
 		}()
 
-		if err := window.ForceSetForegroundWindow(root); err != nil {
+		if err := inputSetForeground(root); err != nil {
 			return fmt.Errorf("%w: failed to foreground target window for modifier hotkey: %v", ErrPermissionDenied, err)
 		}
-		if window.GetForegroundWindow() != root {
-			return fmt.Errorf("%w: target window did not become foreground (ASFW restriction)", ErrPermissionDenied)
+		if err := confirmHotkeyForeground(root, foregroundNow().Add(foregroundTransitionTimeout)); err != nil {
+			return fmt.Errorf("%w: target foreground was not confirmed: %v", ErrPermissionDenied, err)
 		}
-		time.Sleep(50 * time.Millisecond)
+		foregroundHotkeySleep(50 * time.Millisecond)
 	}
 
 	var scope inputScope
@@ -483,14 +498,22 @@ func pressHotkeyForeground(hwnd uintptr, keys []Key) (err error) {
 	for _, k := range keys {
 		key := k
 		if err := scope.Press(
-			func() error { return sendScanCode(key, false) },
-			func() error { return sendScanCode(key, true) },
+			func() error {
+				if inputAncestorRoot(hwnd) != root {
+					return ErrWindowGone
+				}
+				if inputForegroundWindow() != root {
+					return fmt.Errorf("%w: target lost foreground before modifier key-down", ErrPermissionDenied)
+				}
+				return foregroundScanCode(key, false)
+			},
+			func() error { return foregroundScanCode(key, true) },
 		); err != nil {
 			return err
 		}
-		time.Sleep(10 * time.Millisecond)
+		foregroundHotkeySleep(10 * time.Millisecond)
 	}
-	time.Sleep(50 * time.Millisecond)
+	foregroundHotkeySleep(50 * time.Millisecond)
 	return nil
 }
 
@@ -503,7 +526,7 @@ func (w *Window) Move(x, y int32) error {
 	return moveWindow(w, x, y, false, nil)
 }
 
-func moveWindow(w *Window, x, y int32, isRelative bool, fixed *Backend) error {
+func moveWindow(w *Window, x, y int32, isRelative bool, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -528,7 +551,7 @@ func (w *Window) Click(x, y int32) error {
 	return clickWindow(w, x, y, nil)
 }
 
-func clickWindow(w *Window, x, y int32, fixed *Backend) error {
+func clickWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -539,12 +562,12 @@ func clickWindow(w *Window, x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+	if cb.device != nil {
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
-		return hid.Click(sx, sy)
+		return cb.device.ClickAt(MouseLeft, sx, sy)
 	}
 	return mouse.Click(w.HWND, x, y)
 }
@@ -554,7 +577,7 @@ func (w *Window) ClickRight(x, y int32) error {
 	return clickRightWindow(w, x, y, nil)
 }
 
-func clickRightWindow(w *Window, x, y int32, fixed *Backend) error {
+func clickRightWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -565,12 +588,12 @@ func clickRightWindow(w *Window, x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+	if cb.device != nil {
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
-		return hid.ClickRight(sx, sy)
+		return cb.device.ClickAt(MouseRight, sx, sy)
 	}
 	return mouse.ClickRight(w.HWND, x, y)
 }
@@ -580,7 +603,7 @@ func (w *Window) ClickMiddle(x, y int32) error {
 	return clickMiddleWindow(w, x, y, nil)
 }
 
-func clickMiddleWindow(w *Window, x, y int32, fixed *Backend) error {
+func clickMiddleWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -591,12 +614,12 @@ func clickMiddleWindow(w *Window, x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+	if cb.device != nil {
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
-		return hid.ClickMiddle(sx, sy)
+		return cb.device.ClickAt(MouseMiddle, sx, sy)
 	}
 	return mouse.ClickMiddle(w.HWND, x, y)
 }
@@ -606,7 +629,7 @@ func (w *Window) DoubleClick(x, y int32) error {
 	return doubleClickWindow(w, x, y, nil)
 }
 
-func doubleClickWindow(w *Window, x, y int32, fixed *Backend) error {
+func doubleClickWindow(w *Window, x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -617,12 +640,12 @@ func doubleClickWindow(w *Window, x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		sx, sy, err := window.ClientToScreen(w.HWND, x, y)
+	if cb.device != nil {
+		sx, sy, err := inputClientToScreen(w.HWND, x, y)
 		if err != nil {
 			return err
 		}
-		return hid.DoubleClick(sx, sy)
+		return cb.device.DoubleClickAt(sx, sy)
 	}
 	return mouse.DoubleClick(w.HWND, x, y)
 }
@@ -639,7 +662,7 @@ func (w *Window) Scroll(x, y int32, delta int32) error {
 	return scrollWindow(w, x, y, delta, nil)
 }
 
-func scrollWindow(w *Window, x, y, delta int32, fixed *Backend) error {
+func scrollWindow(w *Window, x, y, delta int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -650,7 +673,7 @@ func scrollWindow(w *Window, x, y, delta int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
+	if cb.device != nil {
 		return ErrDirectedScrollUnsupported
 	}
 	return mouse.Scroll(w.HWND, x, y, delta)
@@ -665,7 +688,7 @@ func MoveMouseTo(x, y int32) error {
 	return moveMouseTo(x, y, nil)
 }
 
-func moveMouseTo(x, y int32, fixed *Backend) error {
+func moveMouseTo(x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -673,8 +696,8 @@ func moveMouseTo(x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		return hid.Move(x, y)
+	if cb.device != nil {
+		return cb.device.MoveTo(x, y)
 	}
 
 	r, _, _ := window.ProcSetCursorPos.Call(uintptr(x), uintptr(y))
@@ -692,7 +715,7 @@ func ClickMouseAt(x, y int32) error {
 	return clickMouseAt(x, y, nil)
 }
 
-func clickMouseAt(x, y int32, fixed *Backend) error {
+func clickMouseAt(x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -700,8 +723,8 @@ func clickMouseAt(x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		return hid.Click(x, y)
+	if cb.device != nil {
+		return cb.device.ClickAt(MouseLeft, x, y)
 	}
 
 	// Message Backend Fallback (duplicated logic from MoveMouseTo to avoid calling locked func)
@@ -711,10 +734,10 @@ func clickMouseAt(x, y int32, fixed *Backend) error {
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	if err := mouseButtonImpl(BackendMessage, MouseLeft, true); err != nil {
+	if err := mouseButtonImpl(cb, MouseLeft, true); err != nil {
 		return err
 	}
-	return mouseButtonImpl(BackendMessage, MouseLeft, false)
+	return mouseButtonImpl(cb, MouseLeft, false)
 }
 
 // DoubleClickMouseAt moves to the specified screen coordinates and performs a left double-click.
@@ -725,7 +748,7 @@ func DoubleClickMouseAt(x, y int32) error {
 	return doubleClickMouseAt(x, y, nil)
 }
 
-func doubleClickMouseAt(x, y int32, fixed *Backend) error {
+func doubleClickMouseAt(x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -733,8 +756,8 @@ func doubleClickMouseAt(x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		return hid.DoubleClick(x, y)
+	if cb.device != nil {
+		return cb.device.DoubleClickAt(x, y)
 	}
 
 	// Message Backend Fallback
@@ -746,20 +769,20 @@ func doubleClickMouseAt(x, y int32, fixed *Backend) error {
 	// Double click = Down -> Up -> (delay) -> Down -> Up.
 	// mouse_event has no DBLCLK flag, so this is two clicks.
 	time.Sleep(30 * time.Millisecond)
-	if err := mouseButtonImpl(BackendMessage, MouseLeft, true); err != nil {
+	if err := mouseButtonImpl(cb, MouseLeft, true); err != nil {
 		return err
 	}
-	if err := mouseButtonImpl(BackendMessage, MouseLeft, false); err != nil {
+	if err := mouseButtonImpl(cb, MouseLeft, false); err != nil {
 		return err
 	}
 
 	// Interval (short enough for OS to register as double click)
 	time.Sleep(50 * time.Millisecond)
 
-	if err := mouseButtonImpl(BackendMessage, MouseLeft, true); err != nil {
+	if err := mouseButtonImpl(cb, MouseLeft, true); err != nil {
 		return err
 	}
-	return mouseButtonImpl(BackendMessage, MouseLeft, false)
+	return mouseButtonImpl(cb, MouseLeft, false)
 }
 
 // ClickRightMouseAt moves to the specified screen coordinates and performs a right click.
@@ -770,7 +793,7 @@ func ClickRightMouseAt(x, y int32) error {
 	return clickRightMouseAt(x, y, nil)
 }
 
-func clickRightMouseAt(x, y int32, fixed *Backend) error {
+func clickRightMouseAt(x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -778,8 +801,8 @@ func clickRightMouseAt(x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		return hid.ClickRight(x, y)
+	if cb.device != nil {
+		return cb.device.ClickAt(MouseRight, x, y)
 	}
 
 	r, _, _ := window.ProcSetCursorPos.Call(uintptr(x), uintptr(y))
@@ -788,10 +811,10 @@ func clickRightMouseAt(x, y int32, fixed *Backend) error {
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	if err := mouseButtonImpl(BackendMessage, MouseRight, true); err != nil {
+	if err := mouseButtonImpl(cb, MouseRight, true); err != nil {
 		return err
 	}
-	return mouseButtonImpl(BackendMessage, MouseRight, false)
+	return mouseButtonImpl(cb, MouseRight, false)
 }
 
 // ClickMiddleMouseAt moves to the specified screen coordinates and performs a middle click.
@@ -802,7 +825,7 @@ func ClickMiddleMouseAt(x, y int32) error {
 	return clickMiddleMouseAt(x, y, nil)
 }
 
-func clickMiddleMouseAt(x, y int32, fixed *Backend) error {
+func clickMiddleMouseAt(x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -810,8 +833,8 @@ func clickMiddleMouseAt(x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		return hid.ClickMiddle(x, y)
+	if cb.device != nil {
+		return cb.device.ClickAt(MouseMiddle, x, y)
 	}
 
 	r, _, _ := window.ProcSetCursorPos.Call(uintptr(x), uintptr(y))
@@ -820,10 +843,10 @@ func clickMiddleMouseAt(x, y int32, fixed *Backend) error {
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	if err := mouseButtonImpl(BackendMessage, MouseMiddle, true); err != nil {
+	if err := mouseButtonImpl(cb, MouseMiddle, true); err != nil {
 		return err
 	}
-	return mouseButtonImpl(BackendMessage, MouseMiddle, false)
+	return mouseButtonImpl(cb, MouseMiddle, false)
 }
 
 // -----------------------------------------------------------------------------
@@ -838,19 +861,6 @@ const (
 	MouseRight
 	MouseMiddle
 )
-
-func hidButtonStates(button MouseButton) (down, up uint16, ok bool) {
-	switch button {
-	case MouseLeft:
-		return 0x001, 0x002, true
-	case MouseRight:
-		return 0x004, 0x008, true
-	case MouseMiddle:
-		return 0x010, 0x020, true
-	default:
-		return 0, 0, false
-	}
-}
 
 func mouseEventButtonFlags(button MouseButton, down bool) (uintptr, bool) {
 	switch button {
@@ -874,17 +884,9 @@ func mouseEventButtonFlags(button MouseButton, down bool) (uintptr, bool) {
 	}
 }
 
-func mouseButtonImpl(cb Backend, button MouseButton, down bool) error {
-	if cb == BackendHID {
-		downState, upState, ok := hidButtonStates(button)
-		if !ok {
-			return ErrInvalidMouseButton
-		}
-		state := downState
-		if !down {
-			state = upState
-		}
-		return hid.Button(state)
+func mouseButtonImpl(cb backendSelection, button MouseButton, down bool) error {
+	if cb.device != nil {
+		return cb.device.MouseButton(button, down)
 	}
 
 	flags, ok := mouseEventButtonFlags(button, down)
@@ -902,7 +904,7 @@ func MouseDown(button MouseButton) error {
 	return mouseDown(button, nil)
 }
 
-func mouseDown(button MouseButton, fixed *Backend) error {
+func mouseDown(button MouseButton, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -919,7 +921,7 @@ func MouseUp(button MouseButton) error {
 	return mouseUp(button, nil)
 }
 
-func mouseUp(button MouseButton, fixed *Backend) error {
+func mouseUp(button MouseButton, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -940,7 +942,7 @@ func ClickMouse() error {
 	return clickMouse(nil)
 }
 
-func clickMouse(fixed *Backend) error {
+func clickMouse(fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -954,7 +956,7 @@ func clickMouse(fixed *Backend) error {
 	if err := mouseButtonImpl(cb, MouseLeft, false); err != nil {
 		// mouse_event cannot report failure. Only the HID release is
 		// retried, and both failures keep the first error.
-		if cb == BackendHID {
+		if cb.device != nil {
 			if err2 := mouseButtonImpl(cb, MouseLeft, false); err2 != nil {
 				return err
 			}
@@ -987,7 +989,7 @@ func MoveMouseBy(dx, dy int32) error {
 	return moveMouseBy(dx, dy, nil)
 }
 
-func moveMouseBy(dx, dy int32, fixed *Backend) error {
+func moveMouseBy(dx, dy int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -995,11 +997,11 @@ func moveMouseBy(dx, dy int32, fixed *Backend) error {
 		return err
 	}
 
-	if cb == BackendHID {
-		return hid.MoveRelative(dx, dy)
+	if cb.device != nil {
+		return cb.device.MoveRelative(dx, dy)
 	}
 
-	cx, cy, err := window.GetCursorPos()
+	cx, cy, err := inputCursorPos()
 	if err != nil {
 		return err
 	}
@@ -1029,7 +1031,7 @@ func MoveMouseToExact(x, y int32) error {
 	return moveMouseToExact(x, y, nil)
 }
 
-func moveMouseToExact(x, y int32, fixed *Backend) error {
+func moveMouseToExact(x, y int32, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -1037,7 +1039,7 @@ func moveMouseToExact(x, y int32, fixed *Backend) error {
 		return err
 	}
 
-	bounds := screen.VirtualBounds()
+	bounds := inputVirtualBounds()
 	width := int64(bounds.Right - bounds.Left)
 	height := int64(bounds.Bottom - bounds.Top)
 	if width < 2 || height < 2 {
@@ -1047,8 +1049,8 @@ func moveMouseToExact(x, y int32, fixed *Backend) error {
 		return ErrOutsideVirtualDesktop
 	}
 
-	if cb == BackendHID {
-		return hid.MoveExact(x, y)
+	if cb.device != nil {
+		return cb.device.MoveToExact(x, y)
 	}
 
 	r, _, _ := window.ProcSetCursorPos.Call(uintptr(x), uintptr(y))
@@ -1073,7 +1075,7 @@ func ScrollWheel(steps int) error {
 	return scrollWheel(steps, nil)
 }
 
-func scrollWheel(steps int, fixed *Backend) error {
+func scrollWheel(steps int, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -1085,8 +1087,8 @@ func scrollWheel(steps int, fixed *Backend) error {
 	}
 
 	delta := int32(steps * mouse.WHEEL_DELTA)
-	if cb == BackendHID {
-		return hid.Scroll(delta)
+	if cb.device != nil {
+		return cb.device.Scroll(delta)
 	}
 
 	// mouse_event(MOUSEEVENTF_WHEEL, 0, 0, delta, 0)
@@ -1100,7 +1102,7 @@ func PressFor(key Key, duration time.Duration) (err error) {
 	return pressFor(key, duration, nil)
 }
 
-func pressFor(key Key, duration time.Duration, fixed *Backend) (err error) {
+func pressFor(key Key, duration time.Duration, fixed *backendSelection) (err error) {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -1288,7 +1290,7 @@ func (w *Window) KeyDown(key Key) error {
 	return keyDownWindow(w, key, nil)
 }
 
-func keyDownWindow(w *Window, key Key, fixed *Backend) error {
+func keyDownWindow(w *Window, key Key, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -1310,7 +1312,7 @@ func (w *Window) KeyUp(key Key) error {
 	return keyUpWindow(w, key, nil)
 }
 
-func keyUpWindow(w *Window, key Key, fixed *Backend) error {
+func keyUpWindow(w *Window, key Key, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -1342,7 +1344,7 @@ func (w *Window) Press(key Key, interval ...time.Duration) (err error) {
 	return pressWindow(w, key, hold, nil)
 }
 
-func pressWindow(w *Window, key Key, hold time.Duration, fixed *Backend) (err error) {
+func pressWindow(w *Window, key Key, hold time.Duration, fixed *backendSelection) (err error) {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -1379,7 +1381,11 @@ func pressWindow(w *Window, key Key, hold time.Duration, fixed *Backend) (err er
 // not provide reliable modifier state to many target windows. The foreground
 // identity is the top-level ancestor, so a child hwnd is accepted once that
 // ancestor is foreground. The chord still reaches whichever control has the
-// keyboard focus.
+// keyboard focus. Activation and restoration use bounded confirmation waits;
+// a failed confirmation returns ErrPermissionDenied, not an ASFW diagnosis.
+// Restoration is best effort: an unresponsive queue or another application can
+// prevent it, and external foreground changes cannot be made atomic with input.
+// No key-down is sent while an observed foreground mismatch remains.
 //
 // Under BackendHID each key-down is sent only while that same ancestor is
 // the foreground window. Otherwise the call returns ErrTargetNotForeground
@@ -1388,7 +1394,7 @@ func (w *Window) PressHotkey(keys ...Key) (err error) {
 	return pressHotkeyWindow(w, nil, keys...)
 }
 
-func pressHotkeyWindow(w *Window, fixed *Backend, keys ...Key) (err error) {
+func pressHotkeyWindow(w *Window, fixed *backendSelection, keys ...Key) (err error) {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -1401,7 +1407,7 @@ func pressHotkeyWindow(w *Window, fixed *Backend, keys ...Key) (err error) {
 	if err := validateKeys(cb, w.HWND, keys); err != nil {
 		return err
 	}
-	if cb == BackendMessage && w.HWND != 0 && hotkeyNeedsForeground(keys) {
+	if cb.device == nil && w.HWND != 0 && hotkeyNeedsForeground(keys) {
 		return pressHotkeyForeground(w.HWND, keys)
 	}
 
@@ -1448,7 +1454,7 @@ func (w *Window) Type(text string, interval ...time.Duration) error {
 	return typeWindow(w, text, gap, explicit, nil)
 }
 
-func typeWindow(w *Window, text string, gap time.Duration, explicit bool, fixed *Backend) error {
+func typeWindow(w *Window, text string, gap time.Duration, explicit bool, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	if err := w.checkReady(); err != nil {
@@ -1459,16 +1465,16 @@ func typeWindow(w *Window, text string, gap time.Duration, explicit bool, fixed 
 		return err
 	}
 
-	if cb == BackendMessage {
+	if cb.device == nil {
 		// Use WM_CHAR for reliability in background; the only sleep on this
 		// path lives inside TypeWithInterval.
-		return keyboard.TypeWithInterval(w.HWND, text, gap)
+		return inputWindowType(w.HWND, text, gap)
 	}
 
-	return typeHID(text, gap, explicit, w.HWND)
+	return typeDevice(cb, text, gap, explicit, w.HWND)
 }
 
-// typeHID types text with the HID backend. The whole string is validated
+// typeDevice types text with the selected device backend. The whole string is validated
 // before the first key is pressed; each character's Shift state is released
 // before the next character starts.
 //
@@ -1482,7 +1488,7 @@ func typeWindow(w *Window, text string, gap time.Duration, explicit bool, fixed 
 // idle time between), while Type(text, d) sleeps d after each character's
 // Release returns. gap == 0 therefore only suppresses the extra gap; it never
 // removes the fixed hold before Release.
-func typeHID(text string, gap time.Duration, explicit bool, hwnd uintptr) error {
+func typeDevice(cb backendSelection, text string, gap time.Duration, explicit bool, hwnd uintptr) error {
 	for _, r := range text {
 		if _, _, ok := keyboard.LookupKey(r); !ok {
 			return ErrUnsupportedKey
@@ -1497,35 +1503,35 @@ func typeHID(text string, gap time.Duration, explicit bool, hwnd uintptr) error 
 			defer func() {
 				err = errors.Join(err, scope.Release())
 			}()
-			if err := requireHIDTargetForeground(hwnd); err != nil {
+			if err := requireDeviceTargetForeground(hwnd); err != nil {
 				return err
 			}
 			if shifted {
 				if err := scope.Press(
-					func() error { return hid.KeyDown(uint16(KeyShift)) },
-					func() error { return hid.KeyUp(uint16(KeyShift)) },
+					func() error { return keyDown(cb, 0, KeyShift) },
+					func() error { return keyUp(cb, 0, KeyShift) },
 				); err != nil {
 					return err
 				}
-				time.Sleep(10 * time.Millisecond)
-				if err := requireHIDTargetForeground(hwnd); err != nil {
+				deviceTypeSleep(10 * time.Millisecond)
+				if err := requireDeviceTargetForeground(hwnd); err != nil {
 					return err
 				}
 			}
 			if err := scope.Press(
-				func() error { return hid.KeyDown(uint16(k)) },
-				func() error { return hid.KeyUp(uint16(k)) },
+				func() error { return keyDown(cb, 0, k) },
+				func() error { return keyUp(cb, 0, k) },
 			); err != nil {
 				return err
 			}
-			time.Sleep(defaultPressHold)
+			deviceTypeSleep(defaultPressHold)
 			return nil
 		}()
 		if err != nil {
 			return err
 		}
 		if explicit && gap > 0 && i < len(runes)-1 {
-			time.Sleep(gap)
+			deviceTypeSleep(gap)
 		}
 	}
 	return nil
@@ -1538,7 +1544,7 @@ func KeyDown(k Key) error {
 	return keyDownGlobal(k, nil)
 }
 
-func keyDownGlobal(k Key, fixed *Backend) error {
+func keyDownGlobal(k Key, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -1553,7 +1559,7 @@ func KeyUp(k Key) error {
 	return keyUpGlobal(k, nil)
 }
 
-func keyUpGlobal(k Key, fixed *Backend) error {
+func keyUpGlobal(k Key, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -1578,7 +1584,7 @@ func Press(k Key, interval ...time.Duration) (err error) {
 	return pressGlobal(k, hold, nil)
 }
 
-func pressGlobal(k Key, hold time.Duration, fixed *Backend) (err error) {
+func pressGlobal(k Key, hold time.Duration, fixed *backendSelection) (err error) {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -1620,13 +1626,14 @@ func PressHotkey(keys ...Key) (err error) {
 // clipboard swap and Ctrl+V stay inside the same lock without rereading global
 // state.
 func pressHotkeyLocked(keys ...Key) (err error) {
-	if err := checkBackend(); err != nil {
+	cb, err := acquireBackend(nil)
+	if err != nil {
 		return err
 	}
-	return pressHotkeyWith(getBackend(), keys...)
+	return pressHotkeyWith(cb, keys...)
 }
 
-func pressHotkeyWith(cb Backend, keys ...Key) (err error) {
+func pressHotkeyWith(cb backendSelection, keys ...Key) (err error) {
 	if err := validateKeys(cb, 0, keys); err != nil {
 		return err
 	}
@@ -1667,7 +1674,7 @@ func Type(text string, interval ...time.Duration) error {
 	return typeGlobal(text, gap, explicit, nil)
 }
 
-func typeGlobal(text string, gap time.Duration, explicit bool, fixed *Backend) error {
+func typeGlobal(text string, gap time.Duration, explicit bool, fixed *backendSelection) error {
 	inputMutex.Lock()
 	defer inputMutex.Unlock()
 	cb, err := acquireBackend(fixed)
@@ -1675,8 +1682,8 @@ func typeGlobal(text string, gap time.Duration, explicit bool, fixed *Backend) e
 		return err
 	}
 
-	if cb == BackendHID {
-		return typeHID(text, gap, explicit, 0)
+	if cb.device != nil {
+		return typeDevice(cb, text, gap, explicit, 0)
 	}
 
 	runes := []rune(text)

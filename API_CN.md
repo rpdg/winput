@@ -300,7 +300,7 @@ GetCursorPos 返回鼠标光标当前的绝对屏幕坐标。
 ```go
 func SetBackend(b Backend) error
 ```
-SetBackend 设置全局输入模拟后端。如果选择 `BackendHID`，会立即尝试初始化驱动，若失败则返回错误。
+SetBackend 设置全局输入后端。HID 准备在两把输入锁外执行，失败保持当前选择不变；同 kind 调用也先准备。提交等待当前完整输入事务结束（含剪贴板恢复），也会短暂阻塞固定 `Input`。并发提交按获锁顺序，而非调用开始顺序。未知整数 kind 仍接受并原样保存，但所有输入路径一致使用 Message 行为；`NewInput` 仍拒绝未知值。
 
 ### func SetHIDLibraryPath
 

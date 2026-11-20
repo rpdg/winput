@@ -318,7 +318,7 @@ GetCursorPos returns the current absolute screen coordinates of the mouse cursor
 ```go
 func SetBackend(b Backend) error
 ```
-SetBackend sets the input simulation backend. If `BackendHID` is selected, it attempts to initialize the driver immediately and returns an error if it fails (e.g. driver not installed).
+SetBackend sets the global input backend. HID preparation runs outside both input locks; failure preserves the current selection, including on a same-kind call. The commit waits for the complete current input transaction (including clipboard restore) and can briefly block fixed `Input` calls. Concurrent commits follow lock acquisition, not call start order. Unknown integer kinds remain accepted and are saved unchanged, but all input paths consistently use Message behavior; `NewInput` still rejects them.
 
 ### func SetHIDLibraryPath
 
