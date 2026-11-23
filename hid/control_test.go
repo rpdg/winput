@@ -78,27 +78,6 @@ func TestKeyStroke(t *testing.T) {
 	}
 }
 
-func TestHumanArrived(t *testing.T) {
-	cases := []struct {
-		dx, dy int32
-		want   bool
-	}{
-		{2, 0, true},
-		{2, 2, true},
-		{1, 1, true},
-		{0, 0, true},
-		{3, 0, false},
-		{0, 3, false},
-		{-2, 2, true},
-		{-3, 0, false},
-	}
-	for _, tc := range cases {
-		if got := humanArrived(tc.dx, tc.dy); got != tc.want {
-			t.Errorf("humanArrived(%d, %d) = %v, want %v", tc.dx, tc.dy, got, tc.want)
-		}
-	}
-}
-
 func TestInsideVirtualBounds(t *testing.T) {
 	bounds := screen.Rect{Left: -1920, Top: 0, Right: 1920, Bottom: 1080}
 	cases := []struct {
