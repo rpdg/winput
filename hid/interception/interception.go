@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
+	"unicode/utf16"
 	"unsafe"
 )
 
@@ -18,6 +20,14 @@ var (
 	procIsMouse        uintptr
 	procIsKeyboard     uintptr
 	procSend           uintptr
+	procGetHardwareID  uintptr
+)
+
+var (
+	loadLibraryFn     = syscall.LoadLibrary
+	freeLibraryFn     = syscall.FreeLibrary
+	getProcFn         = getProc
+	hardwareIDSyscall = callGetHardwareID
 )
 
 var (
@@ -49,25 +59,29 @@ func Load() error {
 		return nil
 	}
 
-	h, err := syscall.LoadLibrary(libraryPath)
+	h, err := loadLibraryFn(libraryPath)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrLibraryNotFound, err)
 	}
-	dllHandle = h
 
-	procCreateContext = getProc(h, "interception_create_context")
-	procDestroyContext = getProc(h, "interception_destroy_context")
-	procIsMouse = getProc(h, "interception_is_mouse")
-	procIsKeyboard = getProc(h, "interception_is_keyboard")
-	procSend = getProc(h, "interception_send")
+	procCreateContext = getProcFn(h, "interception_create_context")
+	procDestroyContext = getProcFn(h, "interception_destroy_context")
+	procIsMouse = getProcFn(h, "interception_is_mouse")
+	procIsKeyboard = getProcFn(h, "interception_is_keyboard")
+	procSend = getProcFn(h, "interception_send")
+	procGetHardwareID = getProcFn(h, "interception_get_hardware_id")
 
-	// Check essential functions
-	if procCreateContext == 0 || procSend == 0 {
-		syscall.FreeLibrary(h)
+	// Check essential functions including HWID discovery to prevent silent bypasses.
+	if procCreateContext == 0 || procDestroyContext == 0 ||
+		procIsMouse == 0 || procIsKeyboard == 0 ||
+		procSend == 0 || procGetHardwareID == 0 {
+		_ = freeLibraryFn(h)
 		dllHandle = 0
+		clearProcsLocked()
 		return ErrSymbolsMissing
 	}
 
+	dllHandle = h
 	return nil
 }
 
@@ -77,14 +91,19 @@ func Unload() {
 	defer libraryMu.Unlock()
 
 	if dllHandle != 0 {
-		syscall.FreeLibrary(dllHandle)
+		_ = freeLibraryFn(dllHandle)
 		dllHandle = 0
-		procCreateContext = 0
-		procDestroyContext = 0
-		procIsMouse = 0
-		procIsKeyboard = 0
-		procSend = 0
+		clearProcsLocked()
 	}
+}
+
+func clearProcsLocked() {
+	procCreateContext = 0
+	procDestroyContext = 0
+	procIsMouse = 0
+	procIsKeyboard = 0
+	procSend = 0
+	procGetHardwareID = 0
 }
 
 func getProc(h syscall.Handle, name string) uintptr {
@@ -175,6 +194,113 @@ func IsKeyboard(dev Device) bool {
 	}
 	r, _, _ := syscall.Syscall(procIsKeyboard, 1, uintptr(dev), 0, 0)
 	return r != 0
+}
+
+const (
+	initialHardwareIDBufBytes = 4096
+	maxHardwareIDBufBytes     = 16384
+)
+
+func callGetHardwareID(proc uintptr, ctx Context, dev Device, buf []byte) uint32 {
+	if len(buf) == 0 {
+		return 0
+	}
+	r, _, _ := syscall.Syscall6(
+		proc,
+		4,
+		uintptr(ctx),
+		uintptr(dev),
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(len(buf)),
+		0,
+		0,
+	)
+	runtime.KeepAlive(buf)
+	return uint32(r)
+}
+
+// GetHardwareID queries the UTF-16LE REG_MULTI_SZ hardware IDs for dev.
+// Empty slots (0 returned bytes) return (nil, nil).
+func GetHardwareID(ctx Context, dev Device) ([]string, error) {
+	if procGetHardwareID == 0 {
+		return nil, ErrSymbolsMissing
+	}
+	if ctx == 0 || dev <= 0 {
+		return nil, nil
+	}
+
+	bufSize := initialHardwareIDBufBytes
+	for {
+		buf := make([]byte, bufSize)
+		bytesReturned := hardwareIDSyscall(procGetHardwareID, ctx, dev, buf)
+		if bytesReturned == 0 {
+			return nil, nil
+		}
+		// Validate bounds against buffer capacity before retry or slicing.
+		if bytesReturned > uint32(len(buf)) {
+			if bufSize < maxHardwareIDBufBytes {
+				next := bufSize * 2
+				if int(bytesReturned) > next && int(bytesReturned) <= maxHardwareIDBufBytes {
+					next = int(bytesReturned)
+					if next%2 != 0 && next < maxHardwareIDBufBytes {
+						next++
+					}
+				}
+				if next > maxHardwareIDBufBytes {
+					next = maxHardwareIDBufBytes
+				}
+				bufSize = next
+				continue
+			}
+			return nil, fmt.Errorf("interception hardware id length %d exceeds buffer %d", bytesReturned, len(buf))
+		}
+		if len(buf) >= 2 && bytesReturned >= uint32(len(buf)-2) {
+			if bufSize < maxHardwareIDBufBytes {
+				bufSize *= 2
+				if bufSize > maxHardwareIDBufBytes {
+					bufSize = maxHardwareIDBufBytes
+				}
+				continue
+			}
+			return nil, fmt.Errorf("interception hardware id truncated at %d bytes", len(buf))
+		}
+		return decodeHardwareIDs(buf[:bytesReturned])
+	}
+}
+
+// decodeHardwareIDs parses a UTF-16LE REG_MULTI_SZ buffer into non-empty hardware ID strings.
+func decodeHardwareIDs(raw []byte) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	if len(raw)%2 != 0 {
+		return nil, fmt.Errorf("invalid UTF-16LE hardware id byte length %d", len(raw))
+	}
+
+	var out []string
+	var units []uint16
+	for i := 0; i < len(raw); i += 2 {
+		u := binary.LittleEndian.Uint16(raw[i : i+2])
+		if u == 0 {
+			if len(units) > 0 {
+				if s := strings.TrimSpace(string(utf16.Decode(units))); s != "" {
+					out = append(out, s)
+				}
+				units = units[:0]
+			}
+			continue
+		}
+		units = append(units, u)
+	}
+	if len(units) > 0 {
+		if s := strings.TrimSpace(string(utf16.Decode(units))); s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("non-empty hardware id buffer contained no identifiers")
+	}
+	return out, nil
 }
 
 func SendMouse(ctx Context, dev Device, s *MouseStroke) error {

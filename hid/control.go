@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,8 +55,26 @@ var (
 	initMutex sync.RWMutex
 )
 
+type deviceScanner struct {
+	isMouse       func(interception.Device) bool
+	isKeyboard    func(interception.Device) bool
+	getHardwareID func(interception.Context, interception.Device) ([]string, error)
+}
+
+var (
+	interceptionLoad           = interception.Load
+	interceptionUnload         = interception.Unload
+	interceptionCreateContext  = interception.CreateContext
+	interceptionDestroyContext = interception.DestroyContext
+	defaultScanner             = deviceScanner{
+		isMouse:       interception.IsMouse,
+		isKeyboard:    interception.IsKeyboard,
+		getHardwareID: interception.GetHardwareID,
+	}
+)
+
 // Init initializes the Interception context and finds devices.
-// It loads the DLL, creates a context, and scans for mouse and keyboard devices.
+// It loads the DLL, creates a context, and scans for valid non-DD mouse and keyboard devices.
 func Init() error {
 	initMutex.Lock()
 	defer initMutex.Unlock()
@@ -64,36 +83,138 @@ func Init() error {
 		return nil
 	}
 
-	if err := interception.Load(); err != nil {
+	if err := interceptionLoad(); err != nil {
 		return err
 	}
 
-	ctx = interception.CreateContext()
-	if ctx == 0 {
-		interception.Unload()
+	c := interceptionCreateContext()
+	if c == 0 {
+		interceptionUnload()
 		return ErrDriverNotInstalled
 	}
 
-	// Device discovery
-	for i := 1; i <= MaxInterceptionDevices; i++ {
-		dev := interception.Device(i)
-		if interception.IsMouse(dev) && mouseDev == 0 {
-			mouseDev = dev
-		}
-		if interception.IsKeyboard(dev) && keyboardDev == 0 {
-			keyboardDev = dev
-		}
-	}
-
-	if mouseDev == 0 && keyboardDev == 0 {
-		interception.DestroyContext(ctx)
-		interception.Unload()
+	selMouse, selKbd, err := selectDevices(c, defaultScanner)
+	if err != nil {
+		interceptionDestroyContext(c)
+		interceptionUnload()
 		ctx = 0
-		return ErrDevicesUnavailable
+		mouseDev = 0
+		keyboardDev = 0
+		return err
 	}
 
+	ctx = c
+	mouseDev = selMouse
+	keyboardDev = selKbd
 	initialized = true
 	return nil
+}
+
+// selectDevices scans slots 1..MaxInterceptionDevices and selects the first valid
+// non-DD mouse and keyboard while rejecting empty, virtual DD, and unreadable slots.
+func selectDevices(c interception.Context, scan deviceScanner) (interception.Device, interception.Device, error) {
+	var (
+		selMouse, selKbd           interception.Device
+		sawDDMouse, sawDDKbd       bool
+		mouseQueryErr, kbdQueryErr error
+	)
+
+	for i := 1; i <= MaxInterceptionDevices; i++ {
+		dev := interception.Device(i)
+		needMouse := selMouse == 0 && scan.isMouse(dev)
+		needKbd := selKbd == 0 && scan.isKeyboard(dev)
+		if !needMouse && !needKbd {
+			if selMouse != 0 && selKbd != 0 {
+				break
+			}
+			continue
+		}
+
+		hwids, qErr := scan.getHardwareID(c, dev)
+		if qErr != nil {
+			// Never accept an unverified/malformed slot as a physical device.
+			if needMouse && mouseQueryErr == nil {
+				mouseQueryErr = qErr
+			}
+			if needKbd && kbdQueryErr == nil {
+				kbdQueryErr = qErr
+			}
+			continue
+		}
+		if len(hwids) == 0 {
+			// Empty slot (0 returned bytes).
+			continue
+		}
+		if isVirtualDDHardwareID(hwids) {
+			if needMouse {
+				sawDDMouse = true
+			}
+			if needKbd {
+				sawDDKbd = true
+			}
+			continue
+		}
+
+		if needMouse {
+			selMouse = dev
+		}
+		if needKbd {
+			selKbd = dev
+		}
+		if selMouse != 0 && selKbd != 0 {
+			break
+		}
+	}
+
+	if selMouse == 0 && selKbd == 0 {
+		if err := firstError(mouseQueryErr, kbdQueryErr); err != nil {
+			return 0, 0, fmt.Errorf("interception hardware id check failed: %w", err)
+		}
+		if sawDDMouse || sawDDKbd {
+			return 0, 0, fmt.Errorf("%w: only virtual DD devices found", ErrDevicesUnavailable)
+		}
+		return 0, 0, ErrDevicesUnavailable
+	}
+	if selMouse == 0 {
+		if mouseQueryErr != nil {
+			return 0, 0, fmt.Errorf("interception mouse hardware id check failed: %w", mouseQueryErr)
+		}
+		if sawDDMouse {
+			return 0, 0, fmt.Errorf("%w: only virtual DD mouse devices found", ErrDevicesUnavailable)
+		}
+	}
+	if selKbd == 0 {
+		if kbdQueryErr != nil {
+			return 0, 0, fmt.Errorf("interception keyboard hardware id check failed: %w", kbdQueryErr)
+		}
+		if sawDDKbd {
+			return 0, 0, fmt.Errorf("%w: only virtual DD keyboard devices found", ErrDevicesUnavailable)
+		}
+	}
+
+	return selMouse, selKbd, nil
+}
+
+func firstError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isVirtualDDHardwareID reports whether any PnP hardware ID identifies the
+// ddhid63340 virtual HID device or its parent enumerator.
+func isVirtualDDHardwareID(hwids []string) bool {
+	for _, id := range hwids {
+		s := strings.ToLower(strings.TrimSpace(id))
+		if s == `hid\ddhid63340` || strings.HasPrefix(s, `hid\ddhid63340&`) ||
+			s == `ddhid63340` || strings.HasPrefix(s, `ddhid63340\`) {
+			return true
+		}
+	}
+	return false
 }
 
 // Close destroys the Interception context and unloads the DLL.
@@ -107,14 +228,14 @@ func Close() error {
 	}
 
 	if ctx != 0 {
-		interception.DestroyContext(ctx)
+		interceptionDestroyContext(ctx)
 		ctx = 0
 	}
 	mouseDev = 0
 	keyboardDev = 0
 	initialized = false
 
-	interception.Unload()
+	interceptionUnload()
 	return nil
 }
 
@@ -143,30 +264,31 @@ func humanSleep(base int) {
 	time.Sleep(time.Duration(duration) * time.Millisecond)
 }
 
+func acquireSlot(slot *interception.Device) (interception.Context, interception.Device, func(), error) {
+	if err := EnsureInit(); err != nil {
+		return 0, 0, nil, err
+	}
+	initMutex.RLock()
+	if !initialized {
+		initMutex.RUnlock()
+		return 0, 0, nil, fmt.Errorf("hid backend closed")
+	}
+	dev := *slot
+	if dev == 0 {
+		initMutex.RUnlock()
+		return 0, 0, nil, ErrDevicesUnavailable
+	}
+	return ctx, dev, initMutex.RUnlock, nil
+}
+
 // Helper to acquire lock and return handles.
 // Caller MUST call unlock() when done.
 func acquireMouse() (interception.Context, interception.Device, func(), error) {
-	if err := EnsureInit(); err != nil {
-		return 0, 0, nil, err
-	}
-	initMutex.RLock()
-	if !initialized {
-		initMutex.RUnlock()
-		return 0, 0, nil, fmt.Errorf("hid backend closed")
-	}
-	return ctx, mouseDev, initMutex.RUnlock, nil
+	return acquireSlot(&mouseDev)
 }
 
 func acquireKeyboard() (interception.Context, interception.Device, func(), error) {
-	if err := EnsureInit(); err != nil {
-		return 0, 0, nil, err
-	}
-	initMutex.RLock()
-	if !initialized {
-		initMutex.RUnlock()
-		return 0, 0, nil, fmt.Errorf("hid backend closed")
-	}
-	return ctx, keyboardDev, initMutex.RUnlock, nil
+	return acquireSlot(&keyboardDev)
 }
 
 // -----------------------------------------------------------------------------
